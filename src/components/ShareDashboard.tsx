@@ -1130,7 +1130,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                 </div>
               )}
               <div className="text-right">
-                <p className="text-[9px] text-[#e10600] uppercase font-bold tracking-[0.15em] mb-1">Valor Total de Planta</p>
+                <p className="text-[9px] text-[#e10600] uppercase font-bold tracking-[0.15em] mb-1">Valor de Plantilla</p>
                 <div className="flex items-baseline justify-end gap-0.5">
                   <span className="text-2xl font-black italic text-white leading-none">{miEscuderia.valor_total.toFixed(1)}</span>
                   <span className="text-sm font-bold text-white/50">M</span>
@@ -1193,7 +1193,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
               const hasPositiveTrend = p.trendScore > 3;
 
               return (
-                <div key={`rec-${p.id}-${i}`} className="bg-zinc-900/40 border border-white/5 rounded-xl p-4 flex flex-col hover:bg-white/[0.02] hover:border-white/10 transition-all group relative">
+                <div
+                  key={`rec-${p.id}-${i}`}
+                  onClick={() => setSelectedPilotForProfileId(p.id)}
+                  role="button"
+                  title={`Ver perfil de ${p.nombre}`}
+                  className="bg-zinc-900/40 border border-white/5 rounded-xl p-4 flex flex-col hover:bg-white/[0.02] hover:border-white/10 transition-all group relative cursor-pointer"
+                >
                   {/* Badge corner */}
                   {isAlreadyInTeam && (
                     <span className="absolute top-3 right-3 bg-white/10 text-white/70 border border-white/10 text-[7px] font-mono font-bold uppercase px-1.5 py-0.5 rounded">
@@ -1279,13 +1285,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                       <button
                         type="button"
                         disabled={transacting || !isAffordable}
-                        onClick={() => {
-                          if (p.isFreeAgent) {
-                            handleFicharFreeAgent(p);
-                          } else {
-                            handleClausulazo(p, p.teamId, p.teamNombre);
-                          }
-                        }}
+                        onClick={(e) => { e.stopPropagation(); if (p.isFreeAgent) { handleFicharFreeAgent(p); } else { handleClausulazo(p, p.teamId, p.teamNombre); } }}
                         className={`w-full py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
                           isAffordable
                             ? "bg-emerald-500 text-black hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 cursor-pointer"
@@ -1345,7 +1345,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {misPilotos.map((p: any, i: number) => (
-                <div key={`mis-pilotos-${p.id}-${i}`} className="bg-zinc-900/50 border border-white/10 rounded-xl p-4 flex flex-col hover:bg-white/5 transition-all group">
+                <div
+                  key={`mis-pilotos-${p.id}-${i}`}
+                  onClick={() => setSelectedPilotForProfileId(p.id)}
+                  role="button"
+                  title={`Ver perfil de ${p.nombre}`}
+                  className="bg-zinc-900/50 border border-white/10 rounded-xl p-4 flex flex-col hover:bg-white/5 transition-all group cursor-pointer"
+                >
                   <div className="flex gap-3 items-center mb-4">
                     {getPilotPhoto(p.id) ? (
                       <img 
@@ -1383,7 +1389,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                     {canViewBudget && currentSplit?.fichajes_abiertos && (
                       <button
                         disabled={transacting}
-                        onClick={() => handleDespedirPiloto(p)}
+                        onClick={(e) => { e.stopPropagation(); handleDespedirPiloto(p); }}
                         className="mt-4 w-full bg-red-500/10 hover:bg-red-500/25 border border-red-500/20 text-red-500 rounded py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40"
                       >
                         <UserMinus className="w-3.5 h-3.5" />
@@ -1653,37 +1659,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         </section>
       )}
 
-      {activeSplitId !== "global" && raceResults.length > 0 && (
-        <section>
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-white/10 pb-2 lowercase flex items-center gap-2">
-            <span className="w-1 h-5 bg-[#e10600]" />
-            puntos por carrera
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {raceResults.map((gp, i) => (
-              <div key={i} className="bg-zinc-900/50 border border-white/10 rounded-2xl p-4 overflow-hidden relative group">
-                <div className="absolute right-0 top-0 text-[40px] font-black italic text-white/5 pointer-events-none group-hover:text-[#e10600]/10 transition-colors uppercase">GP</div>
-                <h3 className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#e10600] mb-4 border-b border-white/5 pb-2">{gp.circuitName}</h3>
-                <div className="space-y-3">
-                  {gp.pilots.sort((a: any, b: any) => b.pts - a.pts).map((rp: any, idx: number) => (
-                    <div key={idx} className="flex justify-between items-center text-xs">
-                      <div className="flex flex-col">
-                        <span className="font-bold flex items-center gap-2">
-                           <span className="w-1.5 h-1.5 bg-white/20 rounded-full" />
-                           {rp.name}
-                        </span>
-                        <span className="text-[9px] text-white/20 uppercase font-mono ml-3.5">{rp.team.replace('_', ' ')}</span>
-                      </div>
-                      <span className="font-black text-white tabular-nums">{rp.pts} <span className="text-[9px] text-white/40 font-normal">pts</span></span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* CENTRAL DE SCOUTING & PORTAL DE TRANSFERENCIAS */}
       {activeSplitId !== "global" && (
         <section className="mt-8 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
@@ -1718,7 +1693,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                     const canBuy = currentSplit?.fichajes_abiertos && canViewBudget && (miEscuderia?.presupuesto >= clause);
 
                     return (
-                      <div key={`clausula-${p.id}-${p.teamId || ''}-${i}`} className="p-3 bg-white/5 border border-white/5 rounded-lg text-xs hover:border-white/15 transition-all">
+                      <div
+                        key={`clausula-${p.id}-${p.teamId || ''}-${i}`}
+                        onClick={() => setSelectedPilotForProfileId(p.id)}
+                        role="button"
+                        title={`Ver perfil de ${p.nombre}`}
+                        className="p-3 bg-white/5 border border-white/5 rounded-lg text-xs hover:border-white/15 transition-all cursor-pointer"
+                      >
                         <div className="flex justify-between items-start mb-1.5">
                           <div>
                             <p className="font-extrabold text-white text-sm">{p.nombre}</p>
@@ -1739,7 +1720,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                             canViewBudget ? (
                               <button
                                 disabled={transacting || !canBuy}
-                                onClick={() => handleClausulazo(p, p.teamId, p.teamNombre)}
+                                onClick={(e) => { e.stopPropagation(); handleClausulazo(p, p.teamId, p.teamNombre); }}
                                 className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 active:scale-95 ${
                                   canBuy 
                                   ? "bg-[#e10600] text-white hover:bg-red-700 shadow-md shadow-red-900/30" 
@@ -1779,7 +1760,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                   const canBuy = currentSplit?.fichajes_abiertos && canViewBudget && (miEscuderia?.presupuesto >= cost);
 
                   return (
-                    <div key={`freeagent-${p.id}-${i}`} className="p-3 bg-white/5 border border-white/5 rounded-lg text-xs hover:border-white/15 transition-all">
+                    <div
+                      key={`freeagent-${p.id}-${i}`}
+                      onClick={() => setSelectedPilotForProfileId(p.id)}
+                      role="button"
+                      title={`Ver perfil de ${p.nombre}`}
+                      className="p-3 bg-white/5 border border-white/5 rounded-lg text-xs hover:border-white/15 transition-all cursor-pointer"
+                    >
                       <div className="flex justify-between items-start mb-1.5">
                         <div>
                           <p className="font-extrabold text-white text-sm">{p.nombre}</p>
@@ -1797,10 +1784,10 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                         </div>
                         
                         {currentSplit?.fichajes_abiertos ? (
-                          canViewBudget ? (
+                            canViewBudget ? (
                             <button
                               disabled={transacting || !canBuy}
-                              onClick={() => handleFicharFreeAgent(p)}
+                              onClick={(e) => { e.stopPropagation(); handleFicharFreeAgent(p); }}
                               className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 active:scale-95 ${
                                 canBuy 
                                 ? "bg-emerald-500 text-black font-black hover:bg-emerald-400 shadow-md shadow-emerald-950/20" 
