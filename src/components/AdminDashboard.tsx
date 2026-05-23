@@ -549,7 +549,7 @@ export function AdminDashboard() {
           qualyPos: item.qualyPos || 12,
           racePos: item.racePos || 12,
           isDnfOwnError: !!item.isDnfOwnError,
-          isClean: !!item.isClean,
+          isClean: item.isClean ?? true,
           overtakesBoost: !!item.overtakesBoost,
           isDotd: !!item.isDotd,
           isMvp: !!item.isMvp,
@@ -793,63 +793,101 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {(splits.find(s => s.id === selectedSplitId)?.equipos.flatMap((e: any) => e.pilotos) || []).map((p: any, i: number) => (
-                  <tr key={`pilot-row-${p.id}-${i}`} className="group border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="py-4 pl-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-mono text-white/20 w-4">{i+1}</span>
-                        <div>
-                          <EditableName
-                            pilotId={p.id}
-                            initialName={p.nombre}
-                            className="font-bold tracking-tight group-hover:text-[#e10600]"
-                            onSave={handleUpdatePilotName}
-                          />
+                {(splits.find(s => s.id === selectedSplitId)?.equipos.flatMap((e: any) => e.pilotos) || []).map((p: any, i: number) => {
+                  const isPilotDnf = results[p.id]?.isDnfOwnError || false;
+                  return (
+                    <tr key={`pilot-row-${p.id}-${i}`} className="group border-b border-white/5 hover:bg-white/5 transition-colors">
+                      <td className="py-4 pl-4">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-mono text-white/20 w-4">{i+1}</span>
+                          <div>
+                            <EditableName
+                              pilotId={p.id}
+                              initialName={p.nombre}
+                              className="font-bold tracking-tight group-hover:text-[#e10600]"
+                              onSave={handleUpdatePilotName}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-4">
-                      <input type="number" min="1" max="15" className="w-14 bg-zinc-800/50 border border-white/10 rounded-lg px-2 py-2 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40" 
-                        disabled={isActaCerrada}
-                        value={results[p.id]?.qualyPos || ""} onChange={e => handleUpdate(p.id, "qualyPos", parseInt(e.target.value))} />
-                    </td>
-                    <td className="py-4">
-                      <input type="number" min="1" max="15" className="w-14 bg-zinc-800/50 border border-white/10 rounded-lg px-2 py-2 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40"
-                        disabled={isActaCerrada}
-                        value={results[p.id]?.racePos || ""} onChange={e => handleUpdate(p.id, "racePos", parseInt(e.target.value))} />
-                    </td>
-                    <td className="py-4 text-center">
-                      <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
-                        disabled={isActaCerrada}
-                        checked={results[p.id]?.isDnfOwnError || false} onChange={e => handleUpdate(p.id, "isDnfOwnError", e.target.checked)} />
-                    </td>
-                    <td className="py-4 text-center">
-                      <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
-                        disabled={isActaCerrada}
-                        checked={!(results[p.id]?.isClean ?? true)} onChange={e => handleUpdate(p.id, "isClean", !e.target.checked)} />
-                    </td>
-                    <td className="py-4 text-center">
-                      <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
-                        disabled={isActaCerrada}
-                        checked={results[p.id]?.overtakesBoost || false} onChange={e => handleUpdate(p.id, "overtakesBoost", e.target.checked)} />
-                    </td>
-                    <td className="py-4 text-center">
-                      <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
-                        disabled={isActaCerrada}
-                        checked={results[p.id]?.isDotd || false} onChange={e => handleUpdate(p.id, "isDotd", e.target.checked)} />
-                    </td>
-                    <td className="py-4 text-center">
-                      <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
-                        disabled={isActaCerrada}
-                        checked={results[p.id]?.isMvp || false} onChange={e => handleUpdate(p.id, "isMvp", e.target.checked)} />
-                    </td>
-                    <td className="py-4 text-center">
-                      <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
-                        disabled={isActaCerrada}
-                        checked={results[p.id]?.fastestLap || false} onChange={e => handleUpdate(p.id, "fastestLap", e.target.checked)} />
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-4">
+                        <input type="number" min="1" max="15" className="w-14 bg-zinc-800/50 border border-white/10 rounded-lg px-2 py-2 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40" 
+                          disabled={isActaCerrada || isPilotDnf}
+                          value={isPilotDnf ? "" : (results[p.id]?.qualyPos || "")} onChange={e => handleUpdate(p.id, "qualyPos", parseInt(e.target.value))} />
+                      </td>
+                      <td className="py-4">
+                        <input type="number" min="1" max="15" className="w-14 bg-zinc-800/50 border border-white/10 rounded-lg px-2 py-2 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40"
+                          disabled={isActaCerrada || isPilotDnf}
+                          value={isPilotDnf ? "" : (results[p.id]?.racePos || "")} onChange={e => handleUpdate(p.id, "racePos", parseInt(e.target.value))} />
+                      </td>
+                      <td className="py-4 text-center">
+                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
+                          disabled={isActaCerrada}
+                          checked={results[p.id]?.isDnfOwnError || false} 
+                          onChange={e => {
+                            const isDnf = e.target.checked;
+                            if (isDnf) {
+                              setResults(prev => ({
+                                ...prev,
+                                [p.id]: {
+                                  ...prev[p.id],
+                                  pilotoId: p.id,
+                                  isDnfOwnError: true,
+                                  racePos: 99,
+                                  isClean: true,
+                                  overtakesBoost: false,
+                                  isDotd: false,
+                                  isMvp: false,
+                                  fastestLap: false
+                                }
+                              }));
+                            } else {
+                              setResults(prev => ({
+                                ...prev,
+                                [p.id]: {
+                                  ...prev[p.id],
+                                  pilotoId: p.id,
+                                  isDnfOwnError: false,
+                                  racePos: undefined,
+                                  isClean: true,
+                                  overtakesBoost: false,
+                                  isDotd: false,
+                                  isMvp: false,
+                                  fastestLap: false
+                                }
+                              }));
+                            }
+                          }} 
+                        />
+                      </td>
+                      <td className="py-4 text-center">
+                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
+                          disabled={isActaCerrada || isPilotDnf}
+                          checked={isPilotDnf ? false : !(results[p.id]?.isClean ?? true)} onChange={e => handleUpdate(p.id, "isClean", !e.target.checked)} />
+                      </td>
+                      <td className="py-4 text-center">
+                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
+                          disabled={isActaCerrada || isPilotDnf}
+                          checked={isPilotDnf ? false : (results[p.id]?.overtakesBoost || false)} onChange={e => handleUpdate(p.id, "overtakesBoost", e.target.checked)} />
+                      </td>
+                      <td className="py-4 text-center">
+                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
+                          disabled={isActaCerrada || isPilotDnf}
+                          checked={isPilotDnf ? false : (results[p.id]?.isDotd || false)} onChange={e => handleUpdate(p.id, "isDotd", e.target.checked)} />
+                      </td>
+                      <td className="py-4 text-center">
+                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
+                          disabled={isActaCerrada || isPilotDnf}
+                          checked={isPilotDnf ? false : (results[p.id]?.isMvp || false)} onChange={e => handleUpdate(p.id, "isMvp", e.target.checked)} />
+                      </td>
+                      <td className="py-4 text-center">
+                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-zinc-800 text-[#e10600] accent-[#e10600] disabled:opacity-40" 
+                          disabled={isActaCerrada || isPilotDnf}
+                          checked={isPilotDnf ? false : (results[p.id]?.fastestLap || false)} onChange={e => handleUpdate(p.id, "fastestLap", e.target.checked)} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

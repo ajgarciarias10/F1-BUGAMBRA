@@ -127,62 +127,62 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
       });
     } else {
       // For split_2, split_3, split_4:
-      if (!isStarted) {
-        // NOT STARTED YET!
-        // Inherit everything from the previous resolved split:
-        // - Teams & Roster (which pilots are in which teams)
-        // - Budgets
-        // - Pilot properties (rating, split purchase price, buyout clause, previous race price, etc.)
-        // But reset points to 0!
-        const prevResolved = resolved[i - 1];
+      const prevResolved = resolved[i - 1];
+      const hasPilotsInDB = s.equipos && s.equipos.some((eq: any) => eq.pilotos && eq.pilotos.length > 0);
+      
+      const teamKeys = ["zenith", "roses", "alfa_romero"];
+      const equipos = teamKeys.map((teamId) => {
+        const eqActual = s.equipos?.find((eq: any) => eq.id === teamId);
+        const eqAnterior = prevResolved?.equipos?.find((eq: any) => eq.id === teamId);
         
-        let equipos = [];
-        if (prevResolved && prevResolved.equipos) {
-          equipos = prevResolved.equipos.map((prevEq: any) => {
-            return {
-              ...prevEq,
-              presupuesto: prevEq.presupuesto ?? 100,
-              puntos_constructores: 0, // always 0 for unstarted
-              pilotos: (prevEq.pilotos || []).map((prevP: any) => {
-                return {
-                  ...prevP,
-                  puntos_piloto: 0, // always 0 for unstarted
-                  victorias: 0, // always 0 for unstarted
-                  podios: 0, // always 0 for unstarted
-                  rating_piloto: prevP.rating_piloto ?? 70,
-                  precio_compra_split: prevP.precio_compra_split ?? 10,
-                  clausula_actual: prevP.clausula_actual ?? 15,
-                  mantener_actual: prevP.mantener_actual ?? 15,
-                  precio_carrera_anterior: prevP.precio_carrera_anterior ?? 10
-                };
-              })
-            };
-          });
-        } else {
-          equipos = s.equipos.map((eq: any) => ({
-            ...eq,
-            puntos_constructores: 0,
-            pilotos: (eq.pilotos || []).map((p: any) => ({
-              ...p,
-              puntos_piloto: 0,
-              victorias: 0,
-              podios: 0
-            }))
-          }));
+        let presupuesto = 100;
+        if (eqActual?.presupuesto !== undefined) {
+          presupuesto = eqActual.presupuesto;
+        } else if (eqAnterior?.presupuesto !== undefined) {
+          presupuesto = eqAnterior.presupuesto;
         }
-        
-        resolved.push({
-          ...s,
-          equipos,
-          isStarted: false
+
+        let puntos_constructores = 0;
+        if (isStarted) {
+          puntos_constructores = eqActual?.puntos_constructores || 0;
+        }
+
+        let rawPilotos = [];
+        if (hasPilotsInDB) {
+          rawPilotos = eqActual?.pilotos || [];
+        } else {
+          rawPilotos = eqAnterior?.pilotos || [];
+        }
+
+        const pilotos = rawPilotos.map((p: any) => {
+          return {
+            ...p,
+            puntos_piloto: isStarted ? (p.puntos_piloto ?? 0) : 0,
+            victorias: isStarted ? (p.victorias ?? 0) : 0,
+            podios: isStarted ? (p.podios ?? 0) : 0,
+            rating_piloto: p.rating_piloto ?? 70,
+            precio_compra_split: p.precio_compra_split ?? 10,
+            clausula_actual: p.clausula_actual ?? 15,
+            mantener_actual: p.mantener_actual ?? 15,
+            precio_carrera_anterior: p.precio_carrera_anterior ?? 10
+          };
         });
-      } else {
-        // If it IS started, it has its own points & roster in DB. Keep it!
-        resolved.push({
-          ...s,
-          isStarted: true
-        });
-      }
+
+        return {
+          id: teamId,
+          nombre: eqActual?.nombre || eqAnterior?.nombre || (teamId.charAt(0).toUpperCase() + teamId.slice(1)),
+          jeque_id: eqActual?.jeque_id || eqAnterior?.jeque_id || "",
+          presupuesto,
+          puntos_constructores,
+          pilotos
+        };
+      });
+
+      resolved.push({
+        ...s,
+        equipos,
+        isStarted
+      });
     }
   }
   
