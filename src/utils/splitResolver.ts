@@ -128,7 +128,6 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
     } else {
       // For split_2, split_3, split_4:
       const prevResolved = resolved[i - 1];
-      const hasPilotsInDB = s.equipos && s.equipos.some((eq: any) => eq.pilotos && eq.pilotos.length > 0);
       
       const teamKeys = ["zenith", "roses", "alfa_romero"];
       const equipos = teamKeys.map((teamId) => {
@@ -148,8 +147,21 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
         }
 
         let rawPilotos = [];
-        if (hasPilotsInDB) {
-          rawPilotos = eqActual?.pilotos || [];
+        const actualPilots = eqActual?.pilotos || [];
+        if (actualPilots.length > 0) {
+          const prevPilots = eqAnterior?.pilotos || [];
+          const actualPilotIds = actualPilots.map((p: any) => p.id);
+          
+          const otherTeamsDocs = s.equipos?.filter((eq: any) => eq.id !== teamId) || [];
+          const otherTeamsPilotIds = otherTeamsDocs.flatMap((eq: any) => (eq.pilotos || []).map((p: any) => p.id));
+          
+          const inheritedUnedited = prevPilots.filter((p: any) => {
+            const isEditedHere = actualPilotIds.includes(p.id);
+            const isMovedElsewhere = otherTeamsPilotIds.includes(p.id);
+            return !isEditedHere && !isMovedElsewhere;
+          });
+          
+          rawPilotos = [...actualPilots, ...inheritedUnedited];
         } else {
           rawPilotos = eqAnterior?.pilotos || [];
         }

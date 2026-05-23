@@ -12,6 +12,16 @@ export function AdminDashboard() {
   const { usuarios } = useUsuarios();
   const { splits: rawSplits, loading: loadingSplits } = useSplits();
   const splits = useMemo(() => resolveAllSplits(rawSplits), [rawSplits]);
+  const [selectedSplitId, setSelectedSplitId] = useState("");
+
+  const currentRawSplit = useMemo(() => rawSplits.find(s => s.id === selectedSplitId), [rawSplits, selectedSplitId]);
+  const isSelectedSplitInitialized = useMemo(() => {
+    if (!selectedSplitId || selectedSplitId === "split_1") return true;
+    if (!currentRawSplit) return false;
+    const totalPilotsInDb = currentRawSplit.equipos?.reduce((sum: number, eq: any) => sum + (eq.pilotos?.length || 0), 0) || 0;
+    return totalPilotsInDb > 0;
+  }, [selectedSplitId, currentRawSplit]);
+
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [plantilla, setPlantilla] = useState<any[]>([]);
@@ -56,7 +66,6 @@ export function AdminDashboard() {
     return [...uPilots, ...uniquePPilots];
   }, [usuarios, plantilla]);
 
-  const [selectedSplitId, setSelectedSplitId] = useState("");
   const [selectedCircuitoId, setSelectedCircuitoId] = useState("");
   const [isEditingFinished, setIsEditingFinished] = useState(false);
   const [isActaCerrada, setIsActaCerrada] = useState(false);
@@ -297,6 +306,31 @@ export function AdminDashboard() {
       
       let pData = { ...pilotData };
       
+      // Calculate clause price
+      const rating = Number(pData.rating_piloto || pData.raw?.rating_piloto || 70);
+      const clause = Number(pData.clausula_actual || pData.raw?.clausula_actual || (rating * 0.5) || 15);
+
+      const currentSplit = splits.find(s => s.id === selectedSplitId);
+
+      // Adjust budgets in Firestore
+      if (fromTeamId && fromTeamId !== "agente_libre") {
+        const fromTeam = currentSplit?.equipos.find((e: any) => e.id === fromTeamId);
+        const currentFromBudget = fromTeam ? Number(fromTeam.presupuesto ?? 100) : 100;
+        const newFromBudget = Number((currentFromBudget + clause).toFixed(1));
+        
+        const tFromRef = doc(db, `splits/${selectedSplitId}/equipos`, fromTeamId);
+        await setDoc(tFromRef, { presupuesto: newFromBudget }, { merge: true });
+      }
+
+      if (toTeamId && toTeamId !== "agente_libre") {
+        const toTeam = currentSplit?.equipos.find((e: any) => e.id === toTeamId);
+        const currentToBudget = toTeam ? Number(toTeam.presupuesto ?? 100) : 100;
+        const newToBudget = Number((currentToBudget - clause).toFixed(1));
+        
+        const tToRef = doc(db, `splits/${selectedSplitId}/equipos`, toTeamId);
+        await setDoc(tToRef, { presupuesto: newToBudget }, { merge: true });
+      }
+
       // Update global user document escuderia_id to keep Pilot Panel and queries aligned
       // Find matching user in 'usuarios' by uid or registered piloto_id
       const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
@@ -354,8 +388,17 @@ export function AdminDashboard() {
         });
       }
       
+      let budgetStr = "";
+      if (fromTeamId !== "agente_libre" && toTeamId !== "agente_libre") {
+        budgetStr = ` (${fromTeamId} +${clause}M, ${toTeamId} -${clause}M)`;
+      } else if (fromTeamId !== "agente_libre") {
+        budgetStr = ` (${fromTeamId} +${clause}M por rescisión)`;
+      } else if (toTeamId !== "agente_libre") {
+        budgetStr = ` (${toTeamId} -${clause}M por fichaje)`;
+      }
+
       await addDoc(collection(db, `splits/${selectedSplitId}/transfers`), {
-        detalles: `Admin transfirió a ${pilotName} de ${fromTeamId} a ${toTeamId}`,
+        detalles: `Admin transfirió a ${pilotName} de ${fromTeamId} a ${toTeamId}${budgetStr}`,
         timestamp: new Date().toISOString(),
         tipo: "admin"
       });
@@ -369,116 +412,72 @@ export function AdminDashboard() {
     }
   };
 
-  const handleSyncSplit2Rosters = () => {
+  const handleSyncSplitRosters = (splitId: string) => {
+    const currentSplitName = splits.find(s => s.id === splitId)?.nombre || splitId;
     setConfirmModal({
       isOpen: true,
-      title: "Re-inicializar Split 2",
-      message: "¿Seguro que quieres RE-INICIALIZAR las plantillas y presupuestos del SPLIT 2? Esto reestructurará Zenith, Alfa Romero y Roses según el estado de la liga actual con puntuaciones iniciales a 0.",
+      title: `Inicializar ${currentSplitName}`,
+      message: `¿Seguro que quieres INICIALIZAR las plantillas, presupuestos y pilotos del ${currentSplitName.toUpperCase()} a partir del Split anterior? Esto establecerá los presupuestos a 100M, copiará el roster del Split anterior con puntos a 0, victorias a 0 y podios a 0.`,
       onConfirm: async () => {
         setLoading(true);
         try {
           const { doc, setDoc, deleteDoc, getDocs, collection, addDoc } = await import("firebase/firestore");
           const { db } = await import("../services/firebase");
-
-          setMsg("Restableciendo presupuestos y constructores del Split 2...");
-          // Ajustar presupuestos e iniciales constructores del Split 2
-          const teams = ["zenith", "roses", "alfa_romero"];
-          for (const tId of teams) {
-            const tRef = doc(db, `splits/split_2/equipos`, tId);
+          
+          const sortedSplits = [...splits].sort((a, b) => a.id.localeCompare(b.id));
+          const currentIndex = sortedSplits.findIndex(s => s.id === splitId);
+          if (currentIndex <= 0) {
+            setMsg("Error: No se puede inicializar el Split 1 desde un split anterior.");
+            setLoading(false);
+            return;
+          }
+          const prevSplit = sortedSplits[currentIndex - 1];
+          
+          setMsg(`Inicializando presupuestos de ${currentSplitName}...`);
+          const teamKeys = ["zenith", "roses", "alfa_romero"];
+          for (const teamId of teamKeys) {
+            const tRef = doc(db, `splits/${splitId}/equipos`, teamId);
+            const prevTeamDoc = prevSplit.equipos.find((e: any) => e.id === teamId);
+            
             await setDoc(tRef, {
+              id: teamId,
+              nombre: prevTeamDoc?.nombre || (teamId.charAt(0).toUpperCase() + teamId.slice(1)),
               presupuesto: 100,
               puntos_constructores: 0
             }, { merge: true });
 
-            // Borrar pilotos actuales del equipo en Split 2
-            const pSnap = await getDocs(collection(db, `splits/split_2/equipos/${tId}/pilotos`));
+            const pSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
             for (const pDoc of pSnap.docs) {
-              await deleteDoc(doc(db, `splits/split_2/equipos/${tId}/pilotos`, pDoc.id));
+              await deleteDoc(doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pDoc.id));
+            }
+
+            const prevPilots = prevTeamDoc?.pilotos || [];
+            for (const p of prevPilots) {
+              await setDoc(doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, p.id), {
+                id: p.id,
+                nombre: p.nombre,
+                puntos_piloto: 0,
+                victorias: 0,
+                podios: 0,
+                rating_piloto: p.rating_piloto ?? 70,
+                precio_compra_split: p.precio_compra_split ?? 10,
+                clausula_actual: p.clausula_actual ?? 15,
+                mantener_actual: p.mantener_actual ?? 15,
+                precio_carrera_anterior: p.precio_carrera_anterior ?? 10
+              });
             }
           }
 
-          setMsg("Asignando nuevos rosters oficiales en Split 2...");
-          
-          // Zenith: Jose, Mimi (Mimic)
-          await setDoc(doc(db, "splits/split_2/equipos/zenith/pilotos", "piloto_jose"), {
-            id: "piloto_jose",
-            nombre: "Jose (I)",
-            puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 87,
-            precio_compra_split: 40, clausula_actual: 80, mantener_actual: 120, precio_carrera_anterior: 96
-          });
-          await setDoc(doc(db, "splits/split_2/equipos/zenith/pilotos", "piloto_mimic"), {
-            id: "piloto_mimic",
-            nombre: "Mimic", // Mimi
-            puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 81,
-            precio_compra_split: 52, clausula_actual: 104, mantener_actual: 156, precio_carrera_anterior: 72.8
-          });
-
-          // Alfa Romero: Jota, Moles, Aparicio
-          await setDoc(doc(db, "splits/split_2/equipos/alfa_romero/pilotos", "piloto_jota"), {
-            id: "piloto_jota",
-            nombre: "Jota",
-            puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70,
-            precio_compra_split: 28, clausula_actual: 56, mantener_actual: 84, precio_carrera_anterior: 47.1
-          });
-          await setDoc(doc(db, "splits/split_2/equipos/alfa_romero/pilotos", "piloto_moles"), {
-            id: "piloto_moles",
-            nombre: "Moles",
-            puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70,
-            precio_compra_split: 25, clausula_actual: 50, mantener_actual: 75, precio_carrera_anterior: 30.5
-          });
-          await setDoc(doc(db, "splits/split_2/equipos/alfa_romero/pilotos", "piloto_aparicio"), {
-            id: "piloto_aparicio",
-            nombre: "Aparicio",
-            puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70,
-            precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15, precio_carrera_anterior: 10
-          });
-
-          // Roses: Pabliyo, Fabi
-          await setDoc(doc(db, "splits/split_2/equipos/roses/pilotos", "piloto_pabliyo"), {
-            id: "piloto_pabliyo",
-            nombre: "Pabliyo",
-            puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70,
-            precio_compra_split: 10, clausula_actual: 15, mantener_actual: 1.5, precio_carrera_anterior: 1.5
-          });
-          await setDoc(doc(db, "splits/split_2/equipos/roses/pilotos", "piloto_fabi"), {
-            id: "piloto_fabi",
-            nombre: "Fabi (I)",
-            puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 75,
-            precio_compra_split: 38, clausula_actual: 76, mantener_actual: 114, precio_carrera_anterior: 68.4
-          });
-
-          // Asegurar registro de las Nuevas vacante1 y vacante2 en usuarios general
-          await setDoc(doc(db, "usuarios", "vacante_1"), {
-            uid: "vacante_1",
-            nombre: "Nuevas vacante1",
-            email: "vacante1@f1bugambra.com",
-            rol: "piloto",
-            escuderia_id: "",
-            rating_piloto: 70, precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15
-          }, { merge: true });
-
-          await setDoc(doc(db, "usuarios", "vacante_2"), {
-            uid: "vacante_2",
-            nombre: "Nuevas vacante2",
-            email: "vacante2@f1bugambra.com",
-            rol: "piloto",
-            escuderia_id: "",
-            rating_piloto: 70, precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15
-          }, { merge: true });
-
-          // Registramos en transfers
-          await addDoc(collection(db, "splits/split_2/transfers"), {
-            detalles: "⚙️ Admin sincronizó los rosters del Split 2 Oficial: Zenith (Jose, Mimi), Alfa Romero (Jota, Moles, Aparicio), Roses (Pabliyo, Fabi). Toni, Pinilla, Samu, y las nuevas vacantes entran a la bolsa.",
+          await addDoc(collection(db, `splits/${splitId}/transfers`), {
+            detalles: `⚙️ Admin inicializó los rosters del ${currentSplitName} desde ${prevSplit.nombre}.`,
             timestamp: new Date().toISOString(),
             tipo: "admin"
           });
 
-          setMsg("¡Estructura y plantillas del Split 2 sincronizadas correctamente con éxito!");
-          setTimeout(() => {
-            setMsg("");
-          }, 4000);
+          setMsg(`¡${currentSplitName} inicializado correctamente!`);
+          setTimeout(() => setMsg(""), 4000);
         } catch (err: any) {
-          setMsg("Error al sincronizar rosters oficial: " + err.message);
+          setMsg("Error al inicializar split: " + err.message);
         } finally {
           setLoading(false);
         }
@@ -924,6 +923,25 @@ export function AdminDashboard() {
               </button>
             </div>
           </div>
+
+          {!isSelectedSplitInitialized && selectedSplitId !== "split_1" && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mt-6">
+              <div>
+                <h4 className="text-sm font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                  ⚠️ Split No Inicializado en Base de Datos
+                </h4>
+                <p className="text-xs text-white/60 mt-1 max-w-2xl select-none">
+                  Este Split está heredando dinámicamente el presupuesto y plantel del Split anterior. Para poder realizar movimientos de pilotos, modificar presupuestos de equipos, o editar ratings y cláusulas de este Split de forma manual e independiente, debes inicializar la base de datos de este Split.
+                </p>
+              </div>
+              <button
+                onClick={() => handleSyncSplitRosters(selectedSplitId)}
+                className="bg-amber-500 hover:bg-amber-600 text-black px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider shrink-0 transition-colors shadow-lg cursor-pointer"
+              >
+                Inicializar Split
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
             {(splits.find(s => s.id === selectedSplitId)?.equipos || []).map((team: any) => {
