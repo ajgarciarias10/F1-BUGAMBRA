@@ -305,7 +305,9 @@ export function AdminDashboard() {
       const { doc, setDoc, deleteDoc, addDoc, collection } = await import("firebase/firestore");
       
       let pData = { ...pilotData };
-      
+      const isFromFreeAgent = fromTeamId === "agente_libre";
+      const isToFreeAgent = toTeamId === "agente_libre";
+
       // Calculate clause price
       const rating = Number(pData.rating_piloto || pData.raw?.rating_piloto || 70);
       const clause = Number(pData.clausula_actual || pData.raw?.clausula_actual || (rating * 0.5) || 15);
@@ -313,73 +315,70 @@ export function AdminDashboard() {
       const currentSplit = splits.find(s => s.id === selectedSplitId);
 
       // Adjust budgets in Firestore
-      if (fromTeamId && fromTeamId !== "agente_libre") {
+      if (!isFromFreeAgent && fromTeamId) {
         const fromTeam = currentSplit?.equipos.find((e: any) => e.id === fromTeamId);
         const currentFromBudget = fromTeam ? Number(fromTeam.presupuesto ?? 100) : 100;
         const newFromBudget = Number((currentFromBudget + clause).toFixed(1));
-        
         const tFromRef = doc(db, `splits/${selectedSplitId}/equipos`, fromTeamId);
         await setDoc(tFromRef, { presupuesto: newFromBudget }, { merge: true });
       }
 
-      if (toTeamId && toTeamId !== "agente_libre") {
+      if (!isToFreeAgent && toTeamId) {
         const toTeam = currentSplit?.equipos.find((e: any) => e.id === toTeamId);
         const currentToBudget = toTeam ? Number(toTeam.presupuesto ?? 100) : 100;
         const newToBudget = Number((currentToBudget - clause).toFixed(1));
-        
         const tToRef = doc(db, `splits/${selectedSplitId}/equipos`, toTeamId);
         await setDoc(tToRef, { presupuesto: newToBudget }, { merge: true });
       }
 
+      if (isToFreeAgent) {
+        await setDoc(doc(db, `splits/${selectedSplitId}/equipos`, toTeamId), {
+          id: toTeamId,
+          nombre: "Agente Libre",
+          presupuesto: 0
+        }, { merge: true });
+      }
+
       // Update global user document escuderia_id to keep Pilot Panel and queries aligned
-      // Find matching user in 'usuarios' by uid or registered piloto_id
       const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
       if (matchedUser) {
         const userRef = doc(db, "usuarios", matchedUser.uid);
         await setDoc(userRef, {
-          escuderia_id: toTeamId === "agente_libre" ? "" : toTeamId
+          escuderia_id: isToFreeAgent ? "" : toTeamId
         }, { merge: true });
       }
 
-      // To guarantee absolutely no duplicate pilot documents exist across collections/teams in this split,
-      // we prepare all deletions to run in parallel using Promise.all for modern, lightning-fast execution.
       const deletePromises: Promise<any>[] = [];
+      const teamsInSplit = splits.find(s => s.id === selectedSplitId)?.equipos || [];
+      const allTeamIds = Array.from(new Set([
+        ...teamsInSplit.map((t: any) => t.id),
+        fromTeamId,
+        toTeamId,
+        "agente_libre"
+      ].filter(Boolean)));
 
-      if (fromTeamId && fromTeamId !== "agente_libre") {
-        deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${fromTeamId}/pilotos`, pilotId)));
+      allTeamIds.forEach((teamId) => {
+        deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${teamId}/pilotos`, pilotId)));
         if (matchedUser) {
           if (matchedUser.uid !== pilotId) {
-            deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${fromTeamId}/pilotos`, matchedUser.uid)));
+            deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${teamId}/pilotos`, matchedUser.uid)));
           }
           if (matchedUser.piloto_id && matchedUser.piloto_id !== pilotId) {
-            deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${fromTeamId}/pilotos`, matchedUser.piloto_id)));
+            deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${teamId}/pilotos`, matchedUser.piloto_id)));
           }
         }
-      } else {
-        const teamsInSplit = splits.find(s => s.id === selectedSplitId)?.equipos || [];
-        for (const t of teamsInSplit) {
-          deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${t.id}/pilotos`, pilotId)));
-          if (matchedUser) {
-            if (matchedUser.uid !== pilotId) {
-              deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${t.id}/pilotos`, matchedUser.uid)));
-            }
-            if (matchedUser.piloto_id && matchedUser.piloto_id !== pilotId) {
-              deletePromises.push(deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${t.id}/pilotos`, matchedUser.piloto_id)));
-            }
-          }
-        }
-      }
+      });
 
       await Promise.all(deletePromises);
-      
-      if (toTeamId && toTeamId !== "agente_libre") {
+
+      if (toTeamId) {
         const newRef = doc(db, `splits/${selectedSplitId}/equipos/${toTeamId}/pilotos`, pilotId);
         await setDoc(newRef, {
           id: pilotId,
           nombre: pilotName || pData.nombre || "Piloto",
-          puntos_piloto: fromTeamId === "agente_libre" ? 0 : (pData.puntos_piloto ?? 0),
-          victorias: fromTeamId === "agente_libre" ? 0 : (pData.victorias ?? 0),
-          podios: fromTeamId === "agente_libre" ? 0 : (pData.podios ?? 0),
+          puntos_piloto: isFromFreeAgent ? 0 : (pData.puntos_piloto ?? 0),
+          victorias: isFromFreeAgent ? 0 : (pData.victorias ?? 0),
+          podios: isFromFreeAgent ? 0 : (pData.podios ?? 0),
           rating_piloto: pData.rating_piloto ?? 70,
           precio_compra_split: pData.precio_compra_split ?? 10,
           clausula_actual: pData.clausula_actual ?? 15,
@@ -387,13 +386,13 @@ export function AdminDashboard() {
           precio_carrera_anterior: pData.precio_carrera_anterior ?? 10
         });
       }
-      
+
       let budgetStr = "";
-      if (fromTeamId !== "agente_libre" && toTeamId !== "agente_libre") {
+      if (!isFromFreeAgent && !isToFreeAgent) {
         budgetStr = ` (${fromTeamId} +${clause}M, ${toTeamId} -${clause}M)`;
-      } else if (fromTeamId !== "agente_libre") {
+      } else if (!isFromFreeAgent) {
         budgetStr = ` (${fromTeamId} +${clause}M por rescisión)`;
-      } else if (toTeamId !== "agente_libre") {
+      } else if (!isToFreeAgent) {
         budgetStr = ` (${toTeamId} -${clause}M por fichaje)`;
       }
 

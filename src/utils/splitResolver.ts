@@ -129,8 +129,12 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
       // For split_2, split_3, split_4:
       const prevResolved = resolved[i - 1];
       
-      const teamKeys = ["zenith", "roses", "alfa_romero"];
-      const equipos = teamKeys.map((teamId) => {
+      const baseTeamIds = ["zenith", "roses", "alfa_romero"];
+      const currentTeamIds = s.equipos?.map((eq: any) => eq.id) || [];
+      const prevTeamIds = prevResolved?.equipos?.map((eq: any) => eq.id) || [];
+      const teamIds = Array.from(new Set([...baseTeamIds, ...currentTeamIds, ...prevTeamIds]));
+
+      const equipos = teamIds.map((teamId) => {
         const eqActual = s.equipos?.find((eq: any) => eq.id === teamId);
         const eqAnterior = prevResolved?.equipos?.find((eq: any) => eq.id === teamId);
         
@@ -143,10 +147,10 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
 
         let puntos_constructores = 0;
         if (isStarted) {
-          puntos_constructores = eqActual?.puntos_constructores || 0;
+          puntos_constructores = eqActual?.puntos_constructores ?? eqAnterior?.puntos_constructores ?? 0;
         }
 
-        let rawPilotos = [];
+        let rawPilotos: any[] = [];
         const actualPilots = eqActual?.pilotos || [];
         if (actualPilots.length > 0) {
           const prevPilots = eqAnterior?.pilotos || [];
@@ -180,9 +184,11 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
           };
         });
 
+        const defaultNombre = teamId === "agente_libre" ? "Agente Libre" : (teamId.charAt(0).toUpperCase() + teamId.slice(1));
+
         return {
           id: teamId,
-          nombre: eqActual?.nombre || eqAnterior?.nombre || (teamId.charAt(0).toUpperCase() + teamId.slice(1)),
+          nombre: eqActual?.nombre || eqAnterior?.nombre || defaultNombre,
           jeque_id: eqActual?.jeque_id || eqAnterior?.jeque_id || "",
           presupuesto,
           puntos_constructores,

@@ -1418,8 +1418,15 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
               <tbody className="text-sm">
                 {standings.map((p: any, i: number) => {
                   const pilotPhoto = getPilotPhoto(p.id);
+                  const isSelected = selectedPilotForProfileId === p.id;
                   return (
-                    <tr key={`standings-${p.id || p.name}-${i}`} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                    <tr
+                      key={`standings-${p.id || p.name}-${i}`}
+                      onClick={() => setSelectedPilotForProfileId(p.id)}
+                      role="button"
+                      title={`Ver perfil de ${p.name}`}
+                      className={`border-b border-white/5 last:border-0 transition-colors cursor-pointer ${isSelected ? "bg-[#e10600]/10 hover:bg-[#e10600]/15" : "hover:bg-white/5"}`}
+                    >
                       <td className="py-3 pl-2 font-black italic text-white/30 text-lg w-8">{i + 1}</td>
                       <td className="py-3 font-bold">
                         <div className="flex items-center gap-3">
@@ -1441,21 +1448,101 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                           </div>
                         </div>
                       </td>
-                    <td className="py-3 text-right pr-2 font-bold tabular-nums">
-                      {activeSplitId === "global" ? (
-                        <span className="text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-500/20 text-xs inline-flex items-center gap-1 font-mono">
-                          {p.points} 🏆
-                        </span>
-                      ) : (
-                        p.points
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                      <td className="py-3 text-right pr-2 font-bold tabular-nums">
+                        {activeSplitId === "global" ? (
+                          <span className="text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-500/20 text-xs inline-flex items-center gap-1 font-mono">
+                            {p.points} 🏆
+                          </span>
+                        ) : (
+                          p.points
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+
+          {pilotProfileStats && (
+            <section className="mt-8 bg-zinc-900/60 border border-white/10 rounded-3xl p-6 shadow-2xl">
+              <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  {pilotProfileStats.fotoUrl ? (
+                    <img src={pilotProfileStats.fotoUrl} alt={pilotProfileStats.name} referrerPolicy="no-referrer" className="w-20 h-20 rounded-3xl object-cover border-2 border-[#e10600]" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-3xl border border-white/10 bg-zinc-950 flex items-center justify-center text-white/30 font-black text-xl uppercase font-mono">
+                      {pilotProfileStats.name.substring(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.25em] text-[#e10600] font-black font-mono mb-2">Perfil de Piloto</div>
+                    <h3 className="text-3xl font-black tracking-tight text-white">{pilotProfileStats.name}</h3>
+                    <p className="text-sm text-white/50 uppercase tracking-[0.15em] mt-1">{pilotProfileStats.escuderiaName}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPilotForProfileId(null)}
+                  className="self-start xl:self-auto px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white/80 uppercase text-[10px] tracking-[0.24em] font-bold transition hover:bg-white/10"
+                >
+                  Cerrar perfil
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: 'Pts totales', value: pilotProfileStats.totalPoints },
+                    { label: 'Victorias', value: pilotProfileStats.victorias },
+                    { label: 'Podios', value: pilotProfileStats.podiums },
+                    { label: 'DNF', value: pilotProfileStats.dnfs },
+                    { label: 'Poles', value: pilotProfileStats.poles },
+                    { label: 'Laps Rápida', value: pilotProfileStats.fastestLaps },
+                    { label: 'MVP', value: pilotProfileStats.mvps },
+                    { label: 'Carreras limpias', value: pilotProfileStats.cleanRaces }
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl bg-black/40 border border-white/10 p-4">
+                      <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] font-mono mb-2">{item.label}</p>
+                      <p className="text-2xl font-black text-white">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-3xl bg-black/40 border border-white/10 p-4 overflow-x-auto">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-[#e10600] font-mono font-black">Rol histórico</p>
+                      <p className="text-white/60 text-sm mt-1">Promedio de puntos y forma por carrera</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-white/40 uppercase font-mono">Promedio pts</p>
+                      <p className="text-lg font-black text-white">{pilotProfileStats.avgPoints}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-3 gap-3 text-[10px] text-white/40 uppercase font-mono">
+                      <span className="col-span-1">Split</span>
+                      <span className="col-span-1 text-center">Carrera</span>
+                      <span className="col-span-1 text-right">Pts</span>
+                    </div>
+                    {pilotProfileStats.history.slice(0, 6).map((item: any, idx: number) => (
+                      <div key={`${item.splitId}-${item.circuitId}-${idx}`} className="grid grid-cols-3 gap-3 items-center text-sm text-white/80 p-2 rounded-xl bg-white/5">
+                        <span className="col-span-1 uppercase text-white/60 font-mono text-[10px]">{item.splitName}</span>
+                        <span className="col-span-1 text-center font-bold">{item.circuitName}</span>
+                        <span className="col-span-1 text-right font-black tabular-nums">{item.points}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {pilotProfileStats.history.length === 0 && (
+                    <p className="text-sm text-white/40 mt-4">No se han encontrado resultados de carrera para este piloto en el Split seleccionado.</p>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
         </section>
 
         <section>
