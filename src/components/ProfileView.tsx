@@ -207,24 +207,9 @@ export function ProfileView({ pilotId }: { pilotId?: string }) {
 
       {/* RIGHT COLUMN: Edit Settings Panel */}
       <div className="lg:col-span-2">
-        {!isViewingOther ? (
+        { !isViewingOther ? (
           <form onSubmit={handleSaveChanges} className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
-        ) : (
-          <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
-            <div className="border-b border-white/10 pb-4">
-              <h3 className="text-lg font-bold uppercase tracking-tight flex items-center gap-2">
-                <span className="w-1.5 h-5 bg-[#e10600] inline-block" />
-                Perfil Público (Solo Lectura)
-              </h3>
-              <p className="text-xs text-white/40 mt-1 font-mono uppercase tracking-wider">
-                Visualizando datos públicos del piloto.
-              </p>
-            </div>
-            <div className="p-4 text-sm text-white/70">
-              <p><strong>Nombre:</strong> {nombre}</p>
-            </div>
-          </div>
-        )}
+
           <div className="border-b border-white/10 pb-4">
             <h3 className="text-lg font-bold uppercase tracking-tight flex items-center gap-2">
               <span className="w-1.5 h-5 bg-[#e10600] inline-block" />
@@ -250,24 +235,21 @@ export function ProfileView({ pilotId }: { pilotId?: string }) {
           )}
 
           {/* Form input: Nombre */}
-          {!isViewingOther && (
-            <div className="space-y-2">
-              <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
-                Nombre o Álias Piloto/Jeque
-              </label>
-              <input
-                type="text"
-                required
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                className="w-full bg-zinc-800 border border-white/10 rounded-xl px-4 py-3 text-white font-medium focus:outline-none focus:border-[#e10600] transition-colors"
-                placeholder="Ej: Marotez Al-Rafah"
-              />
-            </div>
-          )}
+          <div className="space-y-2">
+            <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
+              Nombre o Álias Piloto/Jeque
+            </label>
+            <input
+              type="text"
+              required
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className="w-full bg-zinc-800 border border-white/10 rounded-xl px-4 py-3 text-white font-medium focus:outline-none focus:border-[#e10600] transition-colors"
+              placeholder="Ej: Marotez Al-Rafah"
+            />
+          </div>
 
           {/* Drag & Drop Area */}
-          {!isViewingOther && (
             <div className="space-y-2">
               <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
                 Foto de Perfil (Avatar)
@@ -301,10 +283,8 @@ export function ProfileView({ pilotId }: { pilotId?: string }) {
                 </p>
               </div>
             </div>
-          )}
 
-          {/* Paste URL Optional Input */}
-          {!isViewingOther && (
+            {/* Paste URL Optional Input */}
             <div className="space-y-2 border-t border-white/5 pt-5">
             <label className="text-xs font-mono uppercase tracking-widest text-white/50 block">
               O introduce una dirección URL de imagen
@@ -329,20 +309,33 @@ export function ProfileView({ pilotId }: { pilotId?: string }) {
               </button>
             </div>
           </div>
-          )}
 
-          {!isViewingOther && (
-            <div className="border-t border-white/10 pt-6 flex justify-end gap-3">
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-[#e10600] hover:bg-red-700 text-white font-extrabold text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-lg shadow-red-900/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Guardando..." : "Guardar Perfil"}
-              </button>
-            </div>
-          )}
+          <div className="border-t border-white/10 pt-6 flex justify-end gap-3">
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-[#e10600] hover:bg-red-700 text-white font-extrabold text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-lg shadow-red-900/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? "Guardando..." : "Guardar Perfil"}
+            </button>
+          </div>
         </form>
+        ) : (
+          <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
+            <div className="border-b border-white/10 pb-4">
+              <h3 className="text-lg font-bold uppercase tracking-tight flex items-center gap-2">
+                <span className="w-1.5 h-5 bg-[#e10600] inline-block" />
+                Perfil Público (Solo Lectura)
+              </h3>
+              <p className="text-xs text-white/40 mt-1 font-mono uppercase tracking-wider">
+                Visualizando datos públicos del piloto.
+              </p>
+            </div>
+            <div className="p-4 text-sm text-white/70">
+              <p><strong>Nombre:</strong> {nombre}</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
