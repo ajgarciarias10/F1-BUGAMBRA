@@ -812,8 +812,8 @@ export function AdminDashboard() {
                       </td>
                       <td className="py-4">
                         <input type="number" min="1" max="15" className="w-14 bg-zinc-800/50 border border-white/10 rounded-lg px-2 py-2 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40" 
-                          disabled={isActaCerrada}
-                          value={results[p.id]?.qualyPos || ""} onChange={e => handleUpdate(p.id, "qualyPos", parseInt(e.target.value))} />
+                          disabled={isActaCerrada || isPilotDnf}
+                          value={isPilotDnf ? "" : (results[p.id]?.qualyPos || "")} onChange={e => handleUpdate(p.id, "qualyPos", parseInt(e.target.value))} />
                       </td>
                       <td className="py-4">
                         <input type="number" min="1" max="15" className="w-14 bg-zinc-800/50 border border-white/10 rounded-lg px-2 py-2 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40"
