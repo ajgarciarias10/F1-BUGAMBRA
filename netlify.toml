@@ -1,0 +1,16 @@
+# Netlify Configuration File
+# This defines how Netlify should build and route your React application.
+
+[build]
+  # The command Netlify runs to build your web app
+  command = "npm run build"
+  
+  # The directory where Vite outputs compiled files, which Netlify will deploy
+  publish = "dist"
+
+# Redirect rule to support React Router single-page application navigation. 
+# It redirects all search paths to index.html and lets React handle the routing.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
