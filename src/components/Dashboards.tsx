@@ -133,7 +133,11 @@ export function JequeDashboard() {
         {activeTab === "championship" ? (
           <SharedDashboardView canViewBudget={true} escuderiaId={userData?.escuderia_id} />
         ) : activeTab === "profile" ? (
-          <ProfileView />
+          (() => {
+            const params = new URLSearchParams(location.search);
+            const pilotId = params.get("pilotId") || undefined;
+            return <ProfileView pilotId={pilotId} />;
+          })()
         ) : (
           <SuggestionsView isAdmin={false} />
         )}
@@ -213,7 +217,11 @@ export function PilotoDashboard() {
         {activeTab === "championship" ? (
           <SharedDashboardView canViewBudget={false} escuderiaId={userData?.escuderia_id} />
         ) : activeTab === "profile" ? (
-          <ProfileView />
+          (() => {
+            const params = new URLSearchParams(location.search);
+            const pilotId = params.get("pilotId") || undefined;
+            return <ProfileView pilotId={pilotId} />;
+          })()
         ) : (
           <SuggestionsView isAdmin={false} />
         )}

@@ -3,6 +3,7 @@ import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Flame, Coins, History, ArrowRight, UserMinus, UserPlus, ShieldAlert, Award, Clock, Sparkles, UploadCloud, Camera, X, Trophy, TrendingUp, Gauge, Zap, CheckCircle2 } from "lucide-react";
 import { resolveAllSplits, isSplitUnlocked } from "../utils/splitResolver";
+import { useNavigate, useLocation } from "react-router";
 
 export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBudget: boolean, escuderiaId?: string }) {
   const { user, userData } = useAuth();
@@ -12,6 +13,15 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   const splits = useMemo(() => resolveAllSplits(rawSplits), [rawSplits]);
   const [activeSplitId, setActiveSplitId] = useState<string>("global");
   const [selectedPilotForProfileId, setSelectedPilotForProfileId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const openPilotProfile = (pilotId: string) => {
+    const params = new URLSearchParams(location.search);
+    params.set("tab", "profile");
+    params.set("pilotId", pilotId);
+    navigate(`${location.pathname}?${params.toString()}`);
+  };
   const [transfers, setTransfers] = useState<any[]>([]);
   const [transacting, setTransacting] = useState(false);
   const [plantilla, setPlantilla] = useState<any[]>([]);
@@ -88,12 +98,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   useEffect(() => {
     if (!user) {
       setPlantilla([]);
-      return;
-    }
-    let unsub = () => {};
-    import("firebase/firestore").then(({ collection, onSnapshot, query }) => {
-      import("../services/firebase").then(({ db }) => {
-        const q = query(collection(db, "plantilla"));
+              return (
+                <div
+                  key={`rec-${p.id}-${i}`}
+                  onClick={() => openPilotProfile(p.id)}
+                  role="button"
+                  title={`Ver perfil de ${p.nombre}`}>
         unsub = onSnapshot(q, (snapshot) => {
           setPlantilla(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => {
@@ -1195,7 +1205,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
               return (
                 <div
                   key={`rec-${p.id}-${i}`}
-                  onClick={() => setSelectedPilotForProfileId(p.id)}
+                  onClick={() => openPilotProfile(p.id)}
                   role="button"
                   title={`Ver perfil de ${p.nombre}`}
                   className="bg-zinc-900/40 border border-white/5 rounded-xl p-4 flex flex-col hover:bg-white/[0.02] hover:border-white/10 transition-all group relative cursor-pointer"
@@ -1347,7 +1357,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
               {misPilotos.map((p: any, i: number) => (
                 <div
                   key={`mis-pilotos-${p.id}-${i}`}
-                  onClick={() => setSelectedPilotForProfileId(p.id)}
+                  onClick={() => openPilotProfile(p.id)}
                   role="button"
                   title={`Ver perfil de ${p.nombre}`}
                   className="bg-zinc-900/50 border border-white/10 rounded-xl p-4 flex flex-col hover:bg-white/5 transition-all group cursor-pointer"
@@ -1428,7 +1438,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                   return (
                     <tr
                       key={`standings-${p.id || p.name}-${i}`}
-                      onClick={() => setSelectedPilotForProfileId(p.id)}
+                      onClick={() => openPilotProfile(p.id)}
                       role="button"
                       title={`Ver perfil de ${p.name}`}
                       className={`border-b border-white/5 last:border-0 transition-colors cursor-pointer ${isSelected ? "bg-[#e10600]/10 hover:bg-[#e10600]/15" : "hover:bg-white/5"}`}
@@ -1695,7 +1705,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                     return (
                       <div
                         key={`clausula-${p.id}-${p.teamId || ''}-${i}`}
-                        onClick={() => setSelectedPilotForProfileId(p.id)}
+                          onClick={() => openPilotProfile(p.id)}
                         role="button"
                         title={`Ver perfil de ${p.nombre}`}
                         className="p-3 bg-white/5 border border-white/5 rounded-lg text-xs hover:border-white/15 transition-all cursor-pointer"
@@ -1762,7 +1772,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                   return (
                     <div
                       key={`freeagent-${p.id}-${i}`}
-                      onClick={() => setSelectedPilotForProfileId(p.id)}
+                      onClick={() => openPilotProfile(p.id)}
                       role="button"
                       title={`Ver perfil de ${p.nombre}`}
                       className="p-3 bg-white/5 border border-white/5 rounded-lg text-xs hover:border-white/15 transition-all cursor-pointer"

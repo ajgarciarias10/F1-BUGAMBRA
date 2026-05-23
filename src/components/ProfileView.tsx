@@ -1,14 +1,19 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { compressAndConvertImage } from "../utils/imageHelper";
 import { UploadCloud, Link as LinkIcon, Camera, User, BadgeAlert, Coins, Sparkles, Trophy, CheckCircle, Flame } from "lucide-react";
+import { useUsuarios } from "../hooks/useData";
 
-export function ProfileView() {
+export function ProfileView({ pilotId }: { pilotId?: string }) {
   const { user, userData } = useAuth();
-  const [nombre, setNombre] = useState(userData?.nombre || "");
-  const [fotoUrl, setFotoUrl] = useState(userData?.foto_url || "");
+  const { usuarios } = useUsuarios();
+  const viewingPilotId = pilotId || user?.uid;
+  const isViewingOther = !!pilotId && pilotId !== user?.uid;
+
+  const [nombre, setNombre] = useState<string>("");
+  const [fotoUrl, setFotoUrl] = useState<string>("");
   const [urlInput, setUrlInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
@@ -18,13 +23,42 @@ export function ProfileView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (userData) {
+    // If viewing other pilot, load from usuarios or plantilla
+    if (viewingPilotId) {
+      const matched = usuarios.find((u: any) => u.uid === viewingPilotId || (u.piloto_id && u.piloto_id === viewingPilotId));
+      if (matched) {
+        setNombre(matched.nombre || "");
+        setFotoUrl(matched.foto_url || "");
+        return;
+      }
+
+      // If not a registered user, try plantilla doc
+      (async () => {
+        try {
+          const pRef = doc(db, "plantilla", viewingPilotId);
+          const snap = await getDoc(pRef);
+          if (snap.exists()) {
+            const data = snap.data() as any;
+            setNombre(data.nombre || viewingPilotId);
+            setFotoUrl(data.foto_url || "");
+            return;
+          }
+        } catch (err) {
+          console.warn("Error fetching plantilla doc for profile view:", err);
+        }
+        // Fallback to current user data if available
+        if (!isViewingOther && userData) {
+          setNombre(userData.nombre || "");
+          setFotoUrl(userData.foto_url || "");
+        }
+      })();
+    } else if (userData) {
       setNombre(userData.nombre || "");
       setFotoUrl(userData.foto_url || "");
     }
-  }, [userData]);
+  }, [viewingPilotId, usuarios, userData]);
 
-  if (!user || !userData) {
+  if (!user) {
     return (
       <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-8 text-center text-white/50 uppercase font-mono text-xs tracking-wider">
         Inicia sesión para ver tu perfil.
@@ -61,6 +95,7 @@ export function ProfileView() {
   };
 
   const processImageFile = async (file: File) => {
+    if (isViewingOther) return; // read-only when viewing other pilot
     if (!file.type.startsWith("image/")) {
       setErrorMsg("El archivo seleccionado debe ser una imagen.");
       return;
@@ -81,6 +116,7 @@ export function ProfileView() {
   };
 
   const handleApplyUrl = () => {
+    if (isViewingOther) return;
     if (!urlInput.trim()) return;
     setFotoUrl(urlInput.trim());
     setUrlInput("");
@@ -89,6 +125,7 @@ export function ProfileView() {
 
   const handleSaveChanges = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewingOther) return; // don't allow saving when viewing someone else
     if (!nombre.trim()) {
       setErrorMsg("El nombre no puede estar vacío.");
       return;
@@ -132,16 +169,18 @@ export function ProfileView() {
                 <User className="w-16 h-16" />
               </div>
             )}
-            <div className="absolute bottom-1 right-1 bg-[#e10600] p-1.5 rounded-full text-white shadow-lg cursor-pointer hover:bg-red-700 transition-colors" onClick={() => fileInputRef.current?.click()}>
-              <Camera className="w-4 h-4" />
-            </div>
+            {!isViewingOther && (
+              <div className="absolute bottom-1 right-1 bg-[#e10600] p-1.5 rounded-full text-white shadow-lg cursor-pointer hover:bg-red-700 transition-colors" onClick={() => fileInputRef.current?.click()}>
+                <Camera className="w-4 h-4" />
+              </div>
+            )}
           </div>
 
           <span className="text-[10px] font-mono tracking-[0.25em] text-[#e10600] uppercase font-black bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20 mb-2">
             Sesión: {userData.rol}
           </span>
           <h2 className="text-xl font-bold italic tracking-tight">{nombre || "Usuario F1"}</h2>
-          <p className="text-xs text-white/50 font-mono lowercase mt-1">{user.email}</p>
+          <p className="text-xs text-white/50 font-mono lowercase mt-1">{isViewingOther ? "" : user.email}</p>
 
           {/* Quick stats panel */}
           <div className="w-full border-t border-white/10 my-6 pt-5 grid grid-cols-2 gap-4">
@@ -160,7 +199,7 @@ export function ProfileView() {
           <div className="bg-[#e10600]/10 border border-[#e10600]/20 rounded-xl p-3.5 text-left w-full text-xs flex gap-2.5">
             <BadgeAlert className="w-4 h-4 text-[#e10600] shrink-0 mt-0.5" />
             <p className="text-white/70 leading-relaxed text-[11px]">
-              Tus fotos y datos de perfil se actualizan en todas las tablas de clasificación de la plataforma de manera inmediata.
+              {isViewingOther ? "Perfil público — solo lectura." : "Tus fotos y datos de perfil se actualizan en todas las tablas de clasificación de la plataforma de manera inmediata."}
             </p>
           </div>
         </div>
@@ -168,7 +207,24 @@ export function ProfileView() {
 
       {/* RIGHT COLUMN: Edit Settings Panel */}
       <div className="lg:col-span-2">
-        <form onSubmit={handleSaveChanges} className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
+        {!isViewingOther ? (
+          <form onSubmit={handleSaveChanges} className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
+        ) : (
+          <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
+            <div className="border-b border-white/10 pb-4">
+              <h3 className="text-lg font-bold uppercase tracking-tight flex items-center gap-2">
+                <span className="w-1.5 h-5 bg-[#e10600] inline-block" />
+                Perfil Público (Solo Lectura)
+              </h3>
+              <p className="text-xs text-white/40 mt-1 font-mono uppercase tracking-wider">
+                Visualizando datos públicos del piloto.
+              </p>
+            </div>
+            <div className="p-4 text-sm text-white/70">
+              <p><strong>Nombre:</strong> {nombre}</p>
+            </div>
+          </div>
+        )}
           <div className="border-b border-white/10 pb-4">
             <h3 className="text-lg font-bold uppercase tracking-tight flex items-center gap-2">
               <span className="w-1.5 h-5 bg-[#e10600] inline-block" />
@@ -194,57 +250,62 @@ export function ProfileView() {
           )}
 
           {/* Form input: Nombre */}
-          <div className="space-y-2">
-            <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
-              Nombre o Álias Piloto/Jeque
-            </label>
-            <input
-              type="text"
-              required
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              className="w-full bg-zinc-800 border border-white/10 rounded-xl px-4 py-3 text-white font-medium focus:outline-none focus:border-[#e10600] transition-colors"
-              placeholder="Ej: Marotez Al-Rafah"
-            />
-          </div>
+          {!isViewingOther && (
+            <div className="space-y-2">
+              <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
+                Nombre o Álias Piloto/Jeque
+              </label>
+              <input
+                type="text"
+                required
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                className="w-full bg-zinc-800 border border-white/10 rounded-xl px-4 py-3 text-white font-medium focus:outline-none focus:border-[#e10600] transition-colors"
+                placeholder="Ej: Marotez Al-Rafah"
+              />
+            </div>
+          )}
 
           {/* Drag & Drop Area */}
-          <div className="space-y-2">
-            <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
-              Foto de Perfil (Avatar)
-            </label>
-            
-            <div
-              onDragEnter={handleDrag}
-              onDragOver={handleDrag}
-              onDragLeave={handleDrag}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[160px] ${
-                dragActive
-                  ? "border-[#e10600] bg-[#e10600]/5"
-                  : "border-white/10 hover:border-white/20 bg-black/20"
-              }`}
-            >
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                accept="image/*"
-                className="hidden"
-              />
-              <UploadCloud className={`w-10 h-10 mb-2 transition-transform duration-300 ${dragActive ? "text-[#e10600] scale-110" : "text-white/30"}`} />
-              <p className="text-xs font-bold text-white uppercase tracking-tight">
-                Arrastra tu imagen aquí o haz clic para subir
-              </p>
-              <p className="text-[10px] text-white/40 mt-1 uppercase font-mono tracking-wider">
-                Soporta PNG, JPG y GIF. Se redimensiona automáticamente.
-              </p>
+          {!isViewingOther && (
+            <div className="space-y-2">
+              <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
+                Foto de Perfil (Avatar)
+              </label>
+              
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[160px] ${
+                  dragActive
+                    ? "border-[#e10600] bg-[#e10600]/5"
+                    : "border-white/10 hover:border-white/20 bg-black/20"
+                }`}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <UploadCloud className={`w-10 h-10 mb-2 transition-transform duration-300 ${dragActive ? "text-[#e10600] scale-110" : "text-white/30"}`} />
+                <p className="text-xs font-bold text-white uppercase tracking-tight">
+                  Arrastra tu imagen aquí o haz clic para subir
+                </p>
+                <p className="text-[10px] text-white/40 mt-1 uppercase font-mono tracking-wider">
+                  Soporta PNG, JPG y GIF. Se redimensiona automáticamente.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Paste URL Optional Input */}
-          <div className="space-y-2 border-t border-white/5 pt-5">
+          {!isViewingOther && (
+            <div className="space-y-2 border-t border-white/5 pt-5">
             <label className="text-xs font-mono uppercase tracking-widest text-white/50 block">
               O introduce una dirección URL de imagen
             </label>
@@ -268,16 +329,19 @@ export function ProfileView() {
               </button>
             </div>
           </div>
+          )}
 
-          <div className="border-t border-white/10 pt-6 flex justify-end gap-3">
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-[#e10600] hover:bg-red-700 text-white font-extrabold text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-lg shadow-red-900/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Guardando..." : "Guardar Perfil"}
-            </button>
-          </div>
+          {!isViewingOther && (
+            <div className="border-t border-white/10 pt-6 flex justify-end gap-3">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-[#e10600] hover:bg-red-700 text-white font-extrabold text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-lg shadow-red-900/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Guardando..." : "Guardar Perfil"}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>
