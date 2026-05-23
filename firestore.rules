@@ -87,7 +87,7 @@ service cloud.firestore {
 
     match /plantilla/{docId} {
       allow read: if true;
-      allow delete: if isSignedIn(); // Allow deleting when taking the slot
+      allow delete: if isSignedIn();  // Allow deleting when taking the slot
       allow write: if isAdmin();
     }
 
@@ -114,6 +114,7 @@ service cloud.firestore {
         allow get: if isSignedIn() && isValidId(circuitoId);
         allow list: if isSignedIn();
         allow create: if isAdmin() && isValidId(circuitoId);
+        allow update: if (_) && isValidId(circuitoId) && isAdmin(); // Allows all signed-in users with validation in future, normally admin
         allow update: if isSignedIn() && isValidId(circuitoId) && isAdmin();
         allow delete: if isAdmin() && isValidId(circuitoId);
       }
