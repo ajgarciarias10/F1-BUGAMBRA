@@ -1,12 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { SharedDashboardView } from "./SharedDashboard";
 import { ProfileView } from "./ProfileView";
 import { auth } from "../services/firebase";
 import { SuggestionsView } from "./SuggestionsView";
+import { useLocation, useNavigate } from "react-router";
 
 export function UserHeader({ title }: { title: string }) {
   const { userData } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   return (
     <header className="h-16 border-b border-white/10 bg-black/40 flex items-center justify-between px-6 shrink-0 -mx-8 -mt-8 mb-8">
       <div className="flex items-center gap-4">
@@ -23,18 +26,30 @@ export function UserHeader({ title }: { title: string }) {
           <span className="text-sm font-medium">{userData?.nombre}</span>
         </div>
         <div className="flex items-center gap-3">
-          {userData?.foto_url ? (
-            <img 
-              src={userData.foto_url} 
-              alt={userData.nombre} 
-              referrerPolicy="no-referrer"
-              className="w-10 h-10 rounded-full border border-[#e10600] object-cover shadow-[0_0_15px_rgba(225,6,0,0.3)]"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full border border-[#e10600] bg-gradient-to-tr from-zinc-800 to-zinc-700 flex items-center justify-center font-bold text-white shadow-[0_0_15px_rgba(225,6,0,0.3)]">
-              {userData?.nombre?.substring(0, 2).toUpperCase() || 'FX'}
-            </div>
-          )}
+          <div
+            role="button"
+            onClick={() => {
+              // Navigate to same path with query ?tab=profile to signal dashboards to open profile tab
+              const params = new URLSearchParams(location.search);
+              params.set("tab", "profile");
+              navigate(`${location.pathname}?${params.toString()}`);
+            }}
+            className="cursor-pointer flex items-center gap-2"
+            title="Abrir Mi Perfil"
+          >
+            {userData?.foto_url ? (
+              <img 
+                src={userData.foto_url} 
+                alt={userData.nombre} 
+                referrerPolicy="no-referrer"
+                className="w-10 h-10 rounded-full border border-[#e10600] object-cover shadow-[0_0_15px_rgba(225,6,0,0.3)]"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full border border-[#e10600] bg-gradient-to-tr from-zinc-800 to-zinc-700 flex items-center justify-center font-bold text-white shadow-[0_0_15px_rgba(225,6,0,0.3)]">
+                {userData?.nombre?.substring(0, 2).toUpperCase() || 'FX'}
+              </div>
+            )}
+          </div>
           <button 
             onClick={() => auth.signOut()}
             className="ml-2 text-[10px] uppercase tracking-widest font-bold text-white/50 hover:text-white transition-colors"
@@ -42,7 +57,7 @@ export function UserHeader({ title }: { title: string }) {
             Salir
           </button>
         </div>
-      </div>
+        </div>
     </header>
   );
 }
@@ -50,6 +65,13 @@ export function UserHeader({ title }: { title: string }) {
 export function JequeDashboard() {
   const { userData } = useAuth();
   const [activeTab, setActiveTab] = useState<"championship" | "profile" | "suggestions">("championship");
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    if (tab === "profile") setActiveTab("profile");
+  }, [location.search]);
 
   const getHeaderTitle = () => {
     switch (activeTab) {
@@ -123,6 +145,13 @@ export function JequeDashboard() {
 export function PilotoDashboard() {
   const { userData } = useAuth();
   const [activeTab, setActiveTab] = useState<"championship" | "profile" | "suggestions">("championship");
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    if (tab === "profile") setActiveTab("profile");
+  }, [location.search]);
 
   const getHeaderTitle = () => {
     switch (activeTab) {
