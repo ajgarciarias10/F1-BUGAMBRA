@@ -104,7 +104,8 @@ export function AdminDashboard() {
     const counts: Record<number, number> = {};
     (Object.values(results) as Partial<RaceResult>[]).forEach(res => {
       const q = res.qualyPos;
-      if (q !== undefined && q !== null && typeof q === "number" && !isNaN(q)) {
+      const isPilotDnf = res.isDnfOwnError || false;
+      if (!isPilotDnf && q !== undefined && q !== null && typeof q === "number" && !isNaN(q) && q !== 99) {
         counts[q] = (counts[q] || 0) + 1;
       }
     });
@@ -115,7 +116,8 @@ export function AdminDashboard() {
     const counts: Record<number, number> = {};
     (Object.values(results) as Partial<RaceResult>[]).forEach(res => {
       const r = res.racePos;
-      if (r !== undefined && r !== null && typeof r === "number" && !isNaN(r) && r !== 99) {
+      const isPilotDnf = res.isDnfOwnError || false;
+      if (!isPilotDnf && r !== undefined && r !== null && typeof r === "number" && !isNaN(r) && r !== 99) {
         counts[r] = (counts[r] || 0) + 1;
       }
     });
@@ -628,7 +630,7 @@ export function AdminDashboard() {
         
         // Safely parse qualyPos, falling back to a unique row index to avoid bulk duplication
         const enteredQualy = typeof item.qualyPos === "number" ? item.qualyPos : parseInt(item.qualyPos as any);
-        const qPos = (!isNaN(enteredQualy) && enteredQualy > 0) ? enteredQualy : (idx + 1);
+        const qPos = isDnf ? 99 : ((!isNaN(enteredQualy) && enteredQualy > 0) ? enteredQualy : (idx + 1));
 
         // Safely parse racePos, returning 99 for DNF, or a unique fallback if blank
         const enteredRace = typeof item.racePos === "number" ? item.racePos : parseInt(item.racePos as any);
@@ -963,8 +965,8 @@ export function AdminDashboard() {
                               : "border-white/10 text-white"
                           }`} 
                           title={isQualyDuplicated ? "¡Posición de Qualy duplicada!" : undefined}
-                          disabled={isActaCerrada}
-                          value={qPosVal ?? ""} 
+                          disabled={isActaCerrada || isPilotDnf}
+                          value={isPilotDnf ? "" : (qPosVal ?? "")} 
                           onChange={e => {
                             const val = parseInt(e.target.value);
                             handleUpdate(p.id, "qualyPos", isNaN(val) ? "" : val);
@@ -1004,6 +1006,7 @@ export function AdminDashboard() {
                                   pilotoId: p.id,
                                   isDnfOwnError: true,
                                   racePos: 99,
+                                  qualyPos: 99,
                                   isClean: true,
                                   overtakesBoost: false,
                                   isDotd: false,
@@ -1019,6 +1022,7 @@ export function AdminDashboard() {
                                   pilotoId: p.id,
                                   isDnfOwnError: false,
                                   racePos: undefined,
+                                  qualyPos: undefined,
                                   isClean: true,
                                   overtakesBoost: false,
                                   isDotd: false,
