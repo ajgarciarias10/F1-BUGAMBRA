@@ -1,0 +1,155 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /usuarios/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || request.auth.uid == userId;
+    }
+
+    // --- PRIMITIVE HELPERS ---
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    
+    // Admin bootstrapping override (Replace with real email logic if necessary)
+    function isAdminEmail() {
+      return request.auth != null && (request.auth.token.email == 'ajgarciarias@gmail.com' || request.auth.token.email == 'admin@f1bugambra.com');
+    }
+
+    // Checking if user is admin from their profile, or via bootstrap email
+    function isAdmin() {
+      return isSignedIn() && (isAdminEmail() || (exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin'));
+    }
+
+    function isJeque() {
+      return isSignedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'jeque';
+    }
+
+    function isJequeAfter() {
+      return isSignedIn() && existsAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)) && getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'jeque';
+    }
+    
+    // --- VALIDATION BLUEPRINTS ---
+    
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'nombre', 'email', 'rol']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.nombre is string && data.nombre.size() <= 100 &&
+             data.email is string && data.email.size() <= 150 &&
+             data.rol is string && data.rol.matches('^(admin|jeque|piloto)$');
+      // Financials and stats are optional or initialized to baseline values.
+    }
+
+    function isValidEscuderia(data) {
+      return data.keys().hasAll(['nombre', 'presupuesto', 'jeque_id']) &&
+             data.nombre is string && data.nombre.size() <= 100 &&
+             data.presupuesto is number &&
+             data.jeque_id is string && data.jeque_id.size() <= 128;
+    }
+
+    function isValidSplit(data) {
+      return data.keys().hasAll(['nombre']) &&
+             data.nombre is string && data.nombre.size() <= 100;
+    }
+
+    function isValidCircuito(data) {
+      return data.keys().hasAll(['nombre', 'completado', 'resultados']) &&
+             data.nombre is string && data.nombre.size() <= 100 &&
+             data.completado is bool &&
+             data.resultados is list && data.resultados.size() <= 12; // 12 drivers max
+    }
+
+    // --- COLLECTION RULES ---
+
+    // 1. Usuarios Collection
+    match /usuarios/{userId} {
+      allow get: if isValidId(userId) && isSignedIn();
+      allow list: if isSignedIn();
+      
+      allow create: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin()) && isValidUser(incoming());
+      
+      allow update: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() ||
+        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['foto_url', 'nombre']))
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /plantilla/{docId} {
+      allow read: if true;
+      allow delete: if isSignedIn();  // Allow deleting when taking the slot
+      allow write: if isAdmin();
+    }
+
+    // 2. Escuderias Collection
+    match /escuderias/{escuderiaId} {
+      allow get: if isSignedIn() && isValidId(escuderiaId) && (isAdmin() || isJeque());
+      allow list: if isSignedIn() && (isAdmin() || isJeque());
+      allow create: if isAdmin() && isValidId(escuderiaId) && isValidEscuderia(incoming());
+      // Allow Jeque update for jeque_id when claiming, or admin
+      allow update: if isSignedIn() && isValidId(escuderiaId);
+      allow delete: if isAdmin() && isValidId(escuderiaId);
+    }
+
+    // 3. Splits Collection
+    match /splits/{splitId} {
+      allow get: if isSignedIn() && isValidId(splitId);
+      allow list: if isSignedIn();
+      allow create: if isAdmin() && isValidId(splitId);
+      allow update: if isSignedIn() && isValidId(splitId) && isAdmin();
+      allow delete: if isAdmin() && isValidId(splitId);
+      
+      // 3.1. Circuitos Sub-collection
+      match /circuitos/{circuitoId} {
+        allow get: if isSignedIn() && isValidId(circuitoId);
+        allow list: if isSignedIn();
+        allow create: if isAdmin() && isValidId(circuitoId);
+        allow update: if isSignedIn() && isValidId(circuitoId) && isAdmin();
+        allow delete: if isAdmin() && isValidId(circuitoId);
+      }
+
+      // 3.2. Equipos Sub-collection
+      match /equipos/{teamId} {
+        allow get: if isSignedIn() && isValidId(teamId);
+        allow list: if isSignedIn();
+        allow create: if isAdmin() && isValidId(teamId);
+        allow update: if isSignedIn() && isValidId(teamId) && (isAdmin() || isJeque() || isJequeAfter());
+        allow delete: if isAdmin() && isValidId(teamId);
+
+        // 3.3. Pilotos Sub-collection (Roster)
+        match /pilotos/{pilotId} {
+          allow get: if isSignedIn() && isValidId(pilotId);
+          allow list: if isSignedIn();
+          allow create, update, delete: if isSignedIn() && isValidId(pilotId) && (isAdmin() || isJeque());
+        }
+      }
+
+      // 3.4. Notificaciones / Historial de Fichajes Sub-collection
+      match /transfers/{transferId} {
+        allow get, list: if isSignedIn();
+        allow create, update, delete: if isSignedIn() && (isAdmin() || isJeque());
+      }
+    }
+
+    // 4. Mejoras Collection (Buzon de Sugerencias)
+    match /mejoras/{mejoraId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(mejoraId);
+      allow update: if isSignedIn() && isValidId(mejoraId) && (
+        isAdmin() || 
+        incoming().diff(existing()).affectedKeys().hasOnly(['votos'])
+      );
+      allow delete: if isAdmin() && isValidId(mejoraId);
+    }
+  }
+}
