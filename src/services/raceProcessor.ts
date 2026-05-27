@@ -116,7 +116,13 @@ export async function processRace(splitId: string, circuitoId: string, results: 
         for (const up of pilotUpdates) transaction.update(up.ref, up.data);
         for (const tid in teamStats) {
           const s = teamStats[tid];
-          const money = 4 + (s.puntosCarrera * 0.1) + (s.poles * 2);
+          const participationBonus = 4;
+          const pointsBonus = s.puntosCarrera * 0.1;
+          const poleBonus = s.poles * 2;
+          const fastestLapBonus = s.fastestLaps * 1;
+          const cleanBonus = s.isCleanGlobal ? 3 : 0;
+          const money = participationBonus + pointsBonus + poleBonus + fastestLapBonus + cleanBonus;
+
           s.data.presupuesto = (s.data.presupuesto || 0) + money;
           s.data.puntos_constructores = (s.data.puntos_constructores || 0) + s.puntosCarrera;
           transaction.update(s.ref, s.data);

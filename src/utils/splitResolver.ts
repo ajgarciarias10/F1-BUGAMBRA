@@ -14,6 +14,98 @@ export const isSplitUnlocked = (splitId: string, allSplits: any[]): boolean => {
   return allCompleted;
 };
 
+export interface RivalryPilot {
+  id: string;
+  nombre: string;
+  equipoId: string;
+  equipoNombre: string;
+  rating: number;
+  puntos_piloto: number;
+}
+
+export interface RivalryPair {
+  pilotoA: RivalryPilot;
+  pilotoB: RivalryPilot;
+  ratingDiff: number;
+  equipoA: string;
+  equipoB: string;
+}
+
+export interface SplitRivalries {
+  splitId: string;
+  totalPilotos: number;
+  pairCount: number;
+  coeficiente: number;
+  rivalidades: RivalryPair[];
+}
+
+const RIVALRY_COEFFICIENT_TABLE: Record<number, number> = {
+  8: 1.0,
+  10: 1.0,
+  12: 1.1,
+  14: 1.2,
+  16: 1.3
+};
+
+export function getRivalryCoefficient(totalPilotos: number): number {
+  return RIVALRY_COEFFICIENT_TABLE[totalPilotos] ?? 1.0;
+}
+
+export function buildRivalryTable(split: any): SplitRivalries {
+  const pilots: RivalryPilot[] = (split.equipos || []).flatMap((equipo: any) =>
+    (equipo.pilotos || []).map((p: any) => ({
+      id: p.id,
+      nombre: p.nombre,
+      equipoId: equipo.id,
+      equipoNombre: equipo.nombre,
+      rating: p.rating_piloto ?? 70,
+      puntos_piloto: p.puntos_piloto ?? 0
+    }))
+  );
+
+  const totalPilotos = pilots.length;
+  const coeficiente = getRivalryCoefficient(totalPilotos);
+  const unpaired = new Set(pilots.map((p) => p.id));
+  const sortedPilots = [...pilots].sort((a, b) => b.rating - a.rating || a.nombre.localeCompare(b.nombre));
+  const rivalidades: RivalryPair[] = [];
+
+  for (const piloto of sortedPilots) {
+    if (!unpaired.has(piloto.id)) continue;
+
+    const candidate = sortedPilots
+      .filter((other) =>
+        unpaired.has(other.id) &&
+        other.id !== piloto.id &&
+        other.equipoId !== piloto.equipoId
+      )
+      .sort((a, b) => {
+        const diffA = Math.abs(a.rating - piloto.rating);
+        const diffB = Math.abs(b.rating - piloto.rating);
+        return diffA - diffB || a.nombre.localeCompare(b.nombre);
+      })[0];
+
+    if (!candidate) continue;
+
+    unpaired.delete(piloto.id);
+    unpaired.delete(candidate.id);
+    rivalidades.push({
+      pilotoA: piloto,
+      pilotoB: candidate,
+      ratingDiff: Math.abs(piloto.rating - candidate.rating) * coeficiente,
+      equipoA: piloto.equipoNombre,
+      equipoB: candidate.equipoNombre
+    });
+  }
+
+  return {
+    splitId: split.id,
+    totalPilotos,
+    pairCount: rivalidades.length,
+    coeficiente,
+    rivalidades
+  };
+}
+
 /**
  * Helper to process and resolve all splits.
  * - "En mundial split 2 no puede haber puntos no hemos ni empezado. Ni en el split 3 tampoco ni en el 4."
@@ -123,7 +215,8 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
       resolved.push({
         ...s,
         equipos,
-        isStarted: true
+        isStarted: true,
+        rivalries: buildRivalryTable({ id: s.id, equipos })
       });
     } else {
       // For split_2, split_3, split_4:
@@ -199,7 +292,8 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
       resolved.push({
         ...s,
         equipos,
-        isStarted
+        isStarted,
+        rivalries: buildRivalryTable({ id: s.id, equipos })
       });
     }
   }
