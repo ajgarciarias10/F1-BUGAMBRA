@@ -7,6 +7,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { ChevronDown, Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon, Sun, CloudRain, Cloud, Wind, Thermometer, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { resolveAllSplits, isSplitUnlocked } from "../utils/splitResolver";
+import { buildRivalrySummaryFromResults } from "../utils/rivalrySummary";
 import { SuggestionsView } from "./SuggestionsView";
 
 const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
@@ -39,8 +40,22 @@ export function AdminDashboard() {
   const { splits: rawSplits, loading: loadingSplits } = useSplits();
   const splits = useMemo(() => resolveAllSplits(rawSplits), [rawSplits]);
   const [selectedSplitId, setSelectedSplitId] = useState("");
+  const [selectedCircuitoId, setSelectedCircuitoId] = useState("");
 
   const currentRawSplit = useMemo(() => rawSplits.find(s => s.id === selectedSplitId), [rawSplits, selectedSplitId]);
+  const currentCircuit = useMemo(() => {
+    return currentRawSplit?.circuitos?.find((c: any) => c.id === selectedCircuitoId) || null;
+  }, [currentRawSplit, selectedCircuitoId]);
+
+  const currentCircuitRivalrySummary = useMemo(() => {
+    if (!currentCircuit) return null;
+    if (currentCircuit.resumen_pagos_rivalidad) return currentCircuit.resumen_pagos_rivalidad;
+    if (currentCircuit.resultados?.length > 0 && currentRawSplit) {
+      return buildRivalrySummaryFromResults(currentRawSplit.id, currentRawSplit, currentCircuit.resultados);
+    }
+    return null;
+  }, [currentCircuit, currentRawSplit]);
+
   const isSelectedSplitInitialized = useMemo(() => {
     if (!selectedSplitId || selectedSplitId === "split_1") return true;
     if (!currentRawSplit) return false;
@@ -92,7 +107,6 @@ export function AdminDashboard() {
     return [...uPilots, ...uniquePPilots];
   }, [usuarios, plantilla]);
 
-  const [selectedCircuitoId, setSelectedCircuitoId] = useState("");
   const [isEditingFinished, setIsEditingFinished] = useState(false);
   const [isActaCerrada, setIsActaCerrada] = useState(false);
 
@@ -810,6 +824,45 @@ export function AdminDashboard() {
             </div>
           </div>
         </div>
+
+        {currentCircuit && (
+          <section className="bg-zinc-900/50 border border-white/10 rounded-xl p-5 mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-[#e10600]">Resumen Rivalidad</h3>
+                <p className="text-[11px] text-white/50 mt-1">Pagos y grupos de rivalidad para {currentCircuit?.nombre || 'este circuito'}.</p>
+              </div>
+              <span className="text-[10px] uppercase tracking-[0.25em] text-white/40">Split: {currentRawSplit?.nombre || selectedSplitId}</span>
+            </div>
+
+            {currentCircuitRivalrySummary ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-black/40 border border-white/5 rounded-2xl p-4">
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-white/40 mb-3">Pagos por escudería</p>
+                  {Object.entries(currentCircuitRivalrySummary.pagosPorEquipo || {}).map(([teamId, amount]: [string, any]) => (
+                    <div key={teamId} className="flex justify-between text-sm text-white/80 py-2 border-b border-white/5 last:border-0">
+                      <span>{teamId}</span>
+                      <span className="font-black text-white">{Number(amount).toFixed(1)}M</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-black/40 border border-white/5 rounded-2xl p-4">
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-white/40 mb-3">Grupos detectados</p>
+                  {currentCircuitRivalrySummary.grupos?.map((group: any, idx: number) => (
+                    <div key={`${group.status}-${idx}`} className="mb-3 last:mb-0">
+                      <div className="text-sm font-bold text-white">Estatus {group.status} ({group.size})</div>
+                      <div className="text-[10px] text-white/40 mt-1">{group.pilotos?.map((p: any) => p.nombre).join(', ')}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-black/40 border border-white/5 p-6 text-sm text-white/70">
+                No hay resumen de rivalidad para este circuito aún. Procesa los resultados del circuito y vuelve a revisar.
+              </div>
+            )}
+          </section>
+        )}
 
         {/* PROGRAMACIÓN DEL CIRCUITO (ADMINISTRATOR UI) */}
         <div className="bg-zinc-900/50 border border-white/10 rounded-xl p-5 mb-8">

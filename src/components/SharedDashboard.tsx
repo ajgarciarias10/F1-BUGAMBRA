@@ -3,6 +3,7 @@ import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Flame, Coins, History, ArrowRight, UserMinus, UserPlus, ShieldAlert, Award, Clock, Sparkles, UploadCloud, Camera, X, Trophy, TrendingUp, Gauge, Zap, CheckCircle2 } from "lucide-react";
 import { resolveAllSplits, isSplitUnlocked } from "../utils/splitResolver";
+import { buildRivalrySummaryFromResults } from "../utils/rivalrySummary";
 import { NextRaceWidget } from "./NextRaceWidget";
 
 export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBudget: boolean, escuderiaId?: string }) {
@@ -872,6 +873,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     let rating = pilotUser?.rating_piloto || 70;
     let clause = pilotUser?.clausula_actual || (rating * 0.5);
     let escuderiaName = "Sin equipo";
+    let rivalInfo: any[] = [];
 
     const localPOINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
@@ -891,6 +893,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           if (pilotInTeam) {
             rating = pilotInTeam.rating_piloto ?? rating;
             clause = pilotInTeam.clausula_actual ?? (rating * 0.5);
+            rivalInfo = pilotInTeam.rivalidades || [];
           }
         }
       }
@@ -909,6 +912,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           if (pilotInTeam) {
             rating = pilotInTeam.rating_piloto ?? rating;
             clause = pilotInTeam.clausula_actual ?? (rating * 0.5);
+            rivalInfo = pilotInTeam.rivalidades || [];
           }
         }
       }
@@ -970,6 +974,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       rating,
       clause,
       escuderiaName,
+      rivalInfo,
       totalPoints,
       victorias: victories,
       podiums,
@@ -1043,6 +1048,27 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [splits, usuarios, plantilla]);
+
+  const latestRivalryCircuitInfo = useMemo(() => {
+    const splitsToInspect = activeSplitId === "global" ? splits : currentSplit ? [currentSplit] : [];
+    const completed = splitsToInspect.flatMap((s: any) => (s.circuitos || []).map((c: any) => ({ circuit: c, split: s })))
+      .filter((entry: any) => entry.circuit.completado && (entry.circuit.resumen_pagos_rivalidad || entry.circuit.resultados?.length > 0));
+    return completed.length > 0 ? completed[completed.length - 1] : null;
+  }, [activeSplitId, currentSplit, splits]);
+
+  const latestRivalryCircuit = latestRivalryCircuitInfo?.circuit || null;
+  const latestRivalryCircuitSplit = latestRivalryCircuitInfo?.split || null;
+
+  const currentSplitRivalries = useMemo(() => {
+    if (!latestRivalryCircuit) return null;
+    if (latestRivalryCircuit.resumen_pagos_rivalidad) {
+      return latestRivalryCircuit.resumen_pagos_rivalidad;
+    }
+    if (latestRivalryCircuit.resultados?.length > 0 && latestRivalryCircuitSplit) {
+      return buildRivalrySummaryFromResults(latestRivalryCircuitSplit.id, latestRivalryCircuitSplit, latestRivalryCircuit.resultados);
+    }
+    return null;
+  }, [latestRivalryCircuit, latestRivalryCircuitSplit]);
 
   const statsA = useMemo(() => {
     if (!comparePilotIdA) return null;
@@ -1118,6 +1144,52 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             : (currentSplit || null)
         } 
       />
+
+      <section className="bg-zinc-900/80 border border-white/10 rounded-3xl p-6 shadow-2xl">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-sky-400 font-bold font-mono mb-2">Rivalidad por Estatus</p>
+            <h2 className="text-lg font-black text-white">Resumen de pagos de rivalidad</h2>
+            <p className="text-sm text-white/50 mt-2">Muestra los pagos acumulados del último circuito con rivalidades activas.</p>
+          </div>
+          <div className="text-right text-xs uppercase tracking-[0.2em] text-white/40">
+            {currentSplitRivalries ? `Circuito: ${latestRivalryCircuit.nombre || latestRivalryCircuit.id}` : "Aún no hay circuitos con resumen de rivalidad"}
+          </div>
+        </div>
+
+        {currentSplitRivalries ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="bg-black/40 border border-white/5 rounded-2xl p-4">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-3">Pagos por Equipo</p>
+              {Object.entries(currentSplitRivalries.pagosPorEquipo || {}).map(([teamId, amount]: [string, any]) => (
+                <div key={teamId} className="flex items-center justify-between gap-3 text-sm text-white/80 py-2 border-b border-white/5 last:border-0">
+                  <span>{teamId}</span>
+                  <span className="font-black text-white">{Number(amount).toFixed(1)}M</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-black/40 border border-white/5 rounded-2xl p-4">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-3">Grupos de Rivalidad</p>
+              {currentSplitRivalries.grupos?.map((group: any, idx: number) => (
+                <div key={`${group.status}-${idx}`} className="mb-3 last:mb-0">
+                  <div className="text-sm font-bold text-white">Estatus {group.status} · {group.size} pilotos</div>
+                  <div className="text-[10px] text-white/40 mt-1">{group.pilotos?.map((p: any) => p.nombre).join(', ')}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-black/40 border border-white/5 rounded-2xl p-4">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-3">Consejo</p>
+              <p className="text-sm text-white/80 leading-6">Los pilotos con mejores posiciones en clasificación y carrera de sus grupos obtienen las mayores recompensas de presupuesto para su escudería. Si no tienes rivales, cada carrera activa paga 1.5M.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-black/40 border border-white/5 p-6 text-sm text-white/70">
+            No hay datos de rivalidad disponibles todavía para este split. Procesa un circuito terminado con rivalidades por estatus para ver el resumen aquí.
+          </div>
+        )}
+      </section>
 
       {/* CUADRO DE HONOR / PALMARÉS */}
       <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-white/10 rounded-2xl p-4 flex flex-col lg:flex-row items-center justify-between gap-4 shadow-xl">
@@ -2073,6 +2145,42 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
                 {pilotProfileStats ? (
                   <div className="space-y-6">
+                    {latestRivalryCircuit?.resumen_pagos_rivalidad && (
+                      <div className="bg-zinc-900/80 border border-white/10 rounded-2xl p-4">
+                        <div className="flex items-center justify-between gap-4 mb-3">
+                          <div>
+                            <div className="text-[9px] uppercase tracking-[0.2em] font-mono text-sky-400">Resumen de Pagos de Rivalidad</div>
+                            <div className="text-sm text-white/70">{latestRivalryCircuit.nombre || latestRivalryCircuit.id}</div>
+                          </div>
+                          <div className="text-xs uppercase tracking-[0.2em] text-white/40">Grupos: {latestRivalryCircuit.resumen_pagos_rivalidad.grupos?.length || 0}</div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="bg-white/5 border border-white/5 rounded-xl p-3">
+                            <div className="text-[10px] uppercase tracking-[0.2em] font-mono text-white/40 mb-2">Pagos por Equipo</div>
+                            {Object.entries(latestRivalryCircuit.resumen_pagos_rivalidad.pagosPorEquipo || {}).map(([teamId, amount]: [string, any]) => (
+                              <div key={teamId} className="flex items-center justify-between text-xs text-white/70 py-1 border-b border-white/5 last:border-0">
+                                <span>{teamId}</span>
+                                <span className="font-black text-white">{Number(amount).toFixed(1)}M</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="bg-white/5 border border-white/5 rounded-xl p-3">
+                            <div className="text-[10px] uppercase tracking-[0.2em] font-mono text-white/40 mb-2">Estatus de grupos</div>
+                            {latestRivalryCircuit.resumen_pagos_rivalidad.grupos?.map((group: any, idx: number) => (
+                              <div key={`${group.status}-${idx}`} className="mb-3 last:mb-0">
+                                <div className="text-xs text-white font-bold">Estatus {group.status}</div>
+                                <div className="text-[10px] text-white/50">Tamaño: {group.size}</div>
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {group.pilotos?.map((pilot: any) => (
+                                    <span key={pilot.pilotoId} className="text-[10px] bg-slate-800/80 text-white/80 px-2 py-1 rounded-full">{pilot.nombre}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {/* Hero Header */}
                     <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-white/5 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
                       <div className="absolute right-0 top-0 w-64 h-64 bg-[#e10600]/5 rounded-full blur-3xl pointer-events-none"></div>
@@ -2185,6 +2293,42 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                         <span className="text-2xl font-black text-purple-400 font-mono mt-2 tabular-nums">{pilotProfileStats.fastestLaps}</span>
                       </div>
 
+                    </div>
+
+                    <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
+                      <div className="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-widest text-[#e10600] font-mono mb-1">Rivales de Estatus</h4>
+                          <p className="text-[11px] text-white/50">Pilotos del mismo estatus y de equipos distintos.</p>
+                        </div>
+                        <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">{pilotProfileStats.rivalInfo?.length || 0} rivales</span>
+                      </div>
+                      {pilotProfileStats.rivalInfo && pilotProfileStats.rivalInfo.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {pilotProfileStats.rivalInfo.map((r: any) => (
+                            <div key={r.pilotoId} className="bg-zinc-950/80 border border-white/10 rounded-xl p-4">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-bold text-white">{r.nombre}</p>
+                                  <p className="text-[11px] text-white/50">Equipo: {r.equipoId}</p>
+                                </div>
+                                <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-300">Rival</span>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {r.debilidades && r.debilidades.length > 0 ? (
+                                  r.debilidades.map((d: string) => (
+                                    <span key={`${r.pilotoId}-${d}`} className="text-[10px] bg-red-500/10 text-red-300 px-2 py-1 rounded-full uppercase">{d.replace(/_/g, ' ')}</span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-white/40 uppercase">Sin debilidades detectadas</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-white/40 italic text-sm">No tiene rivales asignados en el split activo.</div>
+                      )}
                     </div>
 
                     {/* Timeline GPs */}

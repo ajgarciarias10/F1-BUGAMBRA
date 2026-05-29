@@ -1,5 +1,6 @@
 import { doc, runTransaction, getDoc, collection, getDocs, query, where, updateDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
+import { buildActiveStatusGroups } from "../utils/rivalrySummary";
 
 export interface RaceResult {
   pilotoId: string;
@@ -55,6 +56,109 @@ export async function processRace(splitId: string, circuitoId: string, results: 
         isCleanGlobal: boolean
       }> = {};
 
+      // Build a quick map of results by pilotoId for rivalry calculations
+      const resultMap: Record<string, RaceResult> = {};
+      results.forEach(r => { resultMap[r.pilotoId] = r; });
+
+      const splitPayload = {
+        id: splitId,
+        equipos: Object.entries(equiposData).map(([teamId, team]) => ({
+          id: teamId,
+          nombre: team.data?.nombre,
+          pilotos: Object.entries(team.pilotos || {}).map(([pid, pilot]) => ({ id: pid, ...pilot.data }))
+        }))
+      };
+
+      const activeStatusGroups = buildActiveStatusGroups(splitId, splitPayload, results);
+
+      // Compute rivalry payouts per team for this single event (qualy + race)
+      const rivalryPayouts: Record<string, number> = {};
+      for (const key in activeStatusGroups) {
+        const group = activeStatusGroups[key];
+        const size = group.length;
+        if (size === 1) {
+          // Solo pilot that raced: fixed 1.5M for this race
+          const m = group[0];
+          rivalryPayouts[m.teamId] = (rivalryPayouts[m.teamId] || 0) + 1.5;
+        } else {
+          // Sort by qualifying and race positions among group members
+          const qualySorted = [...group].sort((a, b) => {
+            const qa = resultMap[a.pilotoId]?.qualyPos ?? 999;
+            const qb = resultMap[b.pilotoId]?.qualyPos ?? 999;
+            return qa - qb;
+          });
+          const raceSorted = [...group].sort((a, b) => {
+            const ra = resultMap[a.pilotoId]?.racePos ?? 999;
+            const rb = resultMap[b.pilotoId]?.racePos ?? 999;
+            return ra - rb;
+          });
+
+          if (size >= 3) {
+            // Qualy: 1M, 0.5M, 0M
+            const qPayouts = [1, 0.5, 0];
+            for (let i = 0; i < 3; i++) {
+              const member = qualySorted[i];
+              if (!member) break;
+              rivalryPayouts[member.teamId] = (rivalryPayouts[member.teamId] || 0) + qPayouts[i];
+            }
+            // Race: 2M, 1M, 0M
+            const rPayouts = [2, 1, 0];
+            for (let i = 0; i < 3; i++) {
+              const member = raceSorted[i];
+              if (!member) break;
+              rivalryPayouts[member.teamId] = (rivalryPayouts[member.teamId] || 0) + rPayouts[i];
+            }
+          } else if (size === 2) {
+            // Two-person rivalry: Qualy winner +1M, Race winner +2M
+            const qWinner = qualySorted[0];
+            if (qWinner) rivalryPayouts[qWinner.teamId] = (rivalryPayouts[qWinner.teamId] || 0) + 1;
+            const rWinner = raceSorted[0];
+            if (rWinner) rivalryPayouts[rWinner.teamId] = (rivalryPayouts[rWinner.teamId] || 0) + 2;
+          }
+        }
+      }
+
+      const rivalrySummary = {
+        pagosPorEquipo: rivalryPayouts,
+        grupos: Object.entries(activeStatusGroups).map(([statusKey, group]) => ({
+          status: statusKey,
+          size: group.length,
+          pilotos: group.map(m => ({
+            pilotoId: m.pilotoId,
+            nombre: m.data?.nombre || m.pilotoId,
+            equipoId: m.teamId
+          }))
+        }))
+      };
+
+      // Build rival info map for each pilot who raced: list of rivals and their weaknesses
+      const rivalInfoMap: Record<string, Array<{ pilotoId: string; nombre: string; equipoId: string; debilidades: string[] }>> = {};
+      for (const key in activeStatusGroups) {
+        const group = activeStatusGroups[key];
+        for (const member of group) {
+          const rivals = group.filter(m => m.pilotoId !== member.pilotoId);
+          rivalInfoMap[member.pilotoId] = rivalInfoMap[member.pilotoId] || [];
+          for (const r of rivals) {
+            const rResult = resultMap[r.pilotoId];
+            const debilidades: string[] = [];
+            if (rResult) {
+              if ((rResult.qualyPos ?? 999) <= 3 && (rResult.racePos ?? 999) > (rResult.qualyPos ?? 999)) debilidades.push('baja_consistencia_en_carrera');
+              if (rResult.isDnfOwnError) debilidades.push('propenso_a_dnf_por_error');
+              if (!rResult.isClean) debilidades.push('propenso_a_sanciones');
+              if (!rResult.overtakesBoost) debilidades.push('poca_capacidad_adelantar');
+              if ((rResult.racePos ?? 999) > 12) debilidades.push('posicion_baja_o_retiro');
+            }
+
+            rivalInfoMap[member.pilotoId].push({
+              pilotoId: r.pilotoId,
+              nombre: r.data?.nombre || r.pilotoId,
+              equipoId: r.teamId,
+              debilidades
+            });
+          }
+        }
+      }
+
       for (const res of results) {
         let teamId = "";
         let pilotEntry: any = null;
@@ -108,6 +212,8 @@ export async function processRace(splitId: string, circuitoId: string, results: 
         if (res.isClean) rd += 2;
         
         pilot.rating_piloto = Math.max(0, Math.min(99, (pilot.rating_piloto || 70) + rd));
+        // Attach rival list and weaknesses for UI display
+        pilot.rivalidades = rivalInfoMap[res.pilotoId] || [];
         pilotUpdates.push({ ref: pilotEntry.ref, data: pilot });
       }
 
@@ -122,14 +228,19 @@ export async function processRace(splitId: string, circuitoId: string, results: 
           const fastestLapBonus = s.fastestLaps * 1;
           const cleanBonus = s.isCleanGlobal ? 3 : 0;
           const money = participationBonus + pointsBonus + poleBonus + fastestLapBonus + cleanBonus;
+          const rivalry = rivalryPayouts[tid] || 0;
 
-          s.data.presupuesto = (s.data.presupuesto || 0) + money;
+          s.data.presupuesto = (s.data.presupuesto || 0) + money + rivalry;
           s.data.puntos_constructores = (s.data.puntos_constructores || 0) + s.puntosCarrera;
           transaction.update(s.ref, s.data);
         }
       }
 
-      transaction.update(circuitoRef, { completado: true, resultados: results });
+      transaction.update(circuitoRef, {
+        completado: true,
+        resultados: results,
+        resumen_pagos_rivalidad: rivalrySummary
+      });
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `splits/${splitId}/circuitos/${circuitoId}`);
