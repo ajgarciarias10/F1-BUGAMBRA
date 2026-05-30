@@ -31,12 +31,28 @@ export interface RivalryPair {
   equipoB: string;
 }
 
+export interface RivalryGroupMember extends RivalryPilot {
+  statusRank: number;
+  price: number;
+}
+
+export interface RivalryGroup {
+  id: string;
+  statusRank: number;
+  type: "triad" | "pair" | "solo";
+  members: RivalryGroupMember[];
+  groupScore: number;
+  fixedRewardPerRace?: number;
+}
+
 export interface SplitRivalries {
   splitId: string;
   totalPilotos: number;
   pairCount: number;
   coeficiente: number;
   rivalidades: RivalryPair[];
+  groups: RivalryGroup[];
+  soloPilots: RivalryGroupMember[];
 }
 
 const RIVALRY_COEFFICIENT_TABLE: Record<number, number> = {
@@ -50,6 +66,135 @@ const RIVALRY_COEFFICIENT_TABLE: Record<number, number> = {
 export function getRivalryCoefficient(totalPilotos: number): number {
   return RIVALRY_COEFFICIENT_TABLE[totalPilotos] ?? 1.0;
 }
+
+const getPilotPrice = (pilot: any): number => {
+  return pilot.precio_compra_split ?? pilot.clausula_actual ?? ((pilot.rating_piloto || 70) * 0.5) ?? 10;
+};
+
+const buildStatusRankedPilots = (split: any): RivalryGroupMember[] => {
+  const pilots: RivalryGroupMember[] = [];
+
+  (split.equipos || []).forEach((equipo: any) => {
+    const sortedTeamPilots = [...(equipo.pilotos || [])].sort((a: any, b: any) => {
+      const priceA = getPilotPrice(a);
+      const priceB = getPilotPrice(b);
+      if (priceB !== priceA) return priceB - priceA;
+      return (b.rating_piloto || 70) - (a.rating_piloto || 70);
+    });
+
+    sortedTeamPilots.forEach((pilot: any, index: number) => {
+      pilots.push({
+        id: pilot.id,
+        nombre: pilot.nombre,
+        equipoId: equipo.id,
+        equipoNombre: equipo.nombre,
+        rating: pilot.rating_piloto ?? 70,
+        puntos_piloto: pilot.puntos_piloto ?? 0,
+        statusRank: index + 1,
+        price: getPilotPrice(pilot)
+      });
+    });
+  });
+
+  return pilots;
+};
+
+const buildStatusRivalryGroups = (split: any) => {
+  const pilots = buildStatusRankedPilots(split);
+  const groups: RivalryGroup[] = [];
+  const soloPilots: RivalryGroupMember[] = [];
+
+  const byStatus = pilots.reduce((acc: Record<number, RivalryGroupMember[]>, pilot) => {
+    if (!acc[pilot.statusRank]) acc[pilot.statusRank] = [];
+    acc[pilot.statusRank].push(pilot);
+    return acc;
+  }, {} as Record<number, RivalryGroupMember[]>);
+
+  Object.keys(byStatus).sort((a, b) => Number(a) - Number(b)).forEach((statusKey) => {
+    const statusRank = Number(statusKey);
+    const pool = [...byStatus[statusRank]].sort((a, b) => b.rating - a.rating || a.nombre.localeCompare(b.nombre));
+
+    while (pool.length > 0) {
+      if (pool.length === 1) {
+        const solo = pool.shift()!;
+        soloPilots.push(solo);
+        continue;
+      }
+
+      if (pool.length % 2 === 1 && pool.length >= 3) {
+        const members = pool.splice(0, 3);
+        const meanRating = members.reduce((sum, member) => sum + member.rating, 0) / members.length;
+        const spread = Math.max(...members.map(m => m.rating)) - Math.min(...members.map(m => m.rating));
+        groups.push({
+          id: `${split.id}-status-${statusRank}-triad-${groups.length}`,
+          statusRank,
+          type: "triad",
+          members,
+          groupScore: Math.max(0, meanRating - spread * 0.3 + 1),
+          fixedRewardPerRace: undefined
+        });
+        continue;
+      }
+
+      const members = pool.splice(0, 2);
+      const meanRating = (members[0].rating + members[1].rating) / 2;
+      const spread = Math.abs(members[0].rating - members[1].rating);
+      groups.push({
+        id: `${split.id}-status-${statusRank}-pair-${groups.length}`,
+        statusRank,
+        type: "pair",
+        members,
+        groupScore: Math.max(0, meanRating - spread * 0.4),
+        fixedRewardPerRace: undefined
+      });
+    }
+  });
+
+  return { groups, soloPilots };
+};
+
+export const getRivalryGroupMember = (split: any, pilotId: string): RivalryGroupMember | null => {
+  const team = (split.equipos || []).find((eq: any) => (eq.pilotos || []).some((pilot: any) => pilot.id === pilotId));
+  if (!team) return null;
+
+  const pilot = (team.pilotos || []).find((p: any) => p.id === pilotId);
+  if (!pilot) return null;
+
+  const statusRankMap = buildStatusRankedPilots(split).reduce((acc: Record<string, number>, p) => {
+    acc[p.id] = p.statusRank;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return {
+    id: pilot.id,
+    nombre: pilot.nombre,
+    equipoId: team.id,
+    equipoNombre: team.nombre,
+    rating: pilot.rating_piloto ?? 70,
+    puntos_piloto: pilot.puntos_piloto ?? 0,
+    statusRank: statusRankMap[pilot.id] ?? 1,
+    price: getPilotPrice(pilot)
+  };
+};
+
+const normalizeSplitRivalries = (split: any): SplitRivalries => {
+  if (split?.rivalries && Array.isArray(split.rivalries.groups) && Array.isArray(split.rivalries.soloPilots)) {
+    const totalPilotos = (split.equipos || []).flatMap((equipo: any) => equipo.pilotos || []).length;
+    const groups = split.rivalries.groups;
+    const soloPilots = split.rivalries.soloPilots;
+    return {
+      splitId: split.id,
+      totalPilotos,
+      coeficiente: getRivalryCoefficient(totalPilotos),
+      pairCount: groups.filter((group: any) => group.type === "pair").length,
+      rivalidades: [],
+      groups,
+      soloPilots
+    };
+  }
+
+  return buildRivalryTable(split);
+};
 
 export function buildRivalryTable(split: any): SplitRivalries {
   const pilots: RivalryPilot[] = (split.equipos || []).flatMap((equipo: any) =>
@@ -97,12 +242,16 @@ export function buildRivalryTable(split: any): SplitRivalries {
     });
   }
 
+  const { groups, soloPilots } = buildStatusRivalryGroups(split);
+
   return {
     splitId: split.id,
     totalPilotos,
     pairCount: rivalidades.length,
     coeficiente,
-    rivalidades
+    rivalidades,
+    groups,
+    soloPilots
   };
 }
 
@@ -196,17 +345,20 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
             puntos_constructores: eq.puntos_constructores || defaultPts,
             pilotos: (eq.pilotos || []).map((p: any) => {
               const defPilot: any = defaultPilotStats[p.id] || {};
-              return {
+              const tempPilot = {
                 ...p,
                 puntos_piloto: p.puntos_piloto || defPilot.puntos_piloto || 0,
                 victorias: p.victorias || defPilot.victorias || 0,
                 podios: p.podios || defPilot.podios || 0,
+                base_rating: p.base_rating || p.rating_piloto || defPilot.rating_piloto || 70,
                 rating_piloto: p.rating_piloto || defPilot.rating_piloto || 70,
                 precio_compra_split: p.precio_compra_split || defPilot.precio_compra_split || 10,
                 clausula_actual: p.clausula_actual || defPilot.clausula_actual || 15,
                 mantener_actual: p.mantener_actual || defPilot.mantener_actual || 15,
                 precio_carrera_anterior: p.precio_carrera_anterior || defPilot.precio_carrera_anterior || 10
               };
+              tempPilot.rating_piloto = computePilotDynamicOVR(tempPilot);
+              return tempPilot;
             })
           };
         });
@@ -216,7 +368,7 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
         ...s,
         equipos,
         isStarted: true,
-        rivalries: buildRivalryTable({ id: s.id, equipos })
+        rivalries: normalizeSplitRivalries({ ...s, equipos })
       });
     } else {
       // For split_2, split_3, split_4:
@@ -264,17 +416,20 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
         }
 
         const pilotos = rawPilotos.map((p: any) => {
-          return {
+          const tempPilot = {
             ...p,
             puntos_piloto: isStarted ? (p.puntos_piloto ?? 0) : 0,
             victorias: isStarted ? (p.victorias ?? 0) : 0,
             podios: isStarted ? (p.podios ?? 0) : 0,
+            base_rating: p.base_rating || p.rating_piloto || 70,
             rating_piloto: p.rating_piloto ?? 70,
             precio_compra_split: p.precio_compra_split ?? 10,
             clausula_actual: p.clausula_actual ?? 15,
             mantener_actual: p.mantener_actual ?? 15,
             precio_carrera_anterior: p.precio_carrera_anterior ?? 10
           };
+          tempPilot.rating_piloto = computePilotDynamicOVR(tempPilot);
+          return tempPilot;
         });
 
         const defaultNombre = teamId === "agente_libre" ? "Agente Libre" : (teamId.charAt(0).toUpperCase() + teamId.slice(1));
@@ -293,10 +448,110 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
         ...s,
         equipos,
         isStarted,
-        rivalries: buildRivalryTable({ id: s.id, equipos })
+        rivalries: normalizeSplitRivalries({ ...s, equipos })
       });
     }
   }
   
   return resolved;
+}
+
+export function computePilotDynamicOVR(pilot: any): number {
+  const base = pilot.base_rating || pilot.rating_piloto || 70;
+  const points = pilot.puntos_piloto || 0;
+  const wins = pilot.victorias || 0;
+  const podiums = pilot.podios || 0;
+  const dnfs = pilot.dnfs || 0;
+
+  if (points === 0 && wins === 0 && podiums === 0 && dnfs === 0) {
+    return base;
+  }
+
+  // Weight recent performance heavily
+  // performanceBase is roughly 60 + points + bonuses, scaled.
+  let performanceBase = 60 + (points * 0.5) + (wins * 3) + (podiums * 1.5);
+  performanceBase = Math.min(95, performanceBase);
+
+  // Blend the original base rating and the performance base.
+  // The more points they score, the more the performance overpowers the base.
+  const blendFactor = Math.min(1, points / 50); 
+  
+  let finalOvr = (base * (1 - blendFactor)) + (performanceBase * blendFactor);
+  
+  // Apply penalty for DNFs independently
+  finalOvr -= (dnfs * 1.5);
+
+  return Math.round(Math.max(50, Math.min(99, finalOvr)));
+}
+
+/**
+ * MODELO DE ANÁLISIS ESTADÍSTICO DE MERCADO (Reutilizable en React Native)
+ * Extrae la lógica pura para calcular qué pilotos son mejores inversiones.
+ */
+export function computePilotMarketOpportunities(
+  allPilots: any[],
+  completedCircuits: any[],
+  recommenderStrategy: "balanced" | "momentum" | "budget" | "premium"
+) {
+  const localPOINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+
+  return allPilots.map((p: any) => {
+    const historyScore: number[] = [];
+    completedCircuits.forEach((c: any) => {
+      const row = c.resultados?.find((r: any) => 
+        r.pilotoId === p.id || 
+        r.pilotoNombre?.toLowerCase() === p.nombre?.toLowerCase() ||
+        r.name?.toLowerCase() === p.nombre?.toLowerCase()
+      );
+      const pts = row ? (row.racePos >= 1 && row.racePos <= 12 ? localPOINTS_SCALE[row.racePos - 1] : 0) + (row.qualyPos === 1 ? 2 : 0) : 0;
+      historyScore.push(pts);
+    });
+
+    const totalPoints = p.puntos_piloto || historyScore.reduce((sum, val) => sum + val, 0);
+
+    let trendScore = 0;
+    if (historyScore.length >= 2) {
+      const lastRacePts = historyScore[historyScore.length - 1];
+      const prevRecentPts = historyScore[historyScore.length - 2];
+      const recentAv = (lastRacePts + prevRecentPts) / 2;
+      const priorRaces = historyScore.slice(0, historyScore.length - 1);
+      const priorAv = priorRaces.length > 0 ? priorRaces.reduce((sum, val) => sum + val, 0) / priorRaces.length : recentAv;
+      trendScore = recentAv - priorAv;
+    }
+
+    let recoScore = 0;
+    const rtg = p.rating_piloto || 70;
+    const price = p.coste;
+    const ptsOverPrice = price > 0 ? (totalPoints / price) : 0;
+
+    if (recommenderStrategy === "balanced") {
+      recoScore = (rtg * 0.45) + (ptsOverPrice * 18) + (trendScore * 1.5);
+    } else if (recommenderStrategy === "momentum") {
+      recoScore = (trendScore * 8.0) + (ptsOverPrice * 6) + (rtg * 0.15);
+    } else if (recommenderStrategy === "budget") {
+      recoScore = (ptsOverPrice * 35.0) - (price * 0.7) + (trendScore * 1.0);
+    } else if (recommenderStrategy === "premium") {
+      recoScore = (rtg * 4.0) + (totalPoints * 1.8) + (trendScore * 2.5);
+    }
+
+    let justification = "";
+    if (recommenderStrategy === "momentum") {
+      justification = trendScore > 5 ? `¡En racha espectacular! Viene de subir su promedio de puntos en +${trendScore.toFixed(1)} puntos. Un activo con momentum positivo impecable.` : trendScore < -3 ? `Detección de tendencia irregular (baja de ${Math.abs(trendScore).toFixed(1)} pts). Se encuentra en un bache temporal de resultados. ¡Opción de riesgo!` : `Estadísticas estables en los últimos circuitos. Mantiene una trayectoria regular y segura para aportar consistencia a tu casillero semanal.`;
+    } else if (recommenderStrategy === "budget") {
+      justification = price < 12 ? `Ganga absoluta a tan solo ${price.toFixed(1)}M. Presenta un coeficiente ROI altamente favorable, liberando presupuesto para realizar otras contrataciones de peso.` : `Excelente rendimiento costo-beneficio de ${ptsOverPrice.toFixed(1)} Pts/M. Una adquisición inteligente para equilibrar las finanzas de tu escudería.`;
+    } else if (recommenderStrategy === "premium") {
+      justification = `Piloto franquicia con un Rating de ${rtg}. Lidera en potencial neto de puntos y su contratación asegura tener a una superestrella de primera línea.`;
+    } else {
+      justification = ptsOverPrice > 4.5 ? `Oportunidad recomendada por su increíble eficiencia (${ptsOverPrice.toFixed(1)} pts por millón invertido). Una inversión óptima y segura para el Split.` : trendScore < -4 ? `Aviso: Ha tenido altibajos en el último circuito (bajando de media ${Math.abs(trendScore).toFixed(1)} pts). Aun así, por ${price.toFixed(1)}M puede representar un pilar competitivo excelente.` : `Opción balanceada ideal. Responde con garantías a su costo de ${price.toFixed(1)}M y encaja perfectamente en cualquier estrategia competitiva.`;
+    }
+
+    return {
+      ...p,
+      history: historyScore,
+      trendScore,
+      ptsOverPrice,
+      recoScore,
+      justification
+    };
+  }).sort((a, b) => b.recoScore - a.recoScore).slice(0, 4);
 }

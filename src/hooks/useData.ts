@@ -8,10 +8,6 @@ export function useUsuarios() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) {
-      setUsuarios([]);
-      return;
-    }
     const q = query(collection(db, "usuarios"));
     return onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
@@ -19,7 +15,7 @@ export function useUsuarios() {
     }, (error) => {
       console.warn("Gracefully handled usuarios snapshot error (expected on logout):", error);
     });
-  }, [user]);
+  }, []);
 
   return { usuarios };
 }
@@ -31,10 +27,6 @@ export function useSplits() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
     const unsubSplits = onSnapshot(collection(db, "splits"), () => {
       setTrigger(prev => prev + 1);
     }, (error) => {
@@ -62,14 +54,9 @@ export function useSplits() {
       unsubPilotos();
       unsubCircuitos();
     };
-  }, [user]);
+  }, []);
 
   useEffect(() => {
-    if (!user) {
-      setSplits([]);
-      setLoading(false);
-      return;
-    }
     let active = true;
     async function fetchData() {
       try {
@@ -114,6 +101,9 @@ export function useSplits() {
         }
       } catch (err) {
         console.error("Error fetching splits data:", err);
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
@@ -121,7 +111,7 @@ export function useSplits() {
     return () => {
       active = false;
     };
-  }, [trigger, user]);
+  }, [trigger]);
 
   return { splits, loading };
 }

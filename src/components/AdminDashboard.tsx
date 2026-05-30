@@ -2,12 +2,14 @@ import React, { useState, useEffect, useMemo } from "react";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { processRace, RaceResult } from "../services/raceProcessor";
-import { db } from "../services/firebase";
+import { auth, db } from "../services/firebase";
 import { doc, updateDoc } from "firebase/firestore";
-import { ChevronDown, Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon, Sun, CloudRain, Cloud, Wind, Thermometer, Clock } from "lucide-react";
+import { updatePassword } from "firebase/auth";
+import { ChevronDown, Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon, Lock, ShieldAlert } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { resolveAllSplits, isSplitUnlocked } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
+import { AdminRivalryControlPanel } from "./RivalryPanels";
 
 const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
   if (!circuitos || circuitos.length === 0) return null;
@@ -54,17 +56,22 @@ export function AdminDashboard() {
   const [adminTab, setAdminTab] = useState<"championship" | "suggestions">("championship");
 
   useEffect(() => {
+    let isSubscribed = true;
     let unsubscribe: (() => void) | undefined;
     import("firebase/firestore").then(({ collection, onSnapshot }) => {
+      if (!isSubscribed) return;
       const q = collection(db, "plantilla");
       unsubscribe = onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setPlantilla(data);
+        if (isSubscribed) {
+          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setPlantilla(data);
+        }
       }, (error) => {
         console.warn("Gracefully handled AdminDashboard plantilla snapshot error:", error);
       });
-    });
+    }).catch(console.error);
     return () => {
+      isSubscribed = false;
       if (unsubscribe) unsubscribe();
     };
   }, []);
@@ -91,6 +98,37 @@ export function AdminDashboard() {
 
     return [...uPilots, ...uniquePPilots];
   }, [usuarios, plantilla]);
+
+  const paddockUsers = useMemo(() => {
+    const mergedByIdentity: Record<string, any> = {};
+
+    const preferUser = (existing: any, candidate: any) => {
+      const existingHasEmail = Boolean(existing?.email?.trim());
+      const candidateHasEmail = Boolean(candidate?.email?.trim());
+
+      if (existingHasEmail && !candidateHasEmail) return existing;
+      if (!existingHasEmail && candidateHasEmail) return candidate;
+
+      if (existing.rol === "piloto" && candidate.rol !== "piloto") return existing;
+      if (candidate.rol === "piloto" && existing.rol !== "piloto") return candidate;
+
+      return existing;
+    };
+
+    usuarios.forEach((user: any) => {
+      const identity = user.piloto_id || user.uid || user.id || "";
+      if (!identity) return;
+
+      if (!mergedByIdentity[identity]) {
+        mergedByIdentity[identity] = user;
+        return;
+      }
+
+      mergedByIdentity[identity] = preferUser(mergedByIdentity[identity], user);
+    });
+
+    return Object.values(mergedByIdentity);
+  }, [usuarios]);
 
   const [selectedCircuitoId, setSelectedCircuitoId] = useState("");
   const [isEditingFinished, setIsEditingFinished] = useState(false);
@@ -124,13 +162,15 @@ export function AdminDashboard() {
     return counts;
   }, [results]);
 
-  // Schedule & Weather State
+  // Schedule State
   const [fechaVal, setFechaVal] = useState("");
   const [horaVal, setHoraVal] = useState("");
+  /*
   const [climaTipoVal, setClimaTipoVal] = useState("despejado");
   const [climaTempVal, setClimaTempVal] = useState(25);
   const [climaProbLluviaVal, setClimaProbLluviaVal] = useState(10);
   const [climaVientoVal, setClimaVientoVal] = useState(15);
+  */
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Auto-select next circuit on load or when splits change
@@ -156,10 +196,12 @@ export function AdminDashboard() {
       
       setFechaVal(circuito?.fecha || "");
       setHoraVal(circuito?.hora || "");
+      /*
       setClimaTipoVal(circuito?.clima_tipo || "despejado");
       setClimaTempVal(circuito?.clima_temp !== undefined ? circuito.clima_temp : 25);
       setClimaProbLluviaVal(circuito?.clima_prob_lluvia !== undefined ? circuito.clima_prob_lluvia : 10);
       setClimaVientoVal(circuito?.clima_viento !== undefined ? circuito.clima_viento : 15);
+      */
       
       if (circuito?.completado && circuito.resultados) {
         setIsEditingFinished(true);
@@ -398,7 +440,7 @@ export function AdminDashboard() {
 
       // Adjust budgets in Firestore
       if (fromTeamId && fromTeamId !== "agente_libre") {
-        const fromTeam = currentSplit?.equipos.find((e: any) => e.id === fromTeamId);
+        const fromTeam = currentSplit?.equipos?.find((e: any) => e.id === fromTeamId);
         const currentFromBudget = fromTeam ? Number(fromTeam.presupuesto ?? 100) : 100;
         const newFromBudget = Number((currentFromBudget + clause).toFixed(1));
         
@@ -407,7 +449,7 @@ export function AdminDashboard() {
       }
 
       if (toTeamId && toTeamId !== "agente_libre") {
-        const toTeam = currentSplit?.equipos.find((e: any) => e.id === toTeamId);
+        const toTeam = currentSplit?.equipos?.find((e: any) => e.id === toTeamId);
         const currentToBudget = toTeam ? Number(toTeam.presupuesto ?? 100) : 100;
         const newToBudget = Number((currentToBudget - clause).toFixed(1));
         
@@ -521,7 +563,7 @@ export function AdminDashboard() {
           const teamKeys = ["zenith", "roses", "alfa_romero"];
           for (const teamId of teamKeys) {
             const tRef = doc(db, `splits/${splitId}/equipos`, teamId);
-            const prevTeamDoc = prevSplit.equipos.find((e: any) => e.id === teamId);
+            const prevTeamDoc = prevSplit.equipos?.find((e: any) => e.id === teamId);
             
             await setDoc(tRef, {
               id: teamId,
@@ -614,7 +656,7 @@ export function AdminDashboard() {
     }
 
     const currentSplit = splits.find(s => s.id === selectedSplitId);
-    const splitPilots = currentSplit?.equipos.flatMap((e: any) => e.pilotos) || [];
+    const splitPilots = currentSplit?.equipos?.flatMap((e: any) => e.pilotos || []) || [];
 
     if (splitPilots.length === 0) {
       setMsg("No hay pilotos registrados en este split.");
@@ -818,22 +860,13 @@ export function AdminDashboard() {
             <h3 className="font-extrabold text-xs uppercase tracking-wider text-white">Programación de Carrera para {getCircuitName()}</h3>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 max-w-xl gap-4">
+          <div className="grid grid-cols-1 max-w-xl gap-4">
             <div>
               <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Fecha de Carrera</label>
               <input
                 type="date"
                 value={fechaVal}
                 onChange={(e) => setFechaVal(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Hora de Carrera</label>
-              <input
-                type="time"
-                value={horaVal}
-                onChange={(e) => setHoraVal(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
               />
             </div>
@@ -850,6 +883,10 @@ export function AdminDashboard() {
           </div>
         </div>
         
+        {currentRawSplit && (
+          <AdminRivalryControlPanel split={currentRawSplit} />
+        )}
+
         <section className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[#e10600]/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
           
@@ -933,7 +970,7 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {(splits.find(s => s.id === selectedSplitId)?.equipos.flatMap((e: any) => e.pilotos) || []).map((p: any, i: number) => {
+                {(splits.find(s => s.id === selectedSplitId)?.equipos?.flatMap((e: any) => e.pilotos || []) || []).map((p: any, i: number) => {
                   const isPilotDnf = results[p.id]?.isDnfOwnError || false;
                   const qPosVal = results[p.id]?.qualyPos;
                   const isQualyDuplicated = typeof qPosVal === "number" && (qualyCount[qPosVal] || 0) > 1;
@@ -1289,6 +1326,100 @@ export function AdminDashboard() {
           </div>
         </section>
 
+        {/* Change Admin Password Section */}
+        <section className="mt-12 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
+          
+          <div className="mb-6">
+            <h2 className="text-xl font-black italic tracking-tighter text-white flex items-center gap-3 lowercase">
+              <span className="w-1.5 h-6 bg-amber-500 block" />
+              Seguridad del Administrador
+            </h2>
+            <p className="text-[10px] text-white/40 uppercase tracking-widest mt-2 font-mono">
+              Cambia la contraseña de tu cuenta actual de forma local
+            </p>
+          </div>
+
+          <form 
+            className="max-w-md space-y-4 relative z-10"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const newPass = (form.elements.namedItem('newPass') as HTMLInputElement).value;
+              const confirmPass = (form.elements.namedItem('confirmPass') as HTMLInputElement).value;
+              
+              if (newPass !== confirmPass) {
+                setMsg("Error: Las contraseñas no coinciden");
+                return;
+              }
+              if (newPass.length < 6) {
+                setMsg("Error: La contraseña debe tener al menos 6 caracteres");
+                return;
+              }
+
+              const user = auth.currentUser;
+              if (!user) {
+                setMsg("Error: No estás autenticado actualmente");
+                return;
+              }
+
+              setLoading(true);
+              try {
+                await updatePassword(user, newPass);
+                setMsg("¡Contraseña de administrador actualizada con éxito!");
+                form.reset();
+              } catch (error: any) {
+                if (error.code === 'auth/requires-recent-login') {
+                  setMsg("Error: Por seguridad, debes cerrar sesión y volver a entrar antes de cambiar la contraseña.");
+                } else {
+                  setMsg(`Error al cambiar contraseña: ${error.message}`);
+                }
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex gap-3 text-amber-500/90 text-xs mb-4">
+              <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+              <p>Esta acción cambiará la contraseña de la cuenta con la que has iniciado sesión. Asegúrate de guardarla en un lugar seguro.</p>
+            </div>
+            
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-white/50 mb-1.5 font-bold">Nueva Contraseña</label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3 top-3 text-white/30" />
+                <input 
+                  type="password" 
+                  name="newPass"
+                  required
+                  placeholder="Mínimo 6 caracteres"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-xs outline-none focus:border-amber-500 transition-colors text-white"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-white/50 mb-1.5 font-bold">Confirmar Nueva Contraseña</label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3 top-3 text-white/30" />
+                <input 
+                  type="password" 
+                  name="confirmPass"
+                  required
+                  placeholder="Repite la contraseña"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-xs outline-none focus:border-amber-500 transition-colors text-white"
+                />
+              </div>
+            </div>
+            <button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-black font-black text-xs uppercase tracking-widest py-3 rounded-lg transition-colors flex justify-center items-center gap-2 mt-2"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cambiar Contraseña"}
+            </button>
+          </form>
+        </section>
+
         {/* Gestión de Usuarios */}
         <section className="mt-12 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
           <div className="mb-6">
@@ -1313,7 +1444,7 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {usuarios.map((p, i) => {
+                {paddockUsers.map((p, i) => {
                   const getPilotTeamLabel = (user: any) => {
                     if (user.rol === "jeque") {
                       return user.escuderia_id ? `Jeque (${user.escuderia_id.replace('_', ' ')})` : "Jeque (Sin asignar)";

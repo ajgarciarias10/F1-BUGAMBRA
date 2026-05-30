@@ -6,10 +6,16 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if isAdmin();
     }
-    
-    match /usuarios/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() || request.auth.uid == userId;
+
+    // Collection Group rules for Guest Dashboard public reads
+    match /{path=**}/equipos/{teamId} {
+      allow read: if true;
+    }
+    match /{path=**}/pilotos/{pilotId} {
+      allow read: if true;
+    }
+    match /{path=**}/circuitos/{circuitoId} {
+      allow read: if true;
     }
 
     // --- PRIMITIVE HELPERS ---
@@ -72,8 +78,7 @@ service cloud.firestore {
 
     // 1. Usuarios Collection
     match /usuarios/{userId} {
-      allow get: if isValidId(userId) && isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if true; // Public for album
       
       allow create: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin()) && isValidUser(incoming());
       
@@ -103,16 +108,14 @@ service cloud.firestore {
 
     // 3. Splits Collection
     match /splits/{splitId} {
-      allow get: if isSignedIn() && isValidId(splitId);
-      allow list: if isSignedIn();
+      allow read: if true; // Public for guest mode
       allow create: if isAdmin() && isValidId(splitId);
       allow update: if isSignedIn() && isValidId(splitId) && isAdmin();
       allow delete: if isAdmin() && isValidId(splitId);
       
       // 3.1. Circuitos Sub-collection
       match /circuitos/{circuitoId} {
-        allow get: if isSignedIn() && isValidId(circuitoId);
-        allow list: if isSignedIn();
+        allow read: if true;
         allow create: if isAdmin() && isValidId(circuitoId);
         allow update: if isSignedIn() && isValidId(circuitoId) && isAdmin();
         allow delete: if isAdmin() && isValidId(circuitoId);
@@ -120,16 +123,14 @@ service cloud.firestore {
 
       // 3.2. Equipos Sub-collection
       match /equipos/{teamId} {
-        allow get: if isSignedIn() && isValidId(teamId);
-        allow list: if isSignedIn();
+        allow read: if true;
         allow create: if isAdmin() && isValidId(teamId);
         allow update: if isSignedIn() && isValidId(teamId) && (isAdmin() || isJeque() || isJequeAfter());
         allow delete: if isAdmin() && isValidId(teamId);
 
         // 3.3. Pilotos Sub-collection (Roster)
         match /pilotos/{pilotId} {
-          allow get: if isSignedIn() && isValidId(pilotId);
-          allow list: if isSignedIn();
+          allow read: if true;
           allow create, update, delete: if isSignedIn() && isValidId(pilotId) && (isAdmin() || isJeque());
         }
       }

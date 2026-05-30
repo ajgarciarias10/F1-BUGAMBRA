@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { LoginRegister } from "./components/LoginRegister";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { JequeDashboard, PilotoDashboard } from "./components/Dashboards";
+import { GuestDashboard } from "./components/GuestDashboard";
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) {
   const { user, userData, loading } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginRegister />} />
+          <Route path="/invitado" element={<GuestDashboard />} />
           <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/jeque" element={<ProtectedRoute allowedRoles={['jeque']}><JequeDashboard /></ProtectedRoute>} />
           <Route path="/piloto" element={<ProtectedRoute allowedRoles={['piloto']}><PilotoDashboard /></ProtectedRoute>} />

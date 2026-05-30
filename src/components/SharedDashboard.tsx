@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { Flame, Coins, History, ArrowRight, UserMinus, UserPlus, ShieldAlert, Award, Clock, Sparkles, UploadCloud, Camera, X, Trophy, TrendingUp, Gauge, Zap, CheckCircle2 } from "lucide-react";
-import { resolveAllSplits, isSplitUnlocked } from "../utils/splitResolver";
+import { Flame, Coins, History, ArrowRight, UserMinus, UserPlus, ShieldAlert, Award, Clock, Sparkles, UploadCloud, Camera, X, Trophy, TrendingUp, Gauge, Zap, CheckCircle2, MonitorPlay } from "lucide-react";
+import { resolveAllSplits, isSplitUnlocked, computePilotMarketOpportunities } from "../utils/splitResolver";
+import { PilotRivalryPanel, JequeStrategyPanel } from "./RivalryPanels";
 import { NextRaceWidget } from "./NextRaceWidget";
 
 export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBudget: boolean, escuderiaId?: string }) {
@@ -16,6 +17,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   const [comparePilotIdA, setComparePilotIdA] = useState<string>("");
   const [comparePilotIdB, setComparePilotIdB] = useState<string>("");
   const [isCompareViewOpen, setIsCompareViewOpen] = useState(false);
+  const [isF1TVOpen, setIsF1TVOpen] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<"profile" | "compare">("profile");
   const [transfers, setTransfers] = useState<any[]>([]);
   const [transacting, setTransacting] = useState(false);
@@ -95,18 +97,24 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       setPlantilla([]);
       return;
     }
-    let unsub = () => {};
-    import("firebase/firestore").then(({ collection, onSnapshot, query }) => {
-      import("../services/firebase").then(({ db }) => {
-        const q = query(collection(db, "plantilla"));
-        unsub = onSnapshot(q, (snapshot) => {
-          setPlantilla(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (error) => {
-          console.warn("Gracefully handled plantilla snapshot error:", error);
-        });
+    let isSubscribed = true;
+    let unsubscribe: (() => void) | undefined;
+    Promise.all([
+      import("firebase/firestore"),
+      import("../services/firebase")
+    ]).then(([{ collection, onSnapshot, query }, { db }]) => {
+      if (!isSubscribed) return;
+      const q = query(collection(db, "plantilla"));
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        if (isSubscribed) setPlantilla(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, (error) => {
+        console.warn("Gracefully handled plantilla snapshot error:", error);
       });
-    });
-    return () => unsub();
+    }).catch(console.error);
+    return () => {
+      isSubscribed = false;
+      if (unsubscribe) unsubscribe();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -115,19 +123,24 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       return;
     }
     if (activeSplitId && activeSplitId !== "global") {
-      let unsub = () => {};
-      import("firebase/firestore").then(({ collection, query, orderBy, onSnapshot }) => {
-        import("../services/firebase").then(({ db }) => {
-          const q = query(collection(db, `splits/${activeSplitId}/transfers`), orderBy("timestamp", "desc"));
-          unsub = onSnapshot(q, (snapshot) => {
-            const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            setTransfers(list);
-          }, (error) => {
-            console.warn("Gracefully handled transfers snapshot error:", error);
-          });
+      let isSubscribed = true;
+      let unsubscribe: (() => void) | undefined;
+      Promise.all([
+        import("firebase/firestore"),
+        import("../services/firebase")
+      ]).then(([{ collection, query, orderBy, onSnapshot }, { db }]) => {
+        if (!isSubscribed) return;
+        const q = query(collection(db, `splits/${activeSplitId}/transfers`), orderBy("timestamp", "desc"));
+        unsubscribe = onSnapshot(q, (snapshot) => {
+          if (isSubscribed) setTransfers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => {
+          console.warn("Gracefully handled transfers snapshot error:", error);
         });
-      });
-      return () => unsub();
+      }).catch(console.error);
+      return () => {
+        isSubscribed = false;
+        if (unsubscribe) unsubscribe();
+      };
     } else {
       setTransfers([]);
     }
@@ -395,12 +408,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     
     if (userData?.rol === "piloto" && userData?.uid) {
       // Find team in this split that has this pilot in its roster
-      found = currentSplit.equipos.find((e: any) => e.pilotos?.some((p: any) => p.id === userData.uid || (userData.piloto_id && p.id === userData.piloto_id)));
+      found = (currentSplit.equipos || []).find((e: any) => e.pilotos?.some((p: any) => p.id === userData.uid || (userData.piloto_id && p.id === userData.piloto_id)));
     }
     
     // If not found yet (or if jeque/admin), fall back to checking team ID / jeque_id
     if (!found && escuderiaId) {
-      found = currentSplit.equipos.find((e: any) => e.id === escuderiaId || e.jeque_id === escuderiaId);
+      found = (currentSplit.equipos || []).find((e: any) => e.id === escuderiaId || e.jeque_id === escuderiaId);
     }
 
     if (!found) return null;
@@ -423,7 +436,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     if (!currentSplit) return [];
     
     // Active team roster pilot IDs in this split
-    const rosterUids = currentSplit.equipos.flatMap((eq: any) => (eq.pilotos || []).map((p: any) => p.id));
+    const rosterUids = (currentSplit.equipos || []).flatMap((eq: any) => (eq.pilotos || []).map((p: any) => p.id));
     
     // 1. All registered user pilots
     const registeredPilots = usuarios.filter((u: any) => u.rol === "piloto");
@@ -477,7 +490,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     if (!currentSplit || !miEscuderia) return [];
 
     // 1. Gather all pilots in this split: signed + free agents
-    const signed = currentSplit.equipos.flatMap((eq: any) => 
+    const signed = (currentSplit.equipos || []).flatMap((eq: any) => 
       (eq.pilotos || []).map((p: any) => ({
         id: p.id,
         nombre: p.nombre,
@@ -506,104 +519,10 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     const allPilots = [...signed, ...free];
 
     // 2. Compute points history for each pilot across completed circuits in the current split
-    const completedCircuits = currentSplit.circuitos?.filter((c: any) => c.completado) || [];
+    const completedCircuits = (currentSplit.circuitos || []).filter((c: any) => c.completado) || [];
 
-    const localPOINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-
-    return allPilots.map((p: any) => {
-      // Find race points history in results
-      const historyScore: number[] = [];
-      completedCircuits.forEach((c: any) => {
-        const row = c.resultados?.find((r: any) => 
-          r.pilotoId === p.id || 
-          r.pilotoNombre?.toLowerCase() === p.nombre?.toLowerCase() ||
-          r.name?.toLowerCase() === p.nombre?.toLowerCase()
-        );
-        const pts = row ? (row.racePos >= 1 && row.racePos <= 12 ? localPOINTS_SCALE[row.racePos - 1] : 0) + (row.qualyPos === 1 ? 2 : 0) : 0;
-        historyScore.push(pts);
-      });
-
-      // Calculate total points from actual points or history
-      const totalPoints = p.puntos_piloto || historyScore.reduce((sum, val) => sum + val, 0);
-
-      // Calculations for Trend: Recent momentum (last 1-2 races) vs earlier history
-      let trendScore = 0;
-      if (historyScore.length >= 2) {
-        const lastRacePts = historyScore[historyScore.length - 1];
-        const prevRecentPts = historyScore[historyScore.length - 2];
-        const recentAv = (lastRacePts + prevRecentPts) / 2;
-        
-        const priorRaces = historyScore.slice(0, historyScore.length - 1);
-        const priorAv = priorRaces.length > 0 
-          ? priorRaces.reduce((sum, val) => sum + val, 0) / priorRaces.length 
-          : recentAv;
-        
-        trendScore = recentAv - priorAv;
-      } else if (historyScore.length === 1) {
-        trendScore = 0; // neutral
-      }
-
-      // Calculate score for each strategy
-      let recoScore = 0;
-      const rtg = p.rating_piloto || 70;
-      const price = p.coste;
-      const ptsOverPrice = price > 0 ? (totalPoints / price) : 0;
-
-      if (recommenderStrategy === "balanced") {
-        // Balanced: solid ROI + solid Rating + non-negative Trend
-        recoScore = (rtg * 0.45) + (ptsOverPrice * 18) + (trendScore * 1.5);
-      } else if (recommenderStrategy === "momentum") {
-        // Momentum: heaviest focus on trend score + rating
-        recoScore = (trendScore * 8.0) + (ptsOverPrice * 6) + (rtg * 0.15);
-      } else if (recommenderStrategy === "budget") {
-        // Budget: favor low cost, super high ROI
-        recoScore = (ptsOverPrice * 35.0) - (price * 0.7) + (trendScore * 1.0);
-      } else if (recommenderStrategy === "premium") {
-        // Premium: highest ratings, top raw score, regardless of budget (as long as it fits)
-        recoScore = (rtg * 4.0) + (totalPoints * 1.8) + (trendScore * 2.5);
-      }
-
-      // Compose personalized, highly engaging analytical justification
-      let justification = "";
-      if (recommenderStrategy === "momentum") {
-        if (trendScore > 5) {
-          justification = `¡En racha espectacular! Viene de subir su promedio de puntos en +${trendScore.toFixed(1)} puntos. Un activo con momentum positivo impecable.`;
-        } else if (trendScore < -3) {
-          justification = `Detección de tendencia irregular (baja de ${Math.abs(trendScore).toFixed(1)} pts). Se encuentra en un bache temporal de resultados. ¡Opción de riesgo!`;
-        } else {
-          justification = `Estadísticas estables en los últimos circuitos. Mantiene una trayectoria regular y segura para aportar consistencia a tu casillero semanal.`;
-        }
-      } else if (recommenderStrategy === "budget") {
-        if (price < 12) {
-          justification = `Ganga absoluta a tan solo ${price.toFixed(1)}M. Presenta un coeficiente ROI altamente favorable, liberando presupuesto para realizar otras contrataciones de peso.`;
-        } else {
-          justification = `Excelente rendimiento costo-beneficio de ${ptsOverPrice.toFixed(1)} Pts/M. Una adquisición inteligente para equilibrar las finanzas de tu escudería.`;
-        }
-      } else if (recommenderStrategy === "premium") {
-        justification = `Piloto franquicia con un Rating de ${rtg}. Lidera en potencial neto de puntos y su contratación asegura tener a una superestrella de primera línea.`;
-      } else {
-        // Balanced defaults
-        if (ptsOverPrice > 4.5) {
-          justification = `Oportunidad recomendada por su increíble eficiencia (${ptsOverPrice.toFixed(1)} pts por millón invertido). Una inversión óptima y segura para el Split.`;
-        } else if (trendScore < -4) {
-          justification = `Aviso: Ha tenido altibajos en el último circuito (bajando de media ${Math.abs(trendScore).toFixed(1)} pts). Aun así, por ${price.toFixed(1)}M puede representar un pilar competitivo excelente.`;
-        } else {
-          justification = `Opción balanceada ideal. Responde con garantías a su costo de ${price.toFixed(1)}M y encaja perfectamente en cualquier estrategia competitiva.`;
-        }
-      }
-
-      return {
-        ...p,
-        history: historyScore,
-        trendScore,
-        ptsOverPrice,
-        recoScore,
-        justification
-      };
-    })
-    .sort((a, b) => b.recoScore - a.recoScore)
-    // Select top 4 recommendations
-    .slice(0, 4);
+    // Se invoca el modelo lógico importado (Preparado para React Native)
+    return computePilotMarketOpportunities(allPilots, completedCircuits, recommenderStrategy);
 
   }, [currentSplit, miEscuderia, freeAgentsList, recommenderStrategy]);
 
@@ -611,8 +530,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     // 1. All Pilots for Scouting (Global list from current split or all potential)
     const scoutingList: any[] = [];
     if (currentSplit) {
-      currentSplit.equipos.forEach((e: any) => {
-        e.pilotos.forEach((p: any) => {
+      (currentSplit.equipos || []).forEach((e: any) => {
+        (e.pilotos || []).forEach((p: any) => {
           scoutingList.push({ ...p, teamName: e.nombre });
         });
       });
@@ -798,8 +717,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     if (!currentSplit) return { standings: [], teamStandings: [], raceResults: [], allPilotsForScouting: [], championshipsTimeline: [] };
 
     // Roster of active teams in this split
-    const activeRosterDocs = currentSplit.equipos.flatMap((e: any) => 
-      e.pilotos.map((p: any) => ({
+    const activeRosterDocs = (currentSplit.equipos || []).flatMap((e: any) => 
+      (e.pilotos || []).map((p: any) => ({
         id: p.id,
         name: p.nombre,
         points: p.puntos_piloto || 0,
@@ -820,7 +739,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
     const ps = [...activeRosterDocs, ...freeAgentsInStandings].sort((a: any, b: any) => b.points - a.points);
 
-    const ts = currentSplit.equipos.map((e: any) => ({
+    const ts = (currentSplit.equipos || []).map((e: any) => ({
       id: e.id,
       nombre: e.nombre,
       puntos: e.puntos_constructores || 0
@@ -828,7 +747,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
     const localPOINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
     const rRes: any[] = [];
-    currentSplit.circuitos.filter((c: any) => c.completado && c.resultados).forEach((c: any) => {
+    (currentSplit.circuitos || []).filter((c: any) => c.completado && c.resultados).forEach((c: any) => {
       rRes.push({
         circuitName: c.nombre,
         pilots: c.resultados.map((r: any) => ({
@@ -849,7 +768,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     
     if (!pilotUser) {
       for (const s of splits) {
-        for (const e of s.equipos) {
+        for (const e of (s.equipos || [])) {
           const match = e.pilotos?.find((p: any) => p.id === pilotId);
           if (match) {
             pilotName = match.nombre;
@@ -877,7 +796,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
     const splitsToSearch = (activeSplitId === "global" || forceGlobal) 
       ? splits 
-      : splits.filter(s => s.id === activeSplitId);
+      : splits.filter(s => s.id <= activeSplitId);
 
     if (activeSplitId !== "global" && !forceGlobal) {
       const activeSp = splits.find(s => s.id === activeSplitId);
@@ -932,7 +851,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           if (res.isMvp) mvps++;
           if (res.fastestLap) fastestLaps++;
 
-          const drivingTeam = s.equipos.find((eq: any) => eq.id === res.escuderiaId || eq.pilotos?.some((p: any) => p.id === pilotId));
+          const drivingTeam = (s.equipos || []).find((eq: any) => eq.id === res.escuderiaId || eq.pilotos?.some((p: any) => p.id === pilotId));
           
           history.push({
             splitId: s.id,
@@ -996,8 +915,9 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     const list: { id: string; name: string; rtg: number; team: string }[] = [];
     const seen = new Set<string>();
 
-    splits.forEach((s: any) => {
-      s.equipos?.forEach((e: any) => {
+    if (activeSplitId !== "global" && currentSplit) {
+      // Si estamos en un split, solo mostramos los pilotos contratados en esa temporada
+      currentSplit.equipos?.forEach((e: any) => {
         e.pilotos?.forEach((p: any) => {
           if (!seen.has(p.id)) {
             seen.add(p.id);
@@ -1010,39 +930,56 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           }
         });
       });
-    });
-
-    usuarios.filter((u: any) => u.rol === "piloto").forEach((u: any) => {
-      const pId = u.uid;
-      if (!seen.has(pId)) {
-        seen.add(pId);
-        list.push({
-          id: pId,
-          name: u.nombre,
-          rtg: u.rating_piloto || 70,
-          team: "Sin equipo"
+    } else {
+      // Si estamos en Global, mostramos todos los pilotos existentes
+      splits.forEach((s: any) => {
+        s.equipos?.forEach((e: any) => {
+          e.pilotos?.forEach((p: any) => {
+            if (!seen.has(p.id)) {
+              seen.add(p.id);
+              list.push({
+                id: p.id,
+                name: p.nombre,
+                rtg: p.rating_piloto || 70,
+                team: e.nombre
+              });
+            }
+          });
         });
-      }
-    });
+      });
 
-    try {
-      plantilla.filter((p: any) => p.rol === "piloto").forEach((p: any) => {
-        if (!seen.has(p.id)) {
-          seen.add(p.id);
+      usuarios.filter((u: any) => u.rol === "piloto").forEach((u: any) => {
+        const pId = u.uid;
+        if (!seen.has(pId)) {
+          seen.add(pId);
           list.push({
-            id: p.id,
-            name: p.nombre,
-            rtg: p.rating_piloto || 70,
+            id: pId,
+            name: u.nombre,
+            rtg: u.rating_piloto || 70,
             team: "Sin equipo"
           });
         }
       });
-    } catch (e) {
-      console.warn("Could not filter plantilla in paddock pilots list:", e);
+
+      try {
+        plantilla.filter((p: any) => p.rol === "piloto").forEach((p: any) => {
+          if (!seen.has(p.id)) {
+            seen.add(p.id);
+            list.push({
+              id: p.id,
+              name: p.nombre,
+              rtg: p.rating_piloto || 70,
+              team: "Sin equipo"
+            });
+          }
+        });
+      } catch (e) {
+        console.warn("Could not filter plantilla in paddock pilots list:", e);
+      }
     }
 
     return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [splits, usuarios, plantilla]);
+  }, [activeSplitId, currentSplit, splits, usuarios, plantilla]);
 
   const statsA = useMemo(() => {
     if (!comparePilotIdA) return null;
@@ -1053,6 +990,43 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     if (!comparePilotIdB) return null;
     return getPilotStats(comparePilotIdB, true);
   }, [comparePilotIdB, splits, usuarios]);
+
+  // Estados y función para Plan B: AI Scouting Report
+  const [aiScoutingReport, setAiScoutingReport] = useState<string | null>(null);
+  const [isGeneratingScouting, setIsGeneratingScouting] = useState(false);
+
+  useEffect(() => {
+    setAiScoutingReport(null);
+  }, [comparePilotIdA, comparePilotIdB]);
+
+  const handleGenerateScouting = async (commonRaces: number, aheadA: number, aheadB: number) => {
+    if (!statsA || !statsB) return;
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    if (!apiKey) {
+      alert("Falta configurar VITE_OPENAI_API_KEY en tu entorno (.env).");
+      return;
+    }
+    setIsGeneratingScouting(true);
+    try {
+      const prompt = `Eres un ingeniero analista de F1 para Bugambra ("Plan B"). Analiza el Cara a Cara entre dos pilotos para un Scouting Report exclusivo.
+Piloto A: ${statsA.name} (Rating OVR: ${statsA.rating.toFixed(0)}, Pts totales: ${statsA.totalPoints})
+Piloto B: ${statsB.name} (Rating OVR: ${statsB.rating.toFixed(0)}, Pts totales: ${statsB.totalPoints})
+Contexto de rivalidad: Han coincidido en ${commonRaces} carreras. ${statsA.name} quedó delante ${aheadA} veces y ${statsB.name} quedó delante ${aheadB} veces.
+Escribe un único párrafo (máximo 45 palabras) determinando claramente quién es el favorito y por qué con un tono táctico deportivo.`;
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: "gpt-3.5-turbo", messages: [{ role: "user", content: prompt }], temperature: 0.7 })
+      });
+      const data = await response.json();
+      setAiScoutingReport(data.choices[0].message.content);
+    } catch (err) {
+      console.error("AI Scouting Error:", err);
+    } finally {
+      setIsGeneratingScouting(false);
+    }
+  };
 
   return (
     <div className="space-y-8 pb-32">
@@ -1084,40 +1058,49 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           ))}
         </div>
 
-        <button
-          onClick={() => {
-            setIsCompareViewOpen(true);
-            setActiveProfileTab("compare");
-            if (allPaddockPilots.length > 0) {
-              const defaultA = (userData?.rol === "piloto" && userData?.uid)
-                ? userData.uid
-                : (miEscuderia?.pilotos?.[0]?.id || allPaddockPilots[0].id);
-              setComparePilotIdA(defaultA);
-              const otherPilots = allPaddockPilots.filter(p => p.id !== defaultA);
-              if (otherPilots.length > 0) {
-                setComparePilotIdB(otherPilots[0].id);
-              } else if (allPaddockPilots.length > 1) {
-                setComparePilotIdB(allPaddockPilots[1].id);
-              } else {
-                setComparePilotIdB(allPaddockPilots[0].id);
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setIsCompareViewOpen(true);
+              setActiveProfileTab("compare");
+              if (allPaddockPilots.length > 0) {
+                const defaultA = (userData?.rol === "piloto" && userData?.uid)
+                  ? userData.uid
+                  : (miEscuderia?.pilotos?.[0]?.id || allPaddockPilots[0].id);
+                setComparePilotIdA(defaultA);
+                const otherPilots = allPaddockPilots.filter(p => p.id !== defaultA);
+                if (otherPilots.length > 0) {
+                  setComparePilotIdB(otherPilots[0].id);
+                } else if (allPaddockPilots.length > 1) {
+                  setComparePilotIdB(allPaddockPilots[1].id);
+                } else {
+                  setComparePilotIdB(allPaddockPilots[0].id);
+                }
               }
-            }
-          }}
-          className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-[#e10600]/15 hover:from-amber-500/35 hover:to-[#e10600]/30 border border-amber-500/45 hover:border-amber-400 text-amber-300 hover:text-white rounded-lg font-black text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95"
-        >
-          <TrendingUp className="w-3.5 h-3.5" />
-          perfiles y comparador ⚔️
-        </button>
+            }}
+            className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-[#e10600]/15 hover:from-amber-500/35 hover:to-[#e10600]/30 border border-amber-500/45 hover:border-amber-400 text-amber-300 hover:text-white rounded-lg font-black text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95"
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            perfiles y comparador ⚔️
+          </button>
+          
+          <button
+            onClick={() => setIsF1TVOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-[#e10600]/20 to-red-900/40 hover:from-[#e10600]/40 hover:to-red-900/60 border border-[#e10600]/50 hover:border-[#e10600] text-red-100 hover:text-white rounded-lg font-black text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-red-900/20 active:scale-95"
+          >
+            <MonitorPlay className="w-3.5 h-3.5" />
+            F1 TV EN DIRECTO 🔴
+          </button>
+        </div>
       </div>
 
       {/* PRÓXIMA CARRERA & CLIMA GENERAL WIDGET */}
-      <NextRaceWidget 
-        currentSplit={
-          activeSplitId === "global" 
-            ? (splits.find(s => s.circuitos?.some(c => !c.completado)) || splits[0] || null)
-            : (currentSplit || null)
-        } 
-      />
+      {/* Widget de tiempo eliminado de las interfaces piloto/jeque */}
+      {activeSplitId !== "global" && currentSplit && (
+        <div className="mb-8">
+          <NextRaceWidget currentSplit={currentSplit} />
+        </div>
+      )}
 
       {/* CUADRO DE HONOR / PALMARÉS */}
       <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-white/10 rounded-2xl p-4 flex flex-col lg:flex-row items-center justify-between gap-4 shadow-xl">
@@ -1140,11 +1123,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         </div>
       </div>
 
-      {activeSplitId !== "global" && miEscuderia && (
+      {activeSplitId !== "global" && (miEscuderia || userData?.rol === "piloto") && (
         <section className="bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 border border-white/20 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
           <div className="absolute -right-4 -top-4 w-32 h-32 bg-[#e10600]/10 rounded-full blur-2xl pointer-events-none"></div>
           
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+          {miEscuderia ? (
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
             
             {/* Logo and branding workspace block */}
             <div className="flex items-center gap-5 w-full md:w-auto">
@@ -1249,6 +1233,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             </div>
 
           </div>
+          ) : null}
         </section>
       )}
 
@@ -1741,6 +1726,14 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         </section>
       )}
 
+      {(activeSplitId !== "global" && userData?.rol === "piloto") && (
+        <PilotRivalryPanel split={currentSplit} miEscuderia={miEscuderia} userPilotId={userData.uid || userData.piloto_id} />
+      )}
+
+      {(activeSplitId !== "global" && userData?.rol === "jeque") && (
+        <JequeStrategyPanel split={currentSplit} miEscuderia={miEscuderia} recommendedPilots={recommendedPilots} />
+      )}
+
       {/* CENTRAL DE SCOUTING & PORTAL DE TRANSFERENCIAS */}
       {activeSplitId !== "global" && (
         <section className="mt-8 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
@@ -2073,118 +2066,102 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
                 {pilotProfileStats ? (
                   <div className="space-y-6">
-                    {/* Hero Header */}
-                    <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-white/5 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
-                      <div className="absolute right-0 top-0 w-64 h-64 bg-[#e10600]/5 rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="flex flex-col lg:flex-row gap-6">
                       
-                      <div className="flex flex-col md:flex-row items-center gap-5 text-center md:text-left">
-                        {pilotProfileStats.fotoUrl ? (
-                          <img
-                            src={pilotProfileStats.fotoUrl}
-                            alt={pilotProfileStats.name}
-                            referrerPolicy="no-referrer"
-                            className="w-24 h-24 rounded-2xl object-cover border-2 border-[#e10600] shadow-xl"
-                          />
-                        ) : (
-                          <div className="w-24 h-24 rounded-2xl border border-white/10 bg-zinc-800 flex items-center justify-center font-black text-2xl text-white/20 uppercase font-mono shadow-xl shrink-0">
-                            {pilotProfileStats.name.substring(0, 2).toUpperCase()}
+                      {/* F1 25 Style Rating Card */}
+                      <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 h-[440px] bg-gradient-to-br from-zinc-800 via-zinc-900 to-black rounded-t-3xl rounded-br-3xl rounded-bl-md border border-white/10 shadow-[0_15px_40px_rgba(225,6,0,0.15)] overflow-hidden group">
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-400 via-[#e10600] to-purple-500"></div>
+                        <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#e10600]/20 blur-[50px] rounded-full pointer-events-none group-hover:bg-[#e10600]/30 transition-all duration-500"></div>
+                        
+                        {/* OVR & Team */}
+                        <div className="absolute top-5 left-5 flex flex-col items-center z-20 drop-shadow-md">
+                          <span className="text-[42px] font-black italic text-white leading-none tracking-tighter">{pilotProfileStats.rating.toFixed(0)}</span>
+                          <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest mt-1">OVR</span>
+                          <div className="w-8 h-[2px] bg-white/20 my-2.5"></div>
+                          <div className="text-[11px] font-black text-white/50 uppercase tracking-widest" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                            {pilotProfileStats.escuderiaName.substring(0, 16)}
                           </div>
-                        )}
-                        <div>
-                          <span className="text-[10px] bg-red-500/10 text-red-500 border border-red-500/10 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
-                            {pilotProfileStats.escuderiaName}
-                          </span>
-                          <h3 className="text-3xl font-black italic tracking-tighter text-white uppercase mt-1">{pilotProfileStats.name}</h3>
-                          <p className="text-xs text-white/50 font-mono mt-0.5 uppercase tracking-wide flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5" strokeWidth={3} />
-                            Participaciones totales: <span className="text-white font-bold">{pilotProfileStats.participaciones} GPs</span>
-                          </p>
+                        </div>
+
+                        {/* Pilot Image */}
+                        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 w-[220px] h-[220px] z-10 flex items-end justify-center transition-transform duration-500 group-hover:scale-105">
+                          {pilotProfileStats.fotoUrl ? (
+                            <img src={pilotProfileStats.fotoUrl} alt={pilotProfileStats.name} className="max-w-full max-h-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]" />
+                          ) : (
+                            <div className="w-32 h-32 rounded-full bg-zinc-800/80 border border-white/5 flex items-center justify-center font-black text-5xl text-white/10 mb-6 drop-shadow-xl">{pilotProfileStats.name.substring(0, 2).toUpperCase()}</div>
+                          )}
+                        </div>
+
+                        {/* Bottom Info Section */}
+                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black via-black/95 to-transparent pt-16 pb-6 px-6 z-20">
+                          <h3 className="text-2xl font-black italic text-white uppercase tracking-tighter text-center whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-md">{pilotProfileStats.name}</h3>
+                          
+                          <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent my-3.5"></div>
+
+                          <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-1">
+                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">PTS</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.totalPoints}</span></div>
+                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">WIN</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.victorias}</span></div>
+                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">POD</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.podiums}</span></div>
+                            
+                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">POL</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.poles}</span></div>
+                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">VR</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.fastestLaps}</span></div>
+                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">DNF</span><span className="text-base leading-none font-black text-red-400">{pilotProfileStats.dnfs}</span></div>
+                          </div>
                         </div>
                       </div>
-
-                      {/* Performance rating & buy clause */}
-                      <div className="bg-black/40 border border-white/5 p-4 rounded-xl flex items-center gap-6 min-w-[240px] justify-between">
-                        <div className="flex-1">
-                          <span className="text-[9px] text-white/30 font-mono uppercase tracking-wider block mb-1">RATING DISPONIBLE</span>
-                          <div className="flex items-end gap-1.5">
-                            <span className="text-3xl font-black font-mono text-white leading-none">{(pilotProfileStats.rating).toFixed(0)}</span>
-                            <span className="text-xs text-[#e10600] font-black font-mono pb-0.5">/ 99</span>
-                          </div>
-                          <div className="w-full bg-white/5 rounded-full h-1.5 mt-2">
-                            <div className="bg-[#e10600] h-1.5 rounded-full" style={{ width: `${Math.min(99, pilotProfileStats.rating)}%` }}></div>
-                          </div>
-                        </div>
-
-                        <div className="text-right border-l border-white/5 pl-6 shrink-0">
-                          <span className="text-[9px] text-white/30 font-mono uppercase tracking-wider block mb-1">CLÁUSULA DE RESCISIÓN</span>
-                          <div className="flex items-baseline gap-1 justify-end">
-                            <span className="text-3xl font-black font-mono text-emerald-400">{(pilotProfileStats.clause).toFixed(1)}</span>
-                            <span className="text-xs text-emerald-500 font-bold font-mono">M</span>
-                          </div>
-                          <span className="text-[8px] text-[#e10600] font-bold uppercase font-mono block mt-1 tracking-wider">MERCADO INTEGRAL</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                       
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Puntos Totales</span>
-                        <span className="text-2xl font-black text-white font-mono mt-2 tabular-nums">{pilotProfileStats.totalPoints}</span>
-                      </div>
-
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <div className="flex justify-between items-start">
-                          <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Victorias</span>
-                          <Trophy className="w-4 h-4 text-amber-400" />
+                      {/* Extended Details Grid */}
+                      <div className="flex-1 flex flex-col gap-4">
+                        
+                        {/* Financials / Rating Bar */}
+                        <div className="bg-black/40 border border-white/5 p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-6">
+                          <div className="w-full sm:flex-1">
+                            <div className="flex justify-between items-end mb-2">
+                              <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider">Desarrollo de Rating</span>
+                              <span className="text-xs font-black text-white font-mono">{pilotProfileStats.rating.toFixed(0)} / 99</span>
+                            </div>
+                            <div className="w-full bg-white/5 rounded-full h-2.5 overflow-hidden">
+                              <div className="bg-gradient-to-r from-[#e10600] to-amber-500 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(99, pilotProfileStats.rating)}%` }}></div>
+                            </div>
+                          </div>
+                          <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-white/5 pt-4 sm:pt-0 sm:pl-6 shrink-0">
+                            <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider block mb-1">Cláusula de Mercado</span>
+                            <div className="flex items-baseline gap-1 sm:justify-end">
+                              <span className="text-3xl font-black font-mono text-emerald-400">{pilotProfileStats.clause.toFixed(1)}</span>
+                              <span className="text-sm font-bold text-emerald-500 font-mono">M</span>
+                            </div>
+                          </div>
                         </div>
-                        <span className="text-2xl font-black text-amber-400 font-mono mt-2 tabular-nums">{pilotProfileStats.victorias}</span>
-                      </div>
 
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Podios</span>
-                        <span className="text-2xl font-black text-yellow-500/80 font-mono mt-2 tabular-nums">{pilotProfileStats.podiums}</span>
-                      </div>
-
-                      <div className="bg-white/5 border border-white/3 p-4 rounded-xl flex flex-col justify-between">
-                        <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Pole Positions</span>
-                        <span className="text-2xl font-black text-sky-400 font-mono mt-2 tabular-nums">{pilotProfileStats.poles}</span>
-                      </div>
-
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <div className="flex justify-between items-start">
-                          <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Abandonos (DNF)</span>
-                          <span className="text-red-500 font-mono font-bold text-xs">⚠️</span>
+                        {/* Smaller Stats Grid */}
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
+                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Puntos</span>
+                            <span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.avgPoints}</span>
+                          </div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
+                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Qualy</span>
+                            <span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">P{pilotProfileStats.avgQualy}</span>
+                          </div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
+                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Carrera</span>
+                            <span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">P{pilotProfileStats.avgRace}</span>
+                          </div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
+                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Carreras Limpias</span>
+                            <span className="text-2xl font-black text-teal-400 font-mono mt-1 tabular-nums">{pilotProfileStats.cleanRaces}</span>
+                          </div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
+                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Piloto del Día</span>
+                            <span className="text-2xl font-black text-amber-400 font-mono mt-1 tabular-nums">{pilotProfileStats.dotds}</span>
+                          </div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
+                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">GPs Disputados</span>
+                            <span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.participaciones}</span>
+                          </div>
                         </div>
-                        <span className="text-2xl font-black text-red-500 font-mono mt-2 tabular-nums">{pilotProfileStats.dnfs}</span>
-                      </div>
 
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Pts/Carrera</span>
-                        <span className="text-2xl font-black text-emerald-400 font-mono mt-2 tabular-nums">{pilotProfileStats.avgPoints}</span>
                       </div>
-
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Pos. Qualy</span>
-                        <span className="text-2xl font-black text-white font-mono mt-2 tabular-nums font-bold">P{pilotProfileStats.avgQualy}</span>
-                      </div>
-
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Pos. Carrera</span>
-                        <span className="text-2xl font-black text-white font-mono mt-2 tabular-nums font-bold">P{pilotProfileStats.avgRace}</span>
-                      </div>
-
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Carreras Limpias</span>
-                        <span className="text-2xl font-black text-teal-400 font-mono mt-2 tabular-nums">{pilotProfileStats.cleanRaces}</span>
-                      </div>
-
-                      <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                        <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Vueltas Rápidas</span>
-                        <span className="text-2xl font-black text-purple-400 font-mono mt-2 tabular-nums">{pilotProfileStats.fastestLaps}</span>
-                      </div>
-
                     </div>
 
                     {/* Timeline GPs */}
@@ -2415,6 +2392,24 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                                 </div>
                               </div>
 
+                              {/* PLAN B - AI SCOUTING */}
+                              <div className="mt-8 border-t border-white/5 pt-6 text-left">
+                                <div className="flex justify-between items-center mb-3">
+                                  <span className="text-[10px] text-white/50 uppercase font-mono tracking-wider font-bold flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> Plan B - Analítica con IA</span>
+                                  <button
+                                    onClick={() => handleGenerateScouting(commonRaces, aheadA, aheadB)}
+                                    disabled={isGeneratingScouting}
+                                    className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 rounded text-[9px] uppercase font-black tracking-widest border border-blue-500/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                                  >
+                                    {isGeneratingScouting ? "Analizando..." : "Generar Scouting Report"}
+                                  </button>
+                                </div>
+                                {aiScoutingReport && (
+                                  <div className="bg-black/40 border border-blue-500/20 p-4 rounded-xl shadow-inner">
+                                    <p className="text-xs text-blue-100/80 leading-relaxed font-sans italic">"{aiScoutingReport}"</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );
@@ -2513,6 +2508,77 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL F1 TV EN DIRECTO */}
+      {isF1TVOpen && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[60] overflow-y-auto p-4 md:p-6 text-left">
+          <div className="max-w-7xl mx-auto bg-zinc-950 border border-[#e10600]/30 rounded-3xl shadow-[0_0_50px_rgba(225,6,0,0.15)] p-4 md:p-6 relative my-4 overflow-hidden">
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#e10600]/10 blur-[120px] rounded-full pointer-events-none" />
+
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-[#e10600]/20 pb-4 mb-6 relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="bg-[#e10600] text-white font-black italic tracking-tighter text-3xl px-3 py-1 rounded-lg">F1 TV</div>
+                <div>
+                  <span className="text-[10px] font-black tracking-[0.2em] text-[#e10600] uppercase font-mono block animate-pulse">🔴 EN DIRECTO</span>
+                  <h2 className="text-xl font-bold uppercase tracking-tight text-white mt-0.5">On-Boards & Transmisiones</h2>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsF1TVOpen(false)}
+                className="p-2 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all border border-white/10"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Twitch Streams Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10">
+              
+              {/* Piloto Toni */}
+              <div className="bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex flex-col group shadow-xl">
+                <div className="bg-zinc-900 border-b border-white/5 px-4 py-3 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="font-bold text-white uppercase tracking-tight">Cámara: Piloto Toni</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-white/40 uppercase bg-black/40 px-2 py-1 rounded">@tonicotitular</span>
+                </div>
+                <div className="aspect-video w-full bg-black relative">
+                  <iframe
+                    src={`https://player.twitch.tv/?channel=tonicotitular&parent=${window.location.hostname || 'localhost'}`}
+                    height="100%"
+                    width="100%"
+                    allowFullScreen
+                    className="absolute inset-0"
+                  />
+                </div>
+              </div>
+
+              {/* Piloto Fabi */}
+              <div className="bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex flex-col group shadow-xl">
+                <div className="bg-zinc-900 border-b border-white/5 px-4 py-3 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="font-bold text-white uppercase tracking-tight">Cámara: Piloto Fabi</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-white/40 uppercase bg-black/40 px-2 py-1 rounded">@fabiml_204</span>
+                </div>
+                <div className="aspect-video w-full bg-black relative">
+                  <iframe
+                    src={`https://player.twitch.tv/?channel=fabiml_204&parent=${window.location.hostname || 'localhost'}`}
+                    height="100%"
+                    width="100%"
+                    allowFullScreen
+                    className="absolute inset-0"
+                  />
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}
