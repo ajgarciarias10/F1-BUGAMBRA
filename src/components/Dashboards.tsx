@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { SharedDashboardView } from "./SharedDashboard";
 import { ProfileView } from "./ProfileView";
 import { auth } from "../services/firebase";
 import { SuggestionsView } from "./SuggestionsView";
+import { StickerAlbum } from "./GuestDashboard";
+import { useSplits, useUsuarios } from "../hooks/useData";
 
 export function UserHeader({ title }: { title: string }) {
   const { userData } = useAuth();
@@ -49,13 +51,16 @@ export function UserHeader({ title }: { title: string }) {
 
 export function JequeDashboard() {
   const { userData } = useAuth();
-  const [activeTab, setActiveTab] = useState<"championship" | "profile" | "suggestions">("championship");
+  const { splits, loading } = useSplits();
+  const { usuarios } = useUsuarios();
+  const [activeTab, setActiveTab] = useState<"championship" | "profile" | "suggestions" | "album">("championship");
 
   const getHeaderTitle = () => {
     switch (activeTab) {
       case "championship": return "Dashboard del Jeque";
       case "profile": return "Mi Perfil de Jeque";
       case "suggestions": return "Buzón de Mejoras Paddock";
+      case "album": return "Álbum de Cromos";
       default: return "Jeque";
     }
   };
@@ -64,7 +69,7 @@ export function JequeDashboard() {
     <div className="min-h-screen bg-[#0E0E10] text-gray-100 p-8 font-sans">
       <div className="max-w-7xl mx-auto">
         <UserHeader title={getHeaderTitle()} />
-        
+
         {/* Navigation Tabs */}
         <div className="flex flex-wrap border-b border-white/10 mb-8 gap-2">
           <button
@@ -77,6 +82,19 @@ export function JequeDashboard() {
           >
             🏁 Campeonato y Escudería
             {activeTab === "championship" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("album")}
+            className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
+              activeTab === "album"
+                ? "text-white bg-white/5"
+                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
+            }`}
+          >
+            🎴 Álbum de Cromos
+            {activeTab === "album" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
             )}
           </button>
@@ -110,6 +128,8 @@ export function JequeDashboard() {
 
         {activeTab === "championship" ? (
           <SharedDashboardView canViewBudget={true} escuderiaId={userData?.escuderia_id} />
+        ) : activeTab === "album" ? (
+          <StickerAlbum splits={splits} usuarios={usuarios} loading={loading} />
         ) : activeTab === "profile" ? (
           <ProfileView />
         ) : (
@@ -122,13 +142,16 @@ export function JequeDashboard() {
 
 export function PilotoDashboard() {
   const { userData } = useAuth();
-  const [activeTab, setActiveTab] = useState<"championship" | "profile" | "suggestions">("championship");
+  const { splits, loading } = useSplits();
+  const { usuarios } = useUsuarios();
+  const [activeTab, setActiveTab] = useState<"championship" | "profile" | "suggestions" | "album">("championship");
 
   const getHeaderTitle = () => {
     switch (activeTab) {
       case "championship": return "Dashboard de Piloto";
       case "profile": return "Mi Perfil de Piloto";
       case "suggestions": return "Buzón de Mejoras Paddock";
+      case "album": return "Álbum de Cromos";
       default: return "Piloto";
     }
   };
@@ -137,7 +160,7 @@ export function PilotoDashboard() {
     <div className="min-h-screen bg-[#0E0E10] text-gray-100 p-8 font-sans">
       <div className="max-w-7xl mx-auto">
         <UserHeader title={getHeaderTitle()} />
-        
+
         {/* Navigation Tabs */}
         <div className="flex flex-wrap border-b border-white/10 mb-8 gap-2">
           <button
@@ -150,6 +173,19 @@ export function PilotoDashboard() {
           >
             🏁 Campeonato y Escudería
             {activeTab === "championship" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("album")}
+            className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
+              activeTab === "album"
+                ? "text-white bg-white/5"
+                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
+            }`}
+          >
+            🎴 Álbum de Cromos
+            {activeTab === "album" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
             )}
           </button>
@@ -183,6 +219,8 @@ export function PilotoDashboard() {
 
         {activeTab === "championship" ? (
           <SharedDashboardView canViewBudget={false} escuderiaId={userData?.escuderia_id} />
+        ) : activeTab === "album" ? (
+          <StickerAlbum splits={splits} usuarios={usuarios} loading={loading} />
         ) : activeTab === "profile" ? (
           <ProfileView />
         ) : (

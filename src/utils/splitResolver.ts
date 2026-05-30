@@ -68,7 +68,7 @@ export function getRivalryCoefficient(totalPilotos: number): number {
 }
 
 const getPilotPrice = (pilot: any): number => {
-  return pilot.precio_compra_split ?? pilot.clausula_actual ?? ((pilot.rating_piloto || 70) * 0.5) ?? 10;
+  return pilot.precio_compra_split ?? pilot.clausula_actual ?? (pilot.rating_piloto || 70) * 0.5;
 };
 
 const buildStatusRankedPilots = (split: any): RivalryGroupMember[] => {
@@ -345,7 +345,7 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
             puntos_constructores: eq.puntos_constructores || defaultPts,
             pilotos: (eq.pilotos || []).map((p: any) => {
               const defPilot: any = defaultPilotStats[p.id] || {};
-              const tempPilot = {
+              return {
                 ...p,
                 puntos_piloto: p.puntos_piloto || defPilot.puntos_piloto || 0,
                 victorias: p.victorias || defPilot.victorias || 0,
@@ -357,8 +357,6 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
                 mantener_actual: p.mantener_actual || defPilot.mantener_actual || 15,
                 precio_carrera_anterior: p.precio_carrera_anterior || defPilot.precio_carrera_anterior || 10
               };
-              tempPilot.rating_piloto = computePilotDynamicOVR(tempPilot);
-              return tempPilot;
             })
           };
         });
@@ -415,22 +413,18 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
           rawPilotos = eqAnterior?.pilotos || [];
         }
 
-        const pilotos = rawPilotos.map((p: any) => {
-          const tempPilot = {
-            ...p,
-            puntos_piloto: isStarted ? (p.puntos_piloto ?? 0) : 0,
-            victorias: isStarted ? (p.victorias ?? 0) : 0,
-            podios: isStarted ? (p.podios ?? 0) : 0,
-            base_rating: p.base_rating || p.rating_piloto || 70,
-            rating_piloto: p.rating_piloto ?? 70,
-            precio_compra_split: p.precio_compra_split ?? 10,
-            clausula_actual: p.clausula_actual ?? 15,
-            mantener_actual: p.mantener_actual ?? 15,
-            precio_carrera_anterior: p.precio_carrera_anterior ?? 10
-          };
-          tempPilot.rating_piloto = computePilotDynamicOVR(tempPilot);
-          return tempPilot;
-        });
+        const pilotos = rawPilotos.map((p: any) => ({
+          ...p,
+          puntos_piloto: isStarted ? (p.puntos_piloto ?? 0) : 0,
+          victorias: isStarted ? (p.victorias ?? 0) : 0,
+          podios: isStarted ? (p.podios ?? 0) : 0,
+          base_rating: p.base_rating || p.rating_piloto || 70,
+          rating_piloto: p.rating_piloto ?? 70,
+          precio_compra_split: p.precio_compra_split ?? 10,
+          clausula_actual: p.clausula_actual ?? 15,
+          mantener_actual: p.mantener_actual ?? 15,
+          precio_carrera_anterior: p.precio_carrera_anterior ?? 10
+        }));
 
         const defaultNombre = teamId === "agente_libre" ? "Agente Libre" : (teamId.charAt(0).toUpperCase() + teamId.slice(1));
 

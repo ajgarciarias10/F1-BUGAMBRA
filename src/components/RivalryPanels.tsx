@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Trophy, TrendingUp, ShieldAlert, ArrowRight, Sparkles, Users, ChartBar, Loader2 } from "lucide-react";
 import { db } from "../services/firebase";
 import { doc, updateDoc, deleteField } from "firebase/firestore";
@@ -206,11 +206,11 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
                 <div className={s.statsGridRival}>
                   <div className={s.statBox}>
                     <p className={`${s.statTitle} cursor-help`} title="Estado de forma actual del rival.">NIVEL OVR</p>
-                    <p className={s.statVal}>{rivalRating}</p>
+                    <p className={s.statVal}>{rival.rating}</p>
                   </div>
                   <div className={s.statBox}>
                     <p className={s.statTitle}>Valor</p>
-                    <p className={s.statValRed}>{formatMillions(getPilotValue(rival))}</p>
+                    <p className={s.statValRed}>{formatMillions(getPilotValue(rival.price))}</p>
                   </div>
                 </div>
               </div>
@@ -574,7 +574,7 @@ export function AdminRivalryControlPanel({ split }: { split: any }) {
 
   const financials = useMemo(() => {
     const data: Record<string, { teamName: string; classification: number; race: number; total: number }> = {};
-    if (!split) return data;
+    if (!split) return [];
 
     split.equipos?.forEach((team: any) => {
       data[team.id] = { teamName: team.nombre, classification: 0, race: 0, total: 0 };

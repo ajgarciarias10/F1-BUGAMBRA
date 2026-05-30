@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
-import { processRace, RaceResult } from "../services/raceProcessor";
+import { processRace, RaceResult, recalcSplit1PilotPoints, inheritRatingsFromPrevSplit } from "../services/raceProcessor";
 import { auth, db } from "../services/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot } from "firebase/firestore";
 import { updatePassword } from "firebase/auth";
-import { ChevronDown, Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon, Lock, ShieldAlert } from "lucide-react";
+import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon, Lock, ShieldAlert } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { resolveAllSplits, isSplitUnlocked } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
@@ -55,24 +55,67 @@ export function AdminDashboard() {
   const [plantilla, setPlantilla] = useState<any[]>([]);
   const [adminTab, setAdminTab] = useState<"championship" | "suggestions">("championship");
 
+  // ─── MIGRACIONES AUTOMÁTICAS AL MONTAR ───────────────────────────────────────
+  // Se ejecutan UNA SOLA VEZ. Cada función tiene su propia guardia interna
+  // y se omite silenciosamente si ya no es necesaria.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runMigrations() {
+      const messages: string[] = [];
+
+      // 1. Recalcular puntos y ratings del Split 1 desde resultados históricos
+      //    (solo actúa si todos los pilotos del Split 1 tienen puntos_piloto === 0)
+      try {
+        const r1 = await recalcSplit1PilotPoints();
+        if (!cancelled && r1.migrated) messages.push(r1.message);
+      } catch (e) {
+        console.warn("[Migración] recalcSplit1PilotPoints falló:", e);
+      }
+
+      // 2. Heredar ratings del split anterior a splits posteriores que se
+      //    inicializaron antes del fix (pilotos con rating === 70 por defecto).
+      //    Pares a comprobar: split_1 → split_2, split_2 → split_3, etc.
+      const splitPairs: [string, string][] = [
+        ["split_1", "split_2"],
+        ["split_2", "split_3"],
+        ["split_3", "split_4"],
+      ];
+      for (const [prev, current] of splitPairs) {
+        try {
+          const r = await inheritRatingsFromPrevSplit(prev, current);
+          if (!cancelled && r.fixed > 0) messages.push(r.message);
+        } catch (e) {
+          // El split puede no existir aún — ignorar silenciosamente
+        }
+      }
+
+      if (!cancelled && messages.length > 0) {
+        setMsg(messages.join(" · "));
+        setTimeout(() => setMsg(""), 8000);
+      }
+    }
+
+    runMigrations();
+    return () => { cancelled = true; };
+  }, []); // [] → solo al montar, nunca más
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     let isSubscribed = true;
-    let unsubscribe: (() => void) | undefined;
-    import("firebase/firestore").then(({ collection, onSnapshot }) => {
-      if (!isSubscribed) return;
-      const q = collection(db, "plantilla");
-      unsubscribe = onSnapshot(q, (snapshot) => {
-        if (isSubscribed) {
-          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setPlantilla(data);
-        }
-      }, (error) => {
-        console.warn("Gracefully handled AdminDashboard plantilla snapshot error:", error);
-      });
-    }).catch(console.error);
+    const q = collection(db, "plantilla");
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (isSubscribed) {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setPlantilla(data);
+      }
+    }, (error) => {
+      console.warn("Gracefully handled AdminDashboard plantilla snapshot error:", error);
+    });
     return () => {
       isSubscribed = false;
-      if (unsubscribe) unsubscribe();
+      unsubscribe();
     };
   }, []);
 
@@ -165,12 +208,6 @@ export function AdminDashboard() {
   // Schedule State
   const [fechaVal, setFechaVal] = useState("");
   const [horaVal, setHoraVal] = useState("");
-  /*
-  const [climaTipoVal, setClimaTipoVal] = useState("despejado");
-  const [climaTempVal, setClimaTempVal] = useState(25);
-  const [climaProbLluviaVal, setClimaProbLluviaVal] = useState(10);
-  const [climaVientoVal, setClimaVientoVal] = useState(15);
-  */
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Auto-select next circuit on load or when splits change
@@ -196,12 +233,6 @@ export function AdminDashboard() {
       
       setFechaVal(circuito?.fecha || "");
       setHoraVal(circuito?.hora || "");
-      /*
-      setClimaTipoVal(circuito?.clima_tipo || "despejado");
-      setClimaTempVal(circuito?.clima_temp !== undefined ? circuito.clima_temp : 25);
-      setClimaProbLluviaVal(circuito?.clima_prob_lluvia !== undefined ? circuito.clima_prob_lluvia : 10);
-      setClimaVientoVal(circuito?.clima_viento !== undefined ? circuito.clima_viento : 15);
-      */
       
       if (circuito?.completado && circuito.resultados) {
         setIsEditingFinished(true);
@@ -240,8 +271,6 @@ export function AdminDashboard() {
 
   // Management State
   const [newTeamName, setNewTeamName] = useState("");
-  const [selectedTeamIdForPilot, setSelectedTeamIdForPilot] = useState("");
-  const [selectedUserIdForPilot, setSelectedUserIdForPilot] = useState("");
   const [editStates, setEditStates] = useState<Record<string, any>>({});
   const [teamBudgets, setTeamBudgets] = useState<Record<string, string>>({});
   const [confirmModal, setConfirmModal] = useState<{
@@ -271,11 +300,8 @@ export function AdminDashboard() {
   const handleUpdatePilotName = async (pilotId: string, newName: string) => {
     if (!newName || !newName.trim()) return;
     const trimmedName = newName.trim();
-    
+
     try {
-      const { doc, updateDoc, getDoc } = await import("firebase/firestore");
-      const { db } = await import("../services/firebase");
-      
       // 1. Update in "usuarios"
       const userRef = doc(db, "usuarios", pilotId);
       const userSnap = await getDoc(userRef);
@@ -314,8 +340,6 @@ export function AdminDashboard() {
     if (!selectedSplitId || !newTeamName) return;
     setLoading(true);
     try {
-      const { collection, addDoc, doc, setDoc } = await import("firebase/firestore");
-      const { db } = await import("../services/firebase");
       const teamId = newTeamName.toLowerCase().replace(/\s+/g, '_');
       await setDoc(doc(db, `splits/${selectedSplitId}/equipos`, teamId), {
         nombre: newTeamName,
@@ -331,34 +355,11 @@ export function AdminDashboard() {
     }
   };
 
-  const handleAddPilotToTeam = async () => {
-    if (!selectedSplitId || !selectedTeamIdForPilot || !selectedUserIdForPilot) return;
-    setLoading(true);
-    try {
-      const { doc, setDoc } = await import("firebase/firestore");
-      const { db } = await import("../services/firebase");
-      const user = usuarios.find(u => u.uid === selectedUserIdForPilot);
-      await setDoc(doc(db, `splits/${selectedSplitId}/equipos/${selectedTeamIdForPilot}/pilotos`, selectedUserIdForPilot), {
-        id: selectedUserIdForPilot,
-        nombre: user?.nombre || "Piloto",
-        puntos_piloto: 0,
-        victorias: 0,
-        podios: 0,
-        rating_piloto: 70
-      });
-      setMsg("Piloto vinculado al equipo del split.");
-    } catch (err: any) {
-      setMsg("Error: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleToggleFichajes = async () => {
     if (!selectedSplitId) return;
     setLoading(true);
     try {
-      const { doc, updateDoc } = await import("firebase/firestore");
       const currentSplit = splits.find(s => s.id === selectedSplitId);
       const finalVal = !(currentSplit?.fichajes_abiertos);
       const ref = doc(db, "splits", selectedSplitId);
@@ -378,7 +379,6 @@ export function AdminDashboard() {
     if (!selectedSplitId || isNaN(budget)) return;
     setLoading(true);
     try {
-      const { doc, setDoc } = await import("firebase/firestore");
       const ref = doc(db, `splits/${selectedSplitId}/equipos`, teamId);
       await setDoc(ref, { presupuesto: budget }, { merge: true });
       setTeamBudgets(prev => {
@@ -401,7 +401,6 @@ export function AdminDashboard() {
     if (!selectedSplitId) return;
     setLoading(true);
     try {
-      const { doc, setDoc } = await import("firebase/firestore");
       const ref = doc(db, `splits/${selectedSplitId}/equipos/${teamId}/pilotos`, pilotId);
       await setDoc(ref, {
         rating_piloto: Number(props.rating_piloto || 0),
@@ -428,8 +427,6 @@ export function AdminDashboard() {
   const handleMovePilotOriginal = async (pilotId: string, pilotName: string, fromTeamId: string, toTeamId: string, pilotData?: any) => {
     if (!selectedSplitId || fromTeamId === toTeamId) return;
     try {
-      const { doc, setDoc, deleteDoc, addDoc, collection } = await import("firebase/firestore");
-      
       let pData = { ...pilotData };
       
       // Calculate clause price
@@ -458,7 +455,6 @@ export function AdminDashboard() {
       }
 
       // Update global user document escuderia_id to keep Pilot Panel and queries aligned
-      // Find matching user in 'usuarios' by uid or registered piloto_id
       const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
       if (matchedUser) {
         const userRef = doc(db, "usuarios", matchedUser.uid);
@@ -467,8 +463,6 @@ export function AdminDashboard() {
         }, { merge: true });
       }
 
-      // To guarantee absolutely no duplicate pilot documents exist across collections/teams in this split,
-      // we prepare all deletions to run in parallel using Promise.all for modern, lightning-fast execution.
       const deletePromises: Promise<any>[] = [];
 
       if (fromTeamId && fromTeamId !== "agente_libre") {
@@ -543,13 +537,10 @@ export function AdminDashboard() {
     setConfirmModal({
       isOpen: true,
       title: `Inicializar ${currentSplitName}`,
-      message: `¿Seguro que quieres INICIALIZAR las plantillas, presupuestos y pilotos del ${currentSplitName.toUpperCase()} a partir del Split anterior? Esto establecerá los presupuestos a 100M, copiará el roster del Split anterior con puntos a 0, victorias a 0 y podios a 0.`,
+      message: `¿Seguro que quieres INICIALIZAR las plantillas del ${currentSplitName.toUpperCase()} a partir del Split anterior? Los presupuestos se resetearán a 100M, los puntos a 0, victorias a 0 y podios a 0. El RATING de cada piloto se heredará del valor final que tenga en el split anterior.`,
       onConfirm: async () => {
         setLoading(true);
         try {
-          const { doc, setDoc, deleteDoc, getDocs, collection, addDoc } = await import("firebase/firestore");
-          const { db } = await import("../services/firebase");
-          
           const sortedSplits = [...splits].sort((a, b) => a.id.localeCompare(b.id));
           const currentIndex = sortedSplits.findIndex(s => s.id === splitId);
           if (currentIndex <= 0) {
@@ -558,50 +549,71 @@ export function AdminDashboard() {
             return;
           }
           const prevSplit = sortedSplits[currentIndex - 1];
-          
-          setMsg(`Inicializando presupuestos de ${currentSplitName}...`);
-          const teamKeys = ["zenith", "roses", "alfa_romero"];
-          for (const teamId of teamKeys) {
+
+          setMsg(`Leyendo ratings finales de ${prevSplit.nombre}...`);
+
+          // Leer equipos dinámicamente desde el split anterior en lugar de un array hardcodeado.
+          // Así funciona aunque haya más o menos equipos, o cambien sus IDs.
+          const prevTeamsSnap = await getDocs(collection(db, `splits/${prevSplit.id}/equipos`));
+
+          let pilotsInitialized = 0;
+
+          for (const prevTeamDoc of prevTeamsSnap.docs) {
+            const teamId = prevTeamDoc.id;
+            const teamData = prevTeamDoc.data();
+
+            // Crear/actualizar el equipo en el nuevo split con presupuesto y puntos reseteados
             const tRef = doc(db, `splits/${splitId}/equipos`, teamId);
-            const prevTeamDoc = prevSplit.equipos?.find((e: any) => e.id === teamId);
-            
             await setDoc(tRef, {
               id: teamId,
-              nombre: prevTeamDoc?.nombre || (teamId.charAt(0).toUpperCase() + teamId.slice(1)),
+              nombre: teamData.nombre || teamId,
               presupuesto: 100,
               puntos_constructores: 0
             }, { merge: true });
 
-            const pSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
-            for (const pDoc of pSnap.docs) {
+            // Limpiar pilotos existentes en el nuevo split para este equipo
+            const existingPilotsSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
+            for (const pDoc of existingPilotsSnap.docs) {
               await deleteDoc(doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pDoc.id));
             }
 
-            const prevPilots = prevTeamDoc?.pilotos || [];
-            for (const p of prevPilots) {
-              await setDoc(doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, p.id), {
-                id: p.id,
+            // Leer los pilotos del split anterior desde Firestore directamente
+            // para obtener el rating_piloto más actualizado (no el cacheado en memoria)
+            const prevPilotsSnap = await getDocs(collection(db, `splits/${prevSplit.id}/equipos/${teamId}/pilotos`));
+
+            for (const prevPilotDoc of prevPilotsSnap.docs) {
+              const p = prevPilotDoc.data();
+              // El rating que heredamos es el rating FINAL del split anterior,
+              // que ya incluye todos los ajustes de carrera aplicados por processRace.
+              const inheritedRating = p.rating_piloto ?? 70;
+
+              await setDoc(doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, prevPilotDoc.id), {
+                id: prevPilotDoc.id,
                 nombre: p.nombre,
                 puntos_piloto: 0,
                 victorias: 0,
                 podios: 0,
-                rating_piloto: p.rating_piloto ?? 70,
+                poles: 0,
+                dnfs: 0,
+                carreras_limpias: 0,
+                rating_piloto: inheritedRating,        // ← Rating final heredado del split anterior
                 precio_compra_split: p.precio_compra_split ?? 10,
                 clausula_actual: p.clausula_actual ?? 15,
                 mantener_actual: p.mantener_actual ?? 15,
                 precio_carrera_anterior: p.precio_carrera_anterior ?? 10
               });
+              pilotsInitialized++;
             }
           }
 
           await addDoc(collection(db, `splits/${splitId}/transfers`), {
-            detalles: `⚙️ Admin inicializó los rosters del ${currentSplitName} desde ${prevSplit.nombre}.`,
+            detalles: `⚙️ Admin inicializó los rosters del ${currentSplitName} desde ${prevSplit.nombre}. ${pilotsInitialized} pilotos copiados con rating heredado.`,
             timestamp: new Date().toISOString(),
             tipo: "admin"
           });
 
-          setMsg(`¡${currentSplitName} inicializado correctamente!`);
-          setTimeout(() => setMsg(""), 4000);
+          setMsg(`¡${currentSplitName} inicializado! ${pilotsInitialized} pilotos copiados con su rating final de ${prevSplit.nombre}.`);
+          setTimeout(() => setMsg(""), 6000);
         } catch (err: any) {
           setMsg("Error al inicializar split: " + err.message);
         } finally {
@@ -620,8 +632,6 @@ export function AdminDashboard() {
       onConfirm: async () => {
         setLoading(true);
         try {
-          const { doc, updateDoc } = await import("firebase/firestore");
-          const { db } = await import("../services/firebase");
           const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
           await updateDoc(ref, { acta_cerrada: true });
           setIsActaCerrada(true);
@@ -670,11 +680,9 @@ export function AdminDashboard() {
         const item = results[p.id] || {};
         const isDnf = !!item.isDnfOwnError;
         
-        // Safely parse qualyPos, falling back to a unique row index to avoid bulk duplication
         const enteredQualy = typeof item.qualyPos === "number" ? item.qualyPos : parseInt(item.qualyPos as any);
         const qPos = isDnf ? 99 : ((!isNaN(enteredQualy) && enteredQualy > 0) ? enteredQualy : (idx + 1));
 
-        // Safely parse racePos, returning 99 for DNF, or a unique fallback if blank
         const enteredRace = typeof item.racePos === "number" ? item.racePos : parseInt(item.racePos as any);
         const rPos = isDnf ? 99 : ((!isNaN(enteredRace) && enteredRace > 0) ? enteredRace : (idx + 1));
 
@@ -765,7 +773,6 @@ export function AdminDashboard() {
               key={s.id}
               onClick={() => {
                 setSelectedSplitId(s.id);
-                // Select first circuit naturally
                 const next = getNextCircuitOfSplit(s.circuitos) || s.circuitos[s.circuitos.length - 1];
                 if (next) setSelectedCircuitoId(next.id);
               }}
@@ -820,7 +827,6 @@ export function AdminDashboard() {
                       }
                     }}
                   >
-                    {/* Current Split Context */}
                     {splits.filter(s => s.id === selectedSplitId && isSplitUnlocked(s.id, splits)).map(s => (
                       <React.Fragment key={s.id}>
                         <optgroup label={`${s.nombre} - Pendientes`}>
@@ -839,7 +845,6 @@ export function AdminDashboard() {
                         </optgroup>
                       </React.Fragment>
                     ))}
-                    {/* Access other splits hidden easily */}
                     <optgroup label="Cambiar a otro Split">
                        {splits.filter(s => s.id !== selectedSplitId && isSplitUnlocked(s.id, splits)).map(s => (
                          <option key={s.id} value={`${s.id}|`}>
@@ -853,7 +858,7 @@ export function AdminDashboard() {
           </div>
         </div>
 
-        {/* PROGRAMACIÓN DEL CIRCUITO (ADMINISTRATOR UI) */}
+        {/* PROGRAMACIÓN DEL CIRCUITO */}
         <div className="bg-zinc-900/50 border border-white/10 rounded-xl p-5 mb-8">
           <div className="flex items-center gap-2 mb-4 border-b border-white/5 pb-2">
             <Calendar className="w-4 h-4 text-[#e10600]" />
@@ -904,7 +909,6 @@ export function AdminDashboard() {
             </div>
             
             <div className="flex items-center gap-3">
-              {/* Duplicate warnings */}
               {((Object.values(qualyCount) as number[]).some(c => c > 1) || (Object.values(raceCount) as number[]).some(c => c > 1)) && (
                 <div className="text-[10px] text-amber-400 font-mono flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg mr-2 max-w-xs">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -1103,6 +1107,7 @@ export function AdminDashboard() {
             </table>
           </div>
         </section>
+
         {/* ADMINISTRACIÓN DE ROSTERS, FICHAJES Y MERCADO */}
         <section className="mt-12 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[#e10600]/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
@@ -1161,7 +1166,6 @@ export function AdminDashboard() {
               return (
                 <div key={team.id} className="bg-black/35 border border-white/5 rounded-xl p-5 flex flex-col hover:border-white/10 transition-all">
                   
-                  {/* Team Card Header with Budget config */}
                   <div className="flex justify-between items-start border-b border-white/5 pb-3 mb-4">
                     <div>
                       <h3 className="font-extrabold text-sm uppercase text-[#e10600]">{team.nombre}</h3>
@@ -1184,7 +1188,6 @@ export function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Team Roster List */}
                   <div className="space-y-3 mb-4 flex-1">
                     <p className="text-[10px] uppercase font-mono text-white/30 tracking-wider">Pilotos Integrados ({team.pilotos?.length || 0})</p>
                     
@@ -1220,7 +1223,6 @@ export function AdminDashboard() {
                             </button>
                           </div>
 
-                          {/* Editable params */}
                           <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-white/50">
                             <div>
                               <span>Rating:</span>
@@ -1294,7 +1296,6 @@ export function AdminDashboard() {
                     )}
                   </div>
 
-                  {/* Add pilot to this team */}
                   <div className="border-t border-white/5 pt-3">
                     <p className="text-[10px] font-mono text-white/30 mb-1.5 uppercase">Añadir Piloto al Equipo</p>
                     <select
@@ -1309,7 +1310,6 @@ export function AdminDashboard() {
                     >
                       <option value="">-- Seleccionar piloto para incorporar --</option>
                       {allPossiblePilots.filter((u: any) => {
-                        // Exclude users already in ANY team of THIS split
                         const currentRosters = splits.find(s => s.id === selectedSplitId)?.equipos.flatMap((eq: any) => eq.pilotos.map((p: any) => p.id)) || [];
                         return !currentRosters.some(id => id === u.uid || id === u.piloto_id);
                       }).map((u: any) => (

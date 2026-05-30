@@ -1,7 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { doc, updateDoc, runTransaction, collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { db } from "../services/firebase";
+import { compressAndConvertImage } from "../utils/imageHelper";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { Flame, Coins, History, ArrowRight, UserMinus, UserPlus, ShieldAlert, Award, Clock, Sparkles, UploadCloud, Camera, X, Trophy, TrendingUp, Gauge, Zap, CheckCircle2, MonitorPlay } from "lucide-react";
+import { Flame, Coins, History, UserMinus, UserPlus, ShieldAlert, Award, Clock, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay } from "lucide-react";
 import { resolveAllSplits, isSplitUnlocked, computePilotMarketOpportunities } from "../utils/splitResolver";
 import { PilotRivalryPanel, JequeStrategyPanel } from "./RivalryPanels";
 import { NextRaceWidget } from "./NextRaceWidget";
@@ -45,7 +48,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       const match = currentSplit.equipos?.find((eq: any) => eq.id === teamId);
       return match?.logo_url || "";
     }
-    // In global view, find first split containing a logo for this team
     for (const split of splits) {
       const match = split.equipos?.find((eq: any) => eq.id === teamId);
       if (match?.logo_url) return match.logo_url;
@@ -57,10 +59,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     if (!activeSplitId || !escuderiaId || !miEscuderia) return;
     setUpdatingLogo(true);
     try {
-      const { compressAndConvertImage } = await import("../utils/imageHelper");
-      const { doc, updateDoc } = await import("firebase/firestore");
-      const { db } = await import("../services/firebase");
-      
       const compressed = await compressAndConvertImage(file, 256, 256, 0.75);
       
       const teamRef = doc(db, `splits/${activeSplitId}/equipos`, escuderiaId);
@@ -98,22 +96,15 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       return;
     }
     let isSubscribed = true;
-    let unsubscribe: (() => void) | undefined;
-    Promise.all([
-      import("firebase/firestore"),
-      import("../services/firebase")
-    ]).then(([{ collection, onSnapshot, query }, { db }]) => {
-      if (!isSubscribed) return;
-      const q = query(collection(db, "plantilla"));
-      unsubscribe = onSnapshot(q, (snapshot) => {
-        if (isSubscribed) setPlantilla(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      }, (error) => {
-        console.warn("Gracefully handled plantilla snapshot error:", error);
-      });
-    }).catch(console.error);
+    const q = query(collection(db, "plantilla"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (isSubscribed) setPlantilla(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.warn("Gracefully handled plantilla snapshot error:", error);
+    });
     return () => {
       isSubscribed = false;
-      if (unsubscribe) unsubscribe();
+      unsubscribe();
     };
   }, [user]);
 
@@ -124,22 +115,15 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     }
     if (activeSplitId && activeSplitId !== "global") {
       let isSubscribed = true;
-      let unsubscribe: (() => void) | undefined;
-      Promise.all([
-        import("firebase/firestore"),
-        import("../services/firebase")
-      ]).then(([{ collection, query, orderBy, onSnapshot }, { db }]) => {
-        if (!isSubscribed) return;
-        const q = query(collection(db, `splits/${activeSplitId}/transfers`), orderBy("timestamp", "desc"));
-        unsubscribe = onSnapshot(q, (snapshot) => {
-          if (isSubscribed) setTransfers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, (error) => {
-          console.warn("Gracefully handled transfers snapshot error:", error);
-        });
-      }).catch(console.error);
+      const q = query(collection(db, `splits/${activeSplitId}/transfers`), orderBy("timestamp", "desc"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        if (isSubscribed) setTransfers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (error) => {
+        console.warn("Gracefully handled transfers snapshot error:", error);
+      });
       return () => {
         isSubscribed = false;
-        if (unsubscribe) unsubscribe();
+        unsubscribe();
       };
     } else {
       setTransfers([]);
@@ -174,9 +158,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       onConfirm: async () => {
         setTransacting(true);
         try {
-          const { doc, runTransaction, collection } = await import("firebase/firestore");
-          const { db } = await import("../services/firebase");
-
           await runTransaction(db, async (trans) => {
             const buyerRef = doc(db, `splits/${activeSplitId}/equipos`, escuderiaId);
             const sellerRef = doc(db, `splits/${activeSplitId}/equipos`, ownerTeamId);
@@ -194,27 +175,22 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
               throw new Error("Presupuesto insuficiente.");
             }
 
-            // Adjust budgets
             trans.update(buyerRef, { presupuesto: bData.presupuesto - clausePrice });
             trans.update(sellerRef, { presupuesto: (sData?.presupuesto || 0) + clausePrice });
 
-            // Delete from seller
             trans.delete(sellerPilotRef);
 
-            // Put in buyer
             trans.set(buyerPilotRef, {
               ...pilot,
               puntos_piloto: pilot.puntos_piloto || 0
             });
 
-            // Update global user document escuderia_id if found in usuarios snapshot
             const matchedUser = usuarios.find(u => u.uid === pilot.id || (u.piloto_id && u.piloto_id === pilot.id));
             if (matchedUser) {
               const userRef = doc(db, "usuarios", matchedUser.uid);
               trans.update(userRef, { escuderia_id: escuderiaId });
             }
 
-            // Add history log
             const transferRef = doc(collection(db, `splits/${activeSplitId}/transfers`));
             trans.set(transferRef, {
               detalles: `🚨 ¡CLAUSULAZO! ${miEscuderia.nombre} ha fichado a ${pilot.nombre} de ${ownerTeamName} pagando su cláusula de ${clausePrice.toFixed(1)}M.`,
@@ -267,9 +243,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       onConfirm: async () => {
         setTransacting(true);
         try {
-          const { doc, runTransaction, collection } = await import("firebase/firestore");
-          const { db } = await import("../services/firebase");
-
           const pilotId = pilot.uid || pilot.id;
 
           await runTransaction(db, async (trans) => {
@@ -297,14 +270,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
               precio_carrera_anterior: pilot.precio_carrera_anterior || price
             });
 
-            // Update global user document escuderia_id if found in usuarios snapshot
             const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
             if (matchedUser) {
               const userRef = doc(db, "usuarios", matchedUser.uid);
               trans.update(userRef, { escuderia_id: escuderiaId });
             }
 
-            // Add history log
             const transferRef = doc(collection(db, `splits/${activeSplitId}/transfers`));
             trans.set(transferRef, {
               detalles: `✍️ ${miEscuderia.nombre} firmó al piloto ${pilot.nombre} por ${price.toFixed(1)}M.`,
@@ -347,9 +318,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       onConfirm: async () => {
         setTransacting(true);
         try {
-          const { doc, runTransaction, collection } = await import("firebase/firestore");
-          const { db } = await import("../services/firebase");
-
           await runTransaction(db, async (trans) => {
             const teamRef = doc(db, `splits/${activeSplitId}/equipos`, escuderiaId);
             const pilotRef = doc(db, `splits/${activeSplitId}/equipos/${escuderiaId}/pilotos`, pilot.id);
@@ -360,14 +328,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             trans.update(teamRef, { presupuesto: (tData?.presupuesto || 0) + refund });
             trans.delete(pilotRef);
 
-            // Update global user document escuderia_id to keep Pilot Panel and queries aligned
             const matchedUser = usuarios.find(u => u.uid === pilot.id || (u.piloto_id && u.piloto_id === pilot.id));
             if (matchedUser) {
               const userRef = doc(db, "usuarios", matchedUser.uid);
               trans.update(userRef, { escuderia_id: "" });
             }
 
-            // Add history log
             const transferRef = doc(collection(db, `splits/${activeSplitId}/transfers`));
             trans.set(transferRef, {
               detalles: `❌ ${miEscuderia.nombre} despidió a ${pilot.nombre}, obteniendo un reembolso de ${refund.toFixed(1)}M.`,
@@ -407,11 +373,9 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     let found = null;
     
     if (userData?.rol === "piloto" && userData?.uid) {
-      // Find team in this split that has this pilot in its roster
       found = (currentSplit.equipos || []).find((e: any) => e.pilotos?.some((p: any) => p.id === userData.uid || (userData.piloto_id && p.id === userData.piloto_id)));
     }
     
-    // If not found yet (or if jeque/admin), fall back to checking team ID / jeque_id
     if (!found && escuderiaId) {
       found = (currentSplit.equipos || []).find((e: any) => e.id === escuderiaId || e.jeque_id === escuderiaId);
     }
@@ -435,21 +399,15 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   const freeAgentsList = useMemo(() => {
     if (!currentSplit) return [];
     
-    // Active team roster pilot IDs in this split
     const rosterUids = (currentSplit.equipos || []).flatMap((eq: any) => (eq.pilotos || []).map((p: any) => p.id));
-    
-    // 1. All registered user pilots
     const registeredPilots = usuarios.filter((u: any) => u.rol === "piloto");
     
-    // 2. All paddock/plantilla pilots that are not linked to a registered user
     const unlinkedPlantillaPilots = plantilla.filter((p: any) => {
       if (p.rol !== "piloto") return false;
-      // Check if any registered user is linked to this plantilla doc
       const isLinked = registeredPilots.some((u: any) => u.piloto_id === p.id || u.uid === p.id);
       return !isLinked;
     });
 
-    // Combine both list of systems pilots
     const allSystemPilots = [
       ...registeredPilots.map((u: any) => ({
         id: u.uid,
@@ -471,7 +429,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       }))
     ];
 
-    // Filter out pilots that are already in a team for the current split
     return allSystemPilots
       .filter((p: any) => {
         const isAssigned = rosterUids.some(rId => rId === p.id || rId === p.piloto_id);
@@ -489,13 +446,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   const recommendedPilots = useMemo(() => {
     if (!currentSplit || !miEscuderia) return [];
 
-    // 1. Gather all pilots in this split: signed + free agents
     const signed = (currentSplit.equipos || []).flatMap((eq: any) => 
       (eq.pilotos || []).map((p: any) => ({
         id: p.id,
         nombre: p.nombre,
         rating_piloto: p.rating_piloto || 70,
-        puntos_piloto: p.puntos_piloto || 0,
+        puntos_piloto: p.puntos_piloto || 0, // Directamente de BD
         teamId: eq.id,
         teamNombre: eq.nombre,
         coste: p.clausula_actual || (p.rating_piloto || 70) * 0.5,
@@ -517,17 +473,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     }));
 
     const allPilots = [...signed, ...free];
-
-    // 2. Compute points history for each pilot across completed circuits in the current split
     const completedCircuits = (currentSplit.circuitos || []).filter((c: any) => c.completado) || [];
 
-    // Se invoca el modelo lógico importado (Preparado para React Native)
     return computePilotMarketOpportunities(allPilots, completedCircuits, recommenderStrategy);
-
   }, [currentSplit, miEscuderia, freeAgentsList, recommenderStrategy]);
 
+
   const { standings, teamStandings, raceResults, allPilotsForScouting, championshipsTimeline } = useMemo(() => {
-    // 1. All Pilots for Scouting (Global list from current split or all potential)
     const scoutingList: any[] = [];
     if (currentSplit) {
       (currentSplit.equipos || []).forEach((e: any) => {
@@ -538,107 +490,80 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     }
 
     if (activeSplitId === "global") {
-      // 1. Initialize championships with Split 1 Historical Winners
-      const pilotTitles: Record<string, { id: string, name: string, championships: number, team: string }> = {
-        "piloto_jose": { id: "piloto_jose", name: "Jose (I)", championships: 1, team: "Zenith" }
-      };
-      const teamTitles: Record<string, { id: string, nombre: string, championships: number }> = {
-        "roses": { id: "roses", nombre: "Roses", championships: 1 }
-      };
+      // Mundial Global: cuenta títulos (splits ganados) por piloto y escudería
+      const pilotTitles: Record<string, { id: string; name: string; count: number; escuderia: string }> = {};
+      const teamTitles: Record<string, { id: string; nombre: string; count: number }> = {};
 
-      // 2. Initialize all other registered users & plantilla pilots at 0
-      usuarios.filter((u: any) => u.rol === "piloto").forEach((u: any) => {
-        if (!pilotTitles[u.uid]) {
-          pilotTitles[u.uid] = { id: u.uid, name: u.nombre, championships: 0, team: u.escuderia_id ? u.escuderia_id.replace('_', ' ') : "Sin equipo" };
-        }
-      });
-      plantilla.forEach((p: any) => {
-        if (p.rol === "piloto" && !pilotTitles[p.id]) {
-          pilotTitles[p.id] = { id: p.id, name: p.nombre, championships: 0, team: p.escuderia_id ? p.escuderia_id.replace('_', ' ') : "Sin equipo" };
-        }
-      });
-
-      // 3. Pre-seed known teams at 0
-      const predefinedTeams = ["zenith", "roses", "alfa_romero"];
-      predefinedTeams.forEach(tId => {
-        if (!teamTitles[tId]) {
-          teamTitles[tId] = { id: tId, nombre: tId.replace('_', ' '), championships: 0 };
-        }
-      });
-
-      // 4. Trace subsequent splits dynamically if they are completed
       splits.forEach(s => {
-        if (s.id === "split_1") return; // Split 1 is already pre-seeded as completed above
-        
-        // Count if all circuits in the split are completed
         const hasCircuits = s.circuitos && s.circuitos.length > 0;
-        const allCompleted = hasCircuits && s.circuitos.every((c: any) => c.completado);
-        if (!allCompleted) return; // ignore uncompleted splits
+        const isCompleted = hasCircuits && s.circuitos.every((c: any) => c.completado);
+        if (!isCompleted) return;
 
-        // Find winner team
-        let topTeamId = "";
-        let maxTeamPts = -1;
-        s.equipos.forEach((eq: any) => {
-          const pts = eq.puntos_constructores || 0;
-          if (pts > maxTeamPts) {
-            maxTeamPts = pts;
-            topTeamId = eq.id;
-          }
-        });
-        if (topTeamId && maxTeamPts >= 0) {
-          if (!teamTitles[topTeamId]) {
-            teamTitles[topTeamId] = { id: topTeamId, nombre: topTeamId.replace('_', ' '), championships: 0 };
-          }
-          teamTitles[topTeamId].championships += 1;
-        }
-
-        // Find winner pilot
+        // Campeón de pilotos del split
         let topPilotId = "";
+        let topPilotName = "";
+        let topPilotEscuderia = "";
         let maxPilotPts = -1;
-        let pTeamName = "";
-        s.equipos.forEach((eq: any) => {
+        (s.equipos || []).forEach((eq: any) => {
           (eq.pilotos || []).forEach((p: any) => {
             const pts = p.puntos_piloto || 0;
             if (pts > maxPilotPts) {
               maxPilotPts = pts;
               topPilotId = p.id;
-              pTeamName = eq.nombre;
+              topPilotName = p.nombre;
+              topPilotEscuderia = eq.nombre;
             }
           });
         });
-        if (topPilotId && maxPilotPts >= 0) {
-          // Find or create in pilotTitles
-          const matchedUser = usuarios.find(u => u.uid === topPilotId || (u.piloto_id && u.piloto_id === topPilotId));
-          const canonId = matchedUser ? matchedUser.uid : topPilotId;
-          const canonName = matchedUser ? matchedUser.nombre : (pilotTitles[canonId]?.name || topPilotId);
-          if (!pilotTitles[canonId]) {
-            pilotTitles[canonId] = { id: canonId, name: canonName, championships: 0, team: pTeamName };
+        if (topPilotId && maxPilotPts > 0) {
+          if (!pilotTitles[topPilotId]) {
+            pilotTitles[topPilotId] = { id: topPilotId, name: topPilotName, count: 0, escuderia: topPilotEscuderia };
           }
-          pilotTitles[canonId].championships += 1;
-          pilotTitles[canonId].team = pTeamName;
+          pilotTitles[topPilotId].count++;
+          pilotTitles[topPilotId].name = topPilotName;
+          pilotTitles[topPilotId].escuderia = topPilotEscuderia;
+        }
+
+        // Campeón de escuderías del split
+        let topTeamId = "";
+        let topTeamName = "";
+        let maxTeamPts = -1;
+        (s.equipos || []).forEach((eq: any) => {
+          const pts = eq.puntos_constructores || 0;
+          if (pts > maxTeamPts) {
+            maxTeamPts = pts;
+            topTeamId = eq.id;
+            topTeamName = eq.nombre;
+          }
+        });
+        if (topTeamId && maxTeamPts > 0) {
+          if (!teamTitles[topTeamId]) {
+            teamTitles[topTeamId] = { id: topTeamId, nombre: topTeamName, count: 0 };
+          }
+          teamTitles[topTeamId].count++;
+          teamTitles[topTeamId].nombre = topTeamName;
         }
       });
 
       const ps = Object.values(pilotTitles)
-        .map((p: any) => ({
+        .sort((a, b) => b.count - a.count)
+        .map((p) => ({
           id: p.id,
           name: p.name,
-          points: p.championships,
-          escuderia: p.team,
+          points: p.count,
+          escuderia: p.escuderia,
           isGlobal: true
-        }))
-        .sort((a, b) => b.points - a.points);
+        }));
 
       const ts = Object.values(teamTitles)
-        .map((t: any) => ({
+        .sort((a, b) => b.count - a.count)
+        .map((t) => ({
           id: t.id,
           nombre: t.nombre,
-          puntos: t.championships,
+          puntos: t.count,
           isGlobal: true
-        }))
-        .sort((a, b) => b.puntos - a.puntos);
+        }));
 
-      // Build dynamic championship timeline for the global splits history selector
       const timeline: any[] = [];
       
       // Split 1 is seeded/completed baseline
@@ -653,7 +578,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         winnerTeamPoints: 185
       });
 
-      // Subsequent splits (2, 3, 4)
       splits.forEach(s => {
         if (s.id === "split_1") return;
 
@@ -661,7 +585,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         const allCompleted = hasCircuits && s.circuitos.every((c: any) => c.completado);
 
         if (allCompleted) {
-          // Find winner team
           let topTeamName = "";
           let maxTeamPts = -1;
           s.equipos.forEach((eq: any) => {
@@ -672,7 +595,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             }
           });
 
-          // Find winner pilot
           let topPilotName = "";
           let topPilotTeamName = "";
           let maxPilotPts = -1;
@@ -716,7 +638,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
     if (!currentSplit) return { standings: [], teamStandings: [], raceResults: [], allPilotsForScouting: [], championshipsTimeline: [] };
 
-    // Roster of active teams in this split
+    // Para un Split específico, leemos todo directo de la Base de Datos
     const activeRosterDocs = (currentSplit.equipos || []).flatMap((e: any) => 
       (e.pilotos || []).map((p: any) => ({
         id: p.id,
@@ -726,14 +648,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       }))
     );
 
-    // Any registered pilot not currently in a team is added as "Sin equipo"
     const activeRosterIds = activeRosterDocs.map(d => d.id);
     const freeAgentsInStandings = usuarios
       .filter((u: any) => u.rol === "piloto" && !activeRosterIds.some(id => id === u.uid || (u.piloto_id && id === u.piloto_id)))
       .map((u: any) => ({
         id: u.uid,
         name: u.nombre,
-        points: 0,
+        points: u.puntos_piloto || 0,
         escuderia: "Sin equipo"
       }));
 
@@ -762,79 +683,17 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     return { standings: ps, teamStandings: ts, raceResults: rRes, allPilotsForScouting: scoutingList, championshipsTimeline: [] };
   }, [activeSplitId, currentSplit, splits, usuarios, plantilla]);
 
-  const getPilotStats = (pilotId: string, forceGlobal: boolean = false) => {
+  const getPilotStats = (pilotId: string, isGlobalView: boolean = false) => {
     const pilotUser = usuarios.find((u: any) => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
     let pilotName = pilotUser?.nombre || pilotId;
     
-    if (!pilotUser) {
-      for (const s of splits) {
-        for (const e of (s.equipos || [])) {
-          const match = e.pilotos?.find((p: any) => p.id === pilotId);
-          if (match) {
-            pilotName = match.nombre;
-            break;
-          }
-        }
-      }
-    }
-
-    let totalPoints = 0;
-    let victories = 0;
-    let podiums = 0;
-    let poles = 0;
-    let dnfs = 0;
-    let cleanRaces = 0;
-    let dotds = 0;
-    let mvps = 0;
-    let fastestLaps = 0;
-    
-    let rating = pilotUser?.rating_piloto || 70;
-    let clause = pilotUser?.clausula_actual || (rating * 0.5);
-    let escuderiaName = "Sin equipo";
-
+    let totalPoints = 0, victories = 0, podiums = 0, poles = 0, dnfs = 0;
+    let cleanRaces = 0, dotds = 0, mvps = 0, fastestLaps = 0;
+    const history: any[] = [];
     const localPOINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
-    const splitsToSearch = (activeSplitId === "global" || forceGlobal) 
-      ? splits 
-      : splits.filter(s => s.id <= activeSplitId);
+    const splitsToSearch = isGlobalView ? splits : splits.filter(s => s.id === activeSplitId);
 
-    if (activeSplitId !== "global" && !forceGlobal) {
-      const activeSp = splits.find(s => s.id === activeSplitId);
-      if (activeSp) {
-        const teamWithPilot = activeSp.equipos?.find((e: any) => 
-          e.pilotos?.some((p: any) => p.id === pilotId)
-        );
-        if (teamWithPilot) {
-          escuderiaName = teamWithPilot.nombre;
-          const pilotInTeam = teamWithPilot.pilotos.find((p: any) => p.id === pilotId);
-          if (pilotInTeam) {
-            rating = pilotInTeam.rating_piloto ?? rating;
-            clause = pilotInTeam.clausula_actual ?? (rating * 0.5);
-          }
-        }
-      }
-    } else {
-      const sortedCompletedSplits = [...splits]
-        .filter(s => s.circuitos?.some((c: any) => c.completado))
-        .sort((a, b) => b.id.localeCompare(a.id));
-      const latestSplit = sortedCompletedSplits[0] || splits[splits.length - 1];
-      if (latestSplit) {
-        const teamWithPilot = latestSplit.equipos?.find((e: any) => 
-          e.pilotos?.some((p: any) => p.id === pilotId)
-        );
-        if (teamWithPilot) {
-          escuderiaName = teamWithPilot.nombre;
-          const pilotInTeam = teamWithPilot.pilotos.find((p: any) => p.id === pilotId);
-          if (pilotInTeam) {
-            rating = pilotInTeam.rating_piloto ?? rating;
-            clause = pilotInTeam.clausula_actual ?? (rating * 0.5);
-          }
-        }
-      }
-    }
-
-    const history: any[] = [];
-    
     splitsToSearch.forEach((s: any) => {
       s.circuitos?.filter((c: any) => c.completado && c.resultados).forEach((c: any) => {
         const res = c.resultados.find((r: any) => r.pilotoId === pilotId);
@@ -882,12 +741,59 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     const validRacePos = history.filter(h => h.racePos >= 1 && h.racePos <= 12).map(h => h.racePos);
     const avgRace = validRacePos.length > 0 ? Number((validRacePos.reduce((a, b) => a + b, 0) / validRacePos.length).toFixed(1)) : 0;
 
+    let finalRating = 70;
+    let baseClause = 10;
+    let escuderiaName = "Sin equipo";
+
+    if (isGlobalView) {
+      let sumRating = 0;
+      let countRating = 0;
+      let latestTeamName = "Sin equipo";
+
+      const latestSplitWithPilot = [...splits].reverse().find(s =>
+        s.equipos?.some((e: any) => e.pilotos?.some((p: any) => p.id === pilotId))
+      );
+      if (latestSplitWithPilot) {
+        const teamWithPilot = latestSplitWithPilot.equipos.find((e: any) =>
+          e.pilotos?.some((p: any) => p.id === pilotId)
+        );
+        if (teamWithPilot) {
+          latestTeamName = teamWithPilot.nombre;
+          const pilotDoc = teamWithPilot.pilotos.find((p: any) => p.id === pilotId);
+          if (pilotDoc?.rating_piloto) finalRating = pilotDoc.rating_piloto;
+        }
+      } else if (pilotUser?.rating_piloto) {
+        finalRating = pilotUser.rating_piloto;
+      }
+      if (!pilotName) pilotName = "Desconocido";
+      escuderiaName = latestTeamName;
+      baseClause = finalRating * 0.5;
+
+    } else {
+      let ratingBaseDB = pilotUser?.rating_piloto || 70;
+      const activeSp = splits.find(s => s.id === activeSplitId);
+      
+      if (activeSp) {
+        const teamWithPilot = activeSp.equipos?.find((e: any) => e.pilotos?.some((p: any) => p.id === pilotId));
+        if (teamWithPilot) {
+          escuderiaName = teamWithPilot.nombre;
+          const p = teamWithPilot.pilotos.find((p: any) => p.id === pilotId);
+          if (p) {
+            ratingBaseDB = p.rating_piloto ?? ratingBaseDB;
+            baseClause = p.clausula_actual ?? (ratingBaseDB * 0.5);
+          }
+        }
+      }
+
+      finalRating = ratingBaseDB;
+    }
+
     return {
       pilotId,
       name: pilotName,
       fotoUrl: getPilotPhoto(pilotId),
-      rating,
-      clause,
+      rating: finalRating,
+      clause: baseClause,
       escuderiaName,
       totalPoints,
       victorias: victories,
@@ -908,41 +814,29 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
   const pilotProfileStats = useMemo(() => {
     if (!selectedPilotForProfileId) return null;
-    return getPilotStats(selectedPilotForProfileId, true);
-  }, [selectedPilotForProfileId, splits, usuarios]);
+    return getPilotStats(selectedPilotForProfileId, activeSplitId === "global");
+  }, [selectedPilotForProfileId, splits, usuarios, activeSplitId]);
 
   const allPaddockPilots = useMemo(() => {
     const list: { id: string; name: string; rtg: number; team: string }[] = [];
     const seen = new Set<string>();
 
     if (activeSplitId !== "global" && currentSplit) {
-      // Si estamos en un split, solo mostramos los pilotos contratados en esa temporada
       currentSplit.equipos?.forEach((e: any) => {
         e.pilotos?.forEach((p: any) => {
           if (!seen.has(p.id)) {
             seen.add(p.id);
-            list.push({
-              id: p.id,
-              name: p.nombre,
-              rtg: p.rating_piloto || 70,
-              team: e.nombre
-            });
+            list.push({ id: p.id, name: p.nombre, rtg: p.rating_piloto || 70, team: e.nombre });
           }
         });
       });
     } else {
-      // Si estamos en Global, mostramos todos los pilotos existentes
       splits.forEach((s: any) => {
         s.equipos?.forEach((e: any) => {
           e.pilotos?.forEach((p: any) => {
             if (!seen.has(p.id)) {
               seen.add(p.id);
-              list.push({
-                id: p.id,
-                name: p.nombre,
-                rtg: p.rating_piloto || 70,
-                team: e.nombre
-              });
+              list.push({ id: p.id, name: p.nombre, rtg: p.rating_piloto || 70, team: e.nombre });
             }
           });
         });
@@ -952,12 +846,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         const pId = u.uid;
         if (!seen.has(pId)) {
           seen.add(pId);
-          list.push({
-            id: pId,
-            name: u.nombre,
-            rtg: u.rating_piloto || 70,
-            team: "Sin equipo"
-          });
+          list.push({ id: pId, name: u.nombre, rtg: u.rating_piloto || 70, team: "Sin equipo" });
         }
       });
 
@@ -965,33 +854,25 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         plantilla.filter((p: any) => p.rol === "piloto").forEach((p: any) => {
           if (!seen.has(p.id)) {
             seen.add(p.id);
-            list.push({
-              id: p.id,
-              name: p.nombre,
-              rtg: p.rating_piloto || 70,
-              team: "Sin equipo"
-            });
+            list.push({ id: p.id, name: p.nombre, rtg: p.rating_piloto || 70, team: "Sin equipo" });
           }
         });
-      } catch (e) {
-        console.warn("Could not filter plantilla in paddock pilots list:", e);
-      }
+      } catch (e) {}
     }
 
-    return list.sort((a, b) => a.name.localeCompare(b.name));
+    return list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [activeSplitId, currentSplit, splits, usuarios, plantilla]);
 
   const statsA = useMemo(() => {
     if (!comparePilotIdA) return null;
-    return getPilotStats(comparePilotIdA, true);
-  }, [comparePilotIdA, splits, usuarios]);
+    return getPilotStats(comparePilotIdA, activeSplitId === "global");
+  }, [comparePilotIdA, splits, usuarios, activeSplitId]);
 
   const statsB = useMemo(() => {
     if (!comparePilotIdB) return null;
-    return getPilotStats(comparePilotIdB, true);
-  }, [comparePilotIdB, splits, usuarios]);
+    return getPilotStats(comparePilotIdB, activeSplitId === "global");
+  }, [comparePilotIdB, splits, usuarios, activeSplitId]);
 
-  // Estados y función para Plan B: AI Scouting Report
   const [aiScoutingReport, setAiScoutingReport] = useState<string | null>(null);
   const [isGeneratingScouting, setIsGeneratingScouting] = useState(false);
 
@@ -1002,10 +883,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   const handleGenerateScouting = async (commonRaces: number, aheadA: number, aheadB: number) => {
     if (!statsA || !statsB) return;
     const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    if (!apiKey) {
-      alert("Falta configurar VITE_OPENAI_API_KEY en tu entorno (.env).");
-      return;
-    }
+    if (!apiKey) return alert("Falta configurar VITE_OPENAI_API_KEY en tu entorno (.env).");
     setIsGeneratingScouting(true);
     try {
       const prompt = `Eres un ingeniero analista de F1 para Bugambra ("Plan B"). Analiza el Cara a Cara entre dos pilotos para un Scouting Report exclusivo.
@@ -1030,15 +908,12 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
 
   return (
     <div className="space-y-8 pb-32">
-      {/* Selector de Split */}
       <div className="flex flex-wrap items-center justify-between gap-y-3 w-full bg-black/10 p-1.5 rounded-xl border border-white/5">
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setActiveSplitId("global")}
             className={`px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all ${
-              activeSplitId === "global" 
-              ? "bg-[#e10600] text-white shadow-lg shadow-red-900/20" 
-              : "bg-zinc-900/50 text-white/40 border border-white/5 hover:border-white/10"
+              activeSplitId === "global" ? "bg-[#e10600] text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-white/40 border border-white/5 hover:border-white/10"
             }`}
           >
             Mundial Global
@@ -1048,9 +923,7 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
               key={s.id}
               onClick={() => setActiveSplitId(s.id)}
               className={`px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all ${
-                activeSplitId === s.id 
-                ? "bg-[#e10600] text-white shadow-lg shadow-red-900/20" 
-                : "bg-zinc-900/50 text-white/40 border border-white/5 hover:border-white/10"
+                activeSplitId === s.id ? "bg-[#e10600] text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-white/40 border border-white/5 hover:border-white/10"
               }`}
             >
               {s.nombre}
@@ -1064,18 +937,12 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
               setIsCompareViewOpen(true);
               setActiveProfileTab("compare");
               if (allPaddockPilots.length > 0) {
-                const defaultA = (userData?.rol === "piloto" && userData?.uid)
-                  ? userData.uid
-                  : (miEscuderia?.pilotos?.[0]?.id || allPaddockPilots[0].id);
+                const defaultA = (userData?.rol === "piloto" && userData?.uid) ? userData.uid : (miEscuderia?.pilotos?.[0]?.id || allPaddockPilots[0].id);
                 setComparePilotIdA(defaultA);
                 const otherPilots = allPaddockPilots.filter(p => p.id !== defaultA);
-                if (otherPilots.length > 0) {
-                  setComparePilotIdB(otherPilots[0].id);
-                } else if (allPaddockPilots.length > 1) {
-                  setComparePilotIdB(allPaddockPilots[1].id);
-                } else {
-                  setComparePilotIdB(allPaddockPilots[0].id);
-                }
+                if (otherPilots.length > 0) setComparePilotIdB(otherPilots[0].id);
+                else if (allPaddockPilots.length > 1) setComparePilotIdB(allPaddockPilots[1].id);
+                else setComparePilotIdB(allPaddockPilots[0].id);
               }
             }}
             className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-[#e10600]/15 hover:from-amber-500/35 hover:to-[#e10600]/30 border border-amber-500/45 hover:border-amber-400 text-amber-300 hover:text-white rounded-lg font-black text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95"
@@ -1083,7 +950,6 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
             <TrendingUp className="w-3.5 h-3.5" />
             perfiles y comparador ⚔️
           </button>
-          
           <button
             onClick={() => setIsF1TVOpen(true)}
             className="px-4 py-2 bg-gradient-to-r from-[#e10600]/20 to-red-900/40 hover:from-[#e10600]/40 hover:to-red-900/60 border border-[#e10600]/50 hover:border-[#e10600] text-red-100 hover:text-white rounded-lg font-black text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-red-900/20 active:scale-95"
@@ -1094,15 +960,10 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
         </div>
       </div>
 
-      {/* PRÓXIMA CARRERA & CLIMA GENERAL WIDGET */}
-      {/* Widget de tiempo eliminado de las interfaces piloto/jeque */}
-      {activeSplitId !== "global" && currentSplit && (
-        <div className="mb-8">
-          <NextRaceWidget currentSplit={currentSplit} />
-        </div>
+      {activeSplitId !== "global" && currentSplit && currentSplit.circuitos?.some((c: any) => !c.completado) && (
+        <div className="mb-8"><NextRaceWidget currentSplit={currentSplit} /></div>
       )}
 
-      {/* CUADRO DE HONOR / PALMARÉS */}
       <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-white/10 rounded-2xl p-4 flex flex-col lg:flex-row items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
           <Award className="w-8 h-8 text-amber-400 shrink-0" />
@@ -1126,123 +987,63 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
       {activeSplitId !== "global" && (miEscuderia || userData?.rol === "piloto") && (
         <section className="bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 border border-white/20 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
           <div className="absolute -right-4 -top-4 w-32 h-32 bg-[#e10600]/10 rounded-full blur-2xl pointer-events-none"></div>
-          
           {miEscuderia ? (
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-            
-            {/* Logo and branding workspace block */}
             <div className="flex items-center gap-5 w-full md:w-auto">
               {canViewBudget ? (
                 <div
-                  onDragEnter={handleLogoDrag}
-                  onDragOver={handleLogoDrag}
-                  onDragLeave={handleLogoDrag}
-                  onDrop={handleLogoDrop}
-                  onClick={() => teamLogoInputRef.current?.click()}
-                  className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 cursor-pointer transition-all shrink-0 flex items-center justify-center group ${
-                    logoDragActive 
-                      ? "border-[#e10600] bg-[#e10600]/15" 
-                      : "border-white/10 hover:border-[#e10600] bg-black/40"
-                  }`}
-                  title="Arrastra una imagen o haz clic para subir el logo de tu escudería para este split"
+                  onDragEnter={handleLogoDrag} onDragOver={handleLogoDrag} onDragLeave={handleLogoDrag} onDrop={handleLogoDrop} onClick={() => teamLogoInputRef.current?.click()}
+                  className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 cursor-pointer transition-all shrink-0 flex items-center justify-center group ${logoDragActive ? "border-[#e10600] bg-[#e10600]/15" : "border-white/10 hover:border-[#e10600] bg-black/40"}`}
                 >
-                  <input
-                    type="file"
-                    ref={teamLogoInputRef}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleUpdateTeamLogo(e.target.files[0]);
-                      }
-                    }}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                  
+                  <input type="file" ref={teamLogoInputRef} onChange={(e) => { if (e.target.files && e.target.files[0]) handleUpdateTeamLogo(e.target.files[0]); }} accept="image/*" className="hidden" />
                   {miEscuderia.logo_url ? (
-                    <img
-                      src={miEscuderia.logo_url}
-                      alt={miEscuderia.nombre}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover group-hover:opacity-40 transition-opacity"
-                    />
+                    <img src={miEscuderia.logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:opacity-40 transition-opacity" />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center p-2">
                       <UploadCloud className="w-6 h-6 text-white/30 group-hover:text-white/80 transition-colors" />
                       <span className="text-[8px] font-mono text-white/20 uppercase tracking-tighter mt-1 group-hover:text-white/60">SUBIR LOGO</span>
                     </div>
                   )}
-                  
-                  {/* Overlay editing indicators */}
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[8px] font-mono uppercase tracking-widest gap-1 select-none">
-                    <Camera className="w-4 h-4 text-[#e10600]" />
-                    <span>EDITAR LOGO</span>
+                    <Camera className="w-4 h-4 text-[#e10600]" /><span>EDITAR LOGO</span>
                   </div>
-                  
-                  {updatingLogo && (
-                    <div className="absolute inset-0 bg-black/80 flex items-center justify-center text-xs font-mono text-white">
-                      Cargando...
-                    </div>
-                  )}
+                  {updatingLogo && <div className="absolute inset-0 bg-black/80 flex items-center justify-center text-xs font-mono text-white">Cargando...</div>}
                 </div>
               ) : (
                 <div className="w-20 h-20 rounded-xl overflow-hidden border border-white/10 bg-black/40 shrink-0 flex items-center justify-center">
-                  {miEscuderia.logo_url ? (
-                    <img
-                      src={miEscuderia.logo_url}
-                      alt={miEscuderia.nombre}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs font-black uppercase text-white/20 font-mono">
-                      {miEscuderia.nombre.substring(0, 2)}
-                    </div>
-                  )}
+                  {miEscuderia.logo_url ? <img src={miEscuderia.logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs font-black uppercase text-white/20 font-mono">{miEscuderia.nombre ? miEscuderia.nombre.substring(0, 2).toUpperCase() : 'EQ'}</div>}
                 </div>
               )}
-              
               <div>
-                <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-[#e10600] font-black block mb-1">
-                  {canViewBudget ? "ESCUDERÍA OFICIAL DEL JEQUE" : "TU EQUIPO PARA ESTE SPLIT"}
-                </span>
+                <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-[#e10600] font-black block mb-1">{canViewBudget ? "ESCUDERÍA OFICIAL DEL JEQUE" : "TU EQUIPO PARA ESTE SPLIT"}</span>
                 <h3 className="text-2xl font-black italic text-white uppercase tracking-tight">{miEscuderia.nombre}</h3>
-                <p className="text-[10px] text-white/40 uppercase font-mono mt-0.5">
-                  Visualizando logo oficial del {currentSplit?.nombre || activeSplitId}
-                </p>
+                <p className="text-[10px] text-white/40 uppercase font-mono mt-0.5">Visualizando logo oficial del {currentSplit?.nombre || activeSplitId}</p>
               </div>
             </div>
-
-            {/* Financial indicators */}
             <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-white/5 pt-4 md:pt-0">
               {canViewBudget && (
                 <div>
                   <h4 className="text-[9px] uppercase font-bold tracking-[0.15em] text-[#e10600] mb-1">Presupuesto Disponible</h4>
                   <div className="flex items-baseline gap-0.5">
-                    <span className="text-4xl font-extrabold italic text-white leading-none">{miEscuderia.presupuesto.toFixed(1)}</span>
-                    <span className="text-xl font-bold text-white/50">M</span>
+                    <span className="text-4xl font-extrabold italic text-white leading-none">{miEscuderia.presupuesto.toFixed(1)}</span><span className="text-xl font-bold text-white/50">M</span>
                   </div>
                 </div>
               )}
               <div className="text-right">
                 <p className="text-[9px] text-[#e10600] uppercase font-bold tracking-[0.15em] mb-1">Valor Total de Planta</p>
                 <div className="flex items-baseline justify-end gap-0.5">
-                  <span className="text-2xl font-black italic text-white leading-none">{miEscuderia.valor_total.toFixed(1)}</span>
-                  <span className="text-sm font-bold text-white/50">M</span>
+                  <span className="text-2xl font-black italic text-white leading-none">{miEscuderia.valor_total.toFixed(1)}</span><span className="text-sm font-bold text-white/50">M</span>
                 </div>
               </div>
             </div>
-
           </div>
           ) : null}
         </section>
       )}
 
-      {/* SECCIÓN: RECOMENDADOR DE FICHAJES INTELIGENTE (IA & Eco) */}
       {activeSplitId !== "global" && canViewBudget && miEscuderia && (
         <section className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 border border-emerald-500/20 rounded-2xl p-5 shadow-2xl relative overflow-hidden">
-          {/* Subtle decoration */}
           <div className="absolute right-0 bottom-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
-          
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/5 pb-4">
             <div>
               <span className="text-[9px] uppercase tracking-[0.2em] text-emerald-400 font-extrabold flex items-center gap-1.5 font-mono">
@@ -1254,23 +1055,11 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                 Sugerencias óptimas de 4 pilotos que encajan en tu economía libre ({miEscuderia.presupuesto.toFixed(1)}M)
               </p>
             </div>
-            
-            {/* Strategy Select buttons */}
             <div className="flex flex-wrap gap-2">
-              {[
-                { id: "balanced", label: "⚖️ Equilibrado", desc: "Mejor relación calidad-precio (ROI)" },
-                { id: "momentum", label: "🔥 En Racha", desc: "Pilotos con tendencia ascendente reciente" },
-                { id: "budget", label: "💎 Bajo Coste", desc: "Ahorro extremo para la escudería" },
-                { id: "premium", label: "👑 Galácticos", desc: "Mejores rating costeables disponibles" }
-              ].map((strat) => (
+              {[{ id: "balanced", label: "⚖️ Equilibrado", desc: "Mejor relación calidad-precio (ROI)" }, { id: "momentum", label: "🔥 En Racha", desc: "Pilotos con tendencia ascendente reciente" }, { id: "budget", label: "💎 Bajo Coste", desc: "Ahorro extremo para la escudería" }, { id: "premium", label: "👑 Galácticos", desc: "Mejores rating costeables disponibles" }].map((strat) => (
                 <button
-                  key={strat.id}
-                  onClick={() => setRecommenderStrategy(strat.id as any)}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all flex flex-col items-start min-w-[100px] active:scale-95 cursor-pointer ${
-                    recommenderStrategy === strat.id
-                      ? "bg-emerald-500 text-black border border-emerald-400 shadow-lg shadow-emerald-500/10"
-                      : "bg-zinc-900 text-white/50 border border-white/5 hover:border-white/15"
-                  }`}
+                  key={strat.id} onClick={() => setRecommenderStrategy(strat.id as any)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all flex flex-col items-start min-w-[100px] active:scale-95 cursor-pointer ${recommenderStrategy === strat.id ? "bg-emerald-500 text-black border border-emerald-400 shadow-lg shadow-emerald-500/10" : "bg-zinc-900 text-white/50 border border-white/5 hover:border-white/15"}`}
                   title={strat.desc}
                 >
                   <span className="font-extrabold leading-none">{strat.label}</span>
@@ -1289,30 +1078,14 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
 
               return (
                 <div key={`rec-${p.id}-${i}`} className="bg-zinc-900/40 border border-white/5 rounded-xl p-4 flex flex-col hover:bg-white/[0.02] hover:border-white/10 transition-all group relative">
-                  {/* Badge corner */}
-                  {isAlreadyInTeam && (
-                    <span className="absolute top-3 right-3 bg-white/10 text-white/70 border border-white/10 text-[7px] font-mono font-bold uppercase px-1.5 py-0.5 rounded">
-                      Contratado
-                    </span>
-                  )}
+                  {isAlreadyInTeam && <span className="absolute top-3 right-3 bg-white/10 text-white/70 border border-white/10 text-[7px] font-mono font-bold uppercase px-1.5 py-0.5 rounded">Contratado</span>}
                   
-                  {/* Top Header info */}
                   <div 
-                    onClick={() => {
-                      setSelectedPilotForProfileId(p.id);
-                      setActiveProfileTab("profile");
-                      setIsCompareViewOpen(true);
-                    }}
-                    className="flex gap-3 items-center mb-3 cursor-pointer hover:opacity-85"
-                    title="Haz clic para ver la ficha estadística detallada de este piloto"
+                    onClick={() => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }}
+                    className="flex gap-3 items-center mb-3 cursor-pointer hover:opacity-85" title="Haz clic para ver la ficha estadística detallada de este piloto"
                   >
                     {getPilotPhoto(p.id) ? (
-                      <img
-                        src={getPilotPhoto(p.id)}
-                        alt={p.nombre}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full object-cover border-2 border-emerald-500 group-hover:border-[#e10600]"
-                      />
+                      <img src={getPilotPhoto(p.id)} alt={p.nombre} referrerPolicy="no-referrer" className="w-10 h-10 rounded-full object-cover border-2 border-emerald-500 group-hover:border-[#e10600]" />
                     ) : (
                       <div className="w-10 h-10 rounded-full border border-white/10 bg-zinc-850 flex items-center justify-center font-bold text-xs text-white/30 uppercase font-mono group-hover:border-[#e10600]">
                         {p.nombre ? p.nombre.substring(0, 2).toUpperCase() : 'FX'}
@@ -1324,42 +1097,25 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                     </div>
                   </div>
 
-                  {/* Pricing and points indicators */}
                   <div className="grid grid-cols-3 gap-2 border-y border-white/5 py-2 text-center my-1.5 font-mono">
-                    <div>
-                      <span className="text-[7px] uppercase text-white/30 block mb-0.5">Precio</span>
-                      <span className="text-xs font-black text-white">{p.coste.toFixed(1)}M</span>
-                    </div>
-                    <div>
-                      <span className="text-[7px] uppercase text-white/30 block mb-0.5">Rating</span>
-                      <span className="text-xs font-black text-white">{(p.rating_piloto || p.rating || 70).toFixed(0)}</span>
-                    </div>
-                    <div>
-                      <span className="text-[7px] uppercase text-white/30 block mb-0.5">Puntos</span>
-                      <span className="text-xs font-black text-emerald-400">{(p.puntos_piloto || p.points || p.puntos || 0)}</span>
-                    </div>
+                    <div><span className="text-[7px] uppercase text-white/30 block mb-0.5">Precio</span><span className="text-xs font-black text-white">{p.coste.toFixed(1)}M</span></div>
+                    <div><span className="text-[7px] uppercase text-white/30 block mb-0.5">Rating</span><span className="text-xs font-black text-white">{(p.rating_piloto || p.rating || 70).toFixed(0)}</span></div>
+                    <div><span className="text-[7px] uppercase text-white/30 block mb-0.5">Puntos</span><span className="text-xs font-black text-emerald-400">{(p.puntos_piloto || p.points || p.puntos || 0)}</span></div>
                   </div>
 
-                  {/* Trend Indicator */}
                   <div className="mb-2.5">
                     <div className="flex justify-between items-center text-[8px] font-mono mb-1.5">
                       <span className="text-white/40 uppercase">Tendencia de Forma:</span>
-                      <span className={`font-bold flex items-center gap-0.5 ${
-                        hasNegativeTrend ? "text-red-400 animate-pulse" : hasPositiveTrend ? "text-emerald-400" : "text-white/50"
-                      }`}>
+                      <span className={`font-bold flex items-center gap-0.5 ${hasNegativeTrend ? "text-red-400 animate-pulse" : hasPositiveTrend ? "text-emerald-400" : "text-white/50"}`}>
                         {p.trendScore > 0 ? `+${p.trendScore.toFixed(1)}` : p.trendScore.toFixed(1)} pts
                         {hasNegativeTrend ? "📉" : hasPositiveTrend ? "📈" : "➖"}
                       </span>
                     </div>
-                    
-                    {/* Visual performance indicators per race */}
                     {p.history && p.history.length > 0 ? (
                       <div className="flex gap-1 items-center justify-center bg-black/40 p-1 rounded-lg border border-white/5">
                         <span className="text-[6px] font-mono text-white/20 uppercase mr-1 shrink-0">Últimos:</span>
                         {p.history.map((pts: number, idx: number) => (
-                          <div key={idx} className="flex-1 text-center py-0.5 rounded text-[8px] font-mono font-bold bg-white/5 text-white/60" title={`Carrera ${idx + 1}: ${pts} pts`}>
-                            {pts}
-                          </div>
+                          <div key={idx} className="flex-1 text-center py-0.5 rounded text-[8px] font-mono font-bold bg-white/5 text-white/60" title={`Carrera ${idx + 1}: ${pts} pts`}>{pts}</div>
                         ))}
                       </div>
                     ) : (
@@ -1367,41 +1123,22 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                     )}
                   </div>
 
-                  {/* Description / Justification */}
-                  <p className="text-[10px] text-white/60 leading-relaxed font-sans flex-1 bg-black/30 rounded-lg p-2.5 border border-white/5">
-                    {p.justification}
-                  </p>
+                  <p className="text-[10px] text-white/60 leading-relaxed font-sans flex-1 bg-black/30 rounded-lg p-2.5 border border-white/5">{p.justification}</p>
 
-                  {/* Hire action */}
                   <div className="mt-3 border-t border-white/5 pt-3">
                     {isAlreadyInTeam ? (
-                      <div className="w-full text-center py-2 text-[10px] uppercase font-bold text-white/30 border border-white/5 bg-white/[0.02] rounded-lg">
-                        Ya está en tu equipo
-                      </div>
+                      <div className="w-full text-center py-2 text-[10px] uppercase font-bold text-white/30 border border-white/5 bg-white/[0.02] rounded-lg">Ya está en tu equipo</div>
                     ) : currentSplit?.fichajes_abiertos ? (
                       <button
-                        type="button"
-                        disabled={transacting || !isAffordable}
-                        onClick={() => {
-                          if (p.isFreeAgent) {
-                            handleFicharFreeAgent(p);
-                          } else {
-                            handleClausulazo(p, p.teamId, p.teamNombre);
-                          }
-                        }}
-                        className={`w-full py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
-                          isAffordable
-                            ? "bg-emerald-500 text-black hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 cursor-pointer"
-                            : "bg-white/5 text-white/20 border border-white/5 cursor-not-allowed"
-                        }`}
+                        type="button" disabled={transacting || !isAffordable}
+                        onClick={() => { if (p.isFreeAgent) { handleFicharFreeAgent(p); } else { handleClausulazo(p, p.teamId, p.teamNombre); } }}
+                        className={`w-full py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 active:scale-95 ${isAffordable ? "bg-emerald-500 text-black hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 cursor-pointer" : "bg-white/5 text-white/20 border border-white/5 cursor-not-allowed"}`}
                       >
                         <Coins className="w-3.5 h-3.5" />
                         {isAffordable ? `Fichar por ${p.coste.toFixed(1)}M` : `Insuficiente (Faltan ${(p.coste - miEscuderia.presupuesto).toFixed(1)}M)`}
                       </button>
                     ) : (
-                      <div className="w-full text-center py-2 text-[10px] uppercase font-medium text-red-500/70 border border-red-500/10 bg-red-400/5 rounded-lg font-mono">
-                        Cerrado
-                      </div>
+                      <div className="w-full text-center py-2 text-[10px] uppercase font-medium text-red-500/70 border border-red-500/10 bg-red-400/5 rounded-lg font-mono">Cerrado</div>
                     )}
                   </div>
                 </div>
@@ -1411,18 +1148,13 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
         </section>
       )}
 
-      {/* Mi Equipo Section */}
       {activeSplitId !== "global" && (
         <section>
           <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
-            <h2 className="text-xl font-bold italic tracking-tight lowercase flex items-center gap-2">
-               <span className="w-1 h-5 bg-[#e10600]" />
-               mi equipo
-            </h2>
+            <h2 className="text-xl font-bold italic tracking-tight lowercase flex items-center gap-2"><span className="w-1 h-5 bg-[#e10600]" />mi equipo</h2>
             {currentSplit?.fichajes_abiertos && (
               <span className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold font-mono text-[10px] uppercase px-2.5 py-1 rounded-full animate-pulse tracking-wide flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                VENTANA DE FICHAJES ABIERTA (MERCADO ACTIVO)
+                <Sparkles className="w-3.5 h-3.5" /> VENTANA DE FICHAJES ABIERTA (MERCADO ACTIVO)
               </span>
             )}
           </div>
@@ -1431,14 +1163,9 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
             <div className="bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/20 rounded-2xl p-6 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
               <div className="absolute right-0 top-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl"></div>
               <div>
-                <div className="flex items-center gap-2 text-amber-500 font-black text-xs uppercase tracking-widest mb-2">
-                  <ShieldAlert className="w-4 h-4 animate-bounce" />
-                  Agencia Libre / Estado Independiente
-                </div>
+                <div className="flex items-center gap-2 text-amber-500 font-black text-xs uppercase tracking-widest mb-2"><ShieldAlert className="w-4 h-4 animate-bounce" /> Agencia Libre / Estado Independiente</div>
                 <h3 className="text-xl font-extrabold text-white uppercase tracking-tight">Actualmente estás SIN EQUIPO en {currentSplit?.nombre || "este Split"}</h3>
-                <p className="text-sm text-white/60 mt-1 max-w-xl">
-                  Tu perfil está disponible en el mercado para este Split. Las escuderías con presupuesto te pueden incorporar mediante la sección de "Agentes Libres Bolsa", o el Administrador puede asignarte de forma manual a una escudería desde el Panel de Control.
-                </p>
+                <p className="text-sm text-white/60 mt-1 max-w-xl">Tu perfil está disponible en el mercado para este Split. Las escuderías con presupuesto te pueden incorporar mediante la sección de "Agentes Libres Bolsa", o el Administrador puede asignarte de forma manual a una escudería desde el Panel de Control.</p>
               </div>
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-center w-full md:w-auto shrink-0">
                 <span className="text-[10px] block text-amber-400 font-mono tracking-wider uppercase font-extrabold mb-1">VALOR DE COMPRA</span>
@@ -1451,20 +1178,10 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                 <div key={`mis-pilotos-${p.id}-${i}`} className="bg-zinc-900/50 border border-white/10 rounded-xl p-4 flex flex-col hover:bg-white/5 transition-all group">
                   <div 
                     className="flex gap-3 items-center mb-4 cursor-pointer hover:opacity-85"
-                    onClick={() => {
-                      setSelectedPilotForProfileId(p.id);
-                      setActiveProfileTab("profile");
-                      setIsCompareViewOpen(true);
-                    }}
-                    title="Haz clic para ver las estadísticas de este piloto"
+                    onClick={() => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }} title="Haz clic para ver las estadísticas de este piloto"
                   >
                     {getPilotPhoto(p.id) ? (
-                      <img 
-                        src={getPilotPhoto(p.id)} 
-                        alt={p.nombre} 
-                        referrerPolicy="no-referrer"
-                        className="w-12 h-12 rounded-full object-cover border-2 border-[#e10600]"
-                      />
+                      <img src={getPilotPhoto(p.id)} alt={p.nombre} referrerPolicy="no-referrer" className="w-12 h-12 rounded-full object-cover border-2 border-[#e10600]" />
                     ) : (
                       <div className="w-12 h-12 rounded-full border border-white/10 bg-zinc-800 flex items-center justify-center font-bold text-sm text-white/30 uppercase font-mono">
                         {p.nombre ? p.nombre.substring(0, 2).toUpperCase() : 'FX'}
@@ -1476,29 +1193,16 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                     </div>
                   </div>
                   <div className="space-y-2 mt-auto text-sm font-mono text-gray-400">
-                    <div className="flex justify-between">
-                      <span>Puntos:</span>
-                      <span className="text-white">{p.puntos_piloto || 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Victorias:</span>
-                      <span className="text-white">{p.victorias || 0}</span>
-                    </div>
+                    <div className="flex justify-between"><span>Puntos:</span><span className="text-white">{p.puntos_piloto || 0}</span></div>
+                    <div className="flex justify-between"><span>Victorias:</span><span className="text-white">{p.victorias || 0}</span></div>
                     {canViewBudget && (
                       <div className="flex justify-between text-xs text-white/50 border-t border-white/5 pt-2 mt-2">
-                        <span>Val. Cláusula:</span>
-                        <span className="text-[#e10600] font-bold">{(p.clausula_actual || (p.rating_piloto || 70) * 0.5)}M</span>
+                        <span>Val. Cláusula:</span><span className="text-[#e10600] font-bold">{(p.clausula_actual || (p.rating_piloto || 70) * 0.5)}M</span>
                       </div>
                     )}
-                    
                     {canViewBudget && currentSplit?.fichajes_abiertos && (
-                      <button
-                        disabled={transacting}
-                        onClick={() => handleDespedirPiloto(p)}
-                        className="mt-4 w-full bg-red-500/10 hover:bg-red-500/25 border border-red-500/20 text-red-500 rounded py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40"
-                      >
-                        <UserMinus className="w-3.5 h-3.5" />
-                        Despedir / Reembolso ({(p.precio_compra_split || 10) * 0.5}M)
+                      <button disabled={transacting} onClick={() => handleDespedirPiloto(p)} className="mt-4 w-full bg-red-500/10 hover:bg-red-500/25 border border-red-500/20 text-red-500 rounded py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40">
+                        <UserMinus className="w-3.5 h-3.5" /> Despedir / Reembolso ({(p.precio_compra_split || 10) * 0.5}M)
                       </button>
                     )}
                   </div>
@@ -1510,7 +1214,6 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
         </section>
       )}
 
-      {/* Mundial Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <section>
           <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-white/10 pb-2 lowercase flex items-center gap-2">
@@ -1523,7 +1226,7 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                 <tr className="text-[10px] text-white/30 uppercase tracking-wider border-b border-white/5">
                   <th className="pb-3 pl-2">Pos</th>
                   <th className="pb-3">Piloto</th>
-                  <th className="pb-3 text-right pr-2">{activeSplitId === "global" ? "Mundiales" : "Pts"}</th>
+                  <th className="pb-3 text-right pr-2">{activeSplitId === "global" ? "Títulos" : "Pts"}</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -1532,27 +1235,17 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                   return (
                     <tr 
                       key={`standings-${p.id || p.name}-${i}`} 
-                      onClick={() => {
-                        setSelectedPilotForProfileId(p.id);
-                        setActiveProfileTab("profile");
-                        setIsCompareViewOpen(true);
-                      }}
-                      className="border-b border-white/5 last:border-0 hover:bg-[#e10600]/10 transition-all cursor-pointer group"
-                      title="Haz clic para ver la ficha estadística del piloto"
+                      onClick={() => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }}
+                      className="border-b border-white/5 last:border-0 hover:bg-[#e10600]/10 transition-all cursor-pointer group" title="Haz clic para ver la ficha estadística del piloto"
                     >
                       <td className="py-3 pl-2 font-black italic text-white/30 text-lg w-8">{i + 1}</td>
                       <td className="py-3 font-bold">
                         <div className="flex items-center gap-3">
                           {pilotPhoto ? (
-                            <img
-                              src={pilotPhoto}
-                              alt={p.name}
-                              referrerPolicy="no-referrer"
-                              className="w-8 h-8 rounded-full object-cover border border-[#e10600]/40"
-                            />
+                            <img src={pilotPhoto} alt={p.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full object-cover border border-[#e10600]/40" />
                           ) : (
                             <div className="w-8 h-8 rounded-full border border-white/5 bg-zinc-850 flex items-center justify-center font-bold text-[10px] text-white/30 uppercase font-mono">
-                              {p.name.substring(0, 2).toUpperCase()}
+                              {p.name ? p.name.substring(0, 2).toUpperCase() : '??'}
                             </div>
                           )}
                           <div className="flex flex-col">
@@ -1561,15 +1254,11 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                           </div>
                         </div>
                       </td>
-                    <td className="py-3 text-right pr-2 font-bold tabular-nums">
-                      {activeSplitId === "global" ? (
-                        <span className="text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-500/20 text-xs inline-flex items-center gap-1 font-mono">
-                          {p.points} 🏆
-                        </span>
-                      ) : (
-                        p.points
-                      )}
-                    </td>
+                      <td className="py-3 text-right pr-2 font-bold tabular-nums">
+                        {activeSplitId === "global"
+                          ? <span className="text-amber-400 text-base font-black">{p.points} 🏆</span>
+                          : p.points}
+                      </td>
                   </tr>
                 );
               })}
@@ -1589,7 +1278,7 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                 <tr className="text-[10px] text-white/30 uppercase tracking-wider border-b border-white/5">
                   <th className="pb-3 pl-2">Pos</th>
                   <th className="pb-3">Escudería</th>
-                  <th className="pb-3 text-right pr-2">{activeSplitId === "global" ? "Mundiales" : "Pts"}</th>
+                  <th className="pb-3 text-right pr-2">{activeSplitId === "global" ? "Títulos" : "Pts"}</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -1600,27 +1289,18 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                       <td className="py-3 pl-2 font-black italic text-white/30 text-lg w-8">{i + 1}</td>
                       <td className="py-3 font-bold flex items-center gap-3">
                         {logo ? (
-                          <img 
-                            src={logo}
-                            alt={t.nombre}
-                            referrerPolicy="no-referrer"
-                            className="w-8 h-8 rounded-lg object-cover border border-white/10"
-                          />
+                          <img src={logo} alt={t.nombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
                         ) : (
                           <div className="w-8 h-8 rounded-lg border border-white/5 bg-zinc-850 flex items-center justify-center font-bold text-[10px] text-white/40 uppercase font-mono">
-                            {t.nombre.substring(0, 2).toUpperCase()}
+                            {t.nombre ? t.nombre.substring(0, 2).toUpperCase() : '??'}
                           </div>
                         )}
                         <span className="uppercase tracking-tighter">{t.nombre}</span>
                       </td>
                       <td className="py-3 text-right pr-2 font-bold tabular-nums">
-                        {activeSplitId === "global" ? (
-                          <span className="text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-500/20 text-xs inline-flex items-center gap-1 font-mono">
-                            {t.puntos} 🏆
-                          </span>
-                        ) : (
-                          t.puntos
-                        )}
+                        {activeSplitId === "global"
+                          ? <span className="text-amber-400 text-base font-black">{t.puntos} 🏆</span>
+                          : t.puntos}
                       </td>
                     </tr>
                   );
@@ -1634,24 +1314,15 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
       {activeSplitId === "global" && championshipsTimeline && championshipsTimeline.length > 0 && (
         <section className="mt-8">
           <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-white/10 pb-2 lowercase flex items-center gap-2">
-            <span className="w-1.5 h-5 bg-[#e10600] block" />
-            Palmarés Histórico por Splits (Historial de Campeones)
+            <span className="w-1.5 h-5 bg-[#e10600] block" /> Palmarés Histórico por Splits (Historial de Campeones)
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {championshipsTimeline.map((item, idx) => (
-              <div key={item.splitId} className={`border rounded-2xl p-5 relative overflow-hidden transition-all duration-300 ${
-                item.completed 
-                ? "bg-gradient-to-br from-zinc-900 via-zinc-950 to-black border-amber-500/30 hover:border-amber-500/50 shadow-lg shadow-amber-950/20" 
-                : "bg-zinc-950/20 border-white/5 opacity-60"
-              }`}>
+              <div key={item.splitId} className={`border rounded-2xl p-5 relative overflow-hidden transition-all duration-300 ${item.completed ? "bg-gradient-to-br from-zinc-900 via-zinc-950 to-black border-amber-500/30 hover:border-amber-500/50 shadow-lg shadow-amber-950/20" : "bg-zinc-950/20 border-white/5 opacity-60"}`}>
                 {item.completed ? (
-                  <div className="absolute top-3 right-3 bg-amber-500/10 text-amber-400 border border-amber-500/25 rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider font-mono">
-                    Oficial 🏆
-                  </div>
+                  <div className="absolute top-3 right-3 bg-amber-500/10 text-amber-400 border border-amber-500/25 rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider font-mono">Oficial 🏆</div>
                 ) : (
-                  <div className="absolute top-3 right-3 bg-white/5 text-white/40 border border-white/10 rounded-full px-2 py-0.5 text-[8px] font-mono tracking-wider uppercase">
-                    Próximo 🏁
-                  </div>
+                  <div className="absolute top-3 right-3 bg-white/5 text-white/40 border border-white/10 rounded-full px-2 py-0.5 text-[8px] font-mono tracking-wider uppercase">Próximo 🏁</div>
                 )}
                 <div className="text-[10px] uppercase font-mono tracking-widest text-[#e10600] mb-4 font-black">{item.splitName}</div>
                 
@@ -1667,7 +1338,6 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                       <p className="text-xs text-white/20 italic font-mono uppercase">Pendiente de inicio</p>
                     )}
                   </div>
-
                   <div className="border-t border-white/5 pt-3">
                     <div className="text-[9px] text-white/30 uppercase font-mono mb-1">Campeón de Escuderías:</div>
                     {item.completed ? (
@@ -1689,8 +1359,7 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
       {activeSplitId !== "global" && raceResults.length > 0 && (
         <section>
           <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-white/10 pb-2 lowercase flex items-center gap-2">
-            <span className="w-1 h-5 bg-[#e10600]" />
-            puntos por carrera
+            <span className="w-1 h-5 bg-[#e10600]" /> puntos por carrera
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {raceResults.map((gp, i) => (
@@ -1701,18 +1370,12 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                   {gp.pilots.sort((a: any, b: any) => b.pts - a.pts).map((rp: any, idx: number) => (
                     <div 
                       key={idx} 
-                      onClick={() => {
-                        setSelectedPilotForProfileId(rp.id);
-                        setActiveProfileTab("profile");
-                        setIsCompareViewOpen(true);
-                      }}
-                      className="flex justify-between items-center text-xs cursor-pointer hover:bg-white/5 p-1 rounded transition-colors group/row"
-                      title="Haz clic para ver la ficha estadística detallada de este piloto"
+                      onClick={() => { setSelectedPilotForProfileId(rp.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }}
+                      className="flex justify-between items-center text-xs cursor-pointer hover:bg-white/5 p-1 rounded transition-colors group/row" title="Haz clic para ver la ficha estadística detallada de este piloto"
                     >
                       <div className="flex flex-col">
                         <span className="font-bold flex items-center gap-2 text-white group-hover/row:text-[#e10600] transition-colors">
-                           <span className="w-1.5 h-1.5 bg-white/20 rounded-full group-hover/row:bg-[#e10600]/80" />
-                           {rp.name}
+                           <span className="w-1.5 h-1.5 bg-white/20 rounded-full group-hover/row:bg-[#e10600]/80" /> {rp.name}
                         </span>
                         <span className="text-[9px] text-white/20 uppercase font-mono ml-3.5">{rp.team.replace('_', ' ')}</span>
                       </div>
@@ -1734,176 +1397,70 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
         <JequeStrategyPanel split={currentSplit} miEscuderia={miEscuderia} recommendedPilots={recommendedPilots} />
       )}
 
-      {/* CENTRAL DE SCOUTING & PORTAL DE TRANSFERENCIAS */}
       {activeSplitId !== "global" && (
         <section className="mt-8 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-80 h-80 bg-[#e10600]/5 blur-[120px] -mr-40 -mt-40 rounded-full" />
-          
           <div className="mb-6 border-b border-white/10 pb-4">
-            <h2 className="text-xl font-black italic tracking-tighter text-white flex items-center gap-2.5 lowercase">
-              <span className="w-1.5 h-6 bg-[#e10600] block" />
-              Central de Scouting y Fichajes Activos
-            </h2>
-            <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1 font-mono">
-              Rastrea claúsulas de rivales, contrata agentes libres independientes y visualiza el historial en tiempo real
-            </p>
+            <h2 className="text-xl font-black italic tracking-tighter text-white flex items-center gap-2.5 lowercase"><span className="w-1.5 h-6 bg-[#e10600] block" /> Central de Scouting y Fichajes Activos</h2>
+            <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1 font-mono">Rastrea claúsulas de rivales, contrata agentes libres independientes y visualiza el historial en tiempo real</p>
           </div>
-
-          {/* 3-Column Marketplace Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Column 1: Clausulazos / Rivales */}
             <div className="bg-black/45 border border-white/5 rounded-xl p-4 flex flex-col h-[520px]">
-              <div className="flex items-center gap-2 mb-4">
-                <Flame className="w-4 h-4 text-[#e10600]" />
-                <h3 className="font-bold text-sm text-white uppercase tracking-tight">Clausulazos Rivales</h3>
-              </div>
-              
+              <div className="flex items-center gap-2 mb-4"><Flame className="w-4 h-4 text-[#e10600]" /><h3 className="font-bold text-sm text-white uppercase tracking-tight">Clausulazos Rivales</h3></div>
               <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
-                {currentSplit?.equipos
-                  ?.filter((team: any) => team.id !== escuderiaId)
-                  ?.flatMap((team: any) => (team.pilotos || []).map((p: any) => ({ ...p, teamId: team.id, teamNombre: team.nombre })))
-                  ?.map((p: any, i: number) => {
+                {currentSplit?.equipos?.filter((team: any) => team.id !== escuderiaId)?.flatMap((team: any) => (team.pilotos || []).map((p: any) => ({ ...p, teamId: team.id, teamNombre: team.nombre })))?.map((p: any, i: number) => {
                     const clause = p.clausula_actual || (p.rating_piloto || 70) * 0.5;
                     const canBuy = currentSplit?.fichajes_abiertos && canViewBudget && (miEscuderia?.presupuesto >= clause);
-
                     return (
                       <div key={`clausula-${p.id}-${p.teamId || ''}-${i}`} className="p-3 bg-white/5 border border-white/5 rounded-lg text-xs hover:border-white/15 transition-all">
                         <div className="flex justify-between items-start mb-1.5">
                           <div>
-                            <p 
-                              className="font-extrabold text-white text-sm hover:text-[#e10600] cursor-pointer transition-colors" 
-                              onClick={() => {
-                                setSelectedPilotForProfileId(p.id);
-                                setActiveProfileTab("profile");
-                                setIsCompareViewOpen(true);
-                              }}
-                              title="Ver ficha de rendimiento de este piloto"
-                            >
-                              {p.nombre}
-                            </p>
+                            <p className="font-extrabold text-white text-sm hover:text-[#e10600] cursor-pointer transition-colors" onClick={() => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }} title="Ver ficha de rendimiento de este piloto">{p.nombre}</p>
                             <p className="text-[9px] font-mono text-white/40 uppercase tracking-tight">{p.teamNombre}</p>
                           </div>
-                          <span className="text-[10px] bg-red-500/15 text-red-400 font-bold px-1.5 py-0.5 rounded font-mono">
-                            {p.rating_piloto || 70} RTG
-                          </span>
+                          <span className="text-[10px] bg-red-500/15 text-red-400 font-bold px-1.5 py-0.5 rounded font-mono">{p.rating_piloto || 70} RTG</span>
                         </div>
-                        
                         <div className="flex justify-between items-center text-[10px] font-mono border-t border-white/5 pt-2 mt-2">
-                          <div>
-                            <span className="text-white/40">Cláusula:</span>
-                            <span className="text-white font-bold ml-1">{clause.toFixed(1)}M</span>
-                          </div>
-                          
-                          {currentSplit?.fichajes_abiertos ? (
-                            canViewBudget ? (
-                              <button
-                                disabled={transacting || !canBuy}
-                                onClick={() => handleClausulazo(p, p.teamId, p.teamNombre)}
-                                className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 active:scale-95 ${
-                                  canBuy 
-                                  ? "bg-[#e10600] text-white hover:bg-red-700 shadow-md shadow-red-900/30" 
-                                  : "bg-white/10 text-white/30 cursor-not-allowed"
-                                }`}
-                              >
-                                <Coins className="w-3.5 h-3.5" />
-                                Pagar Cláusula
-                              </button>
-                            ) : (
-                              <span className="text-[9px] text-white/20 italic">Solo Jeques</span>
-                            )
-                          ) : (
-                            <span className="text-[9px] bg-red-500/10 text-red-500/80 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider font-mono">Cerrado</span>
-                          )}
+                          <div><span className="text-white/40">Cláusula:</span><span className="text-white font-bold ml-1">{clause.toFixed(1)}M</span></div>
+                          {currentSplit?.fichajes_abiertos ? (canViewBudget ? (<button disabled={transacting || !canBuy} onClick={() => handleClausulazo(p, p.teamId, p.teamNombre)} className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 active:scale-95 ${canBuy ? "bg-[#e10600] text-white hover:bg-red-700 shadow-md shadow-red-900/30" : "bg-white/10 text-white/30 cursor-not-allowed"}`}><Coins className="w-3.5 h-3.5" /> Pagar Cláusula</button>) : (<span className="text-[9px] text-white/20 italic">Solo Jeques</span>)) : (<span className="text-[9px] bg-red-500/10 text-red-500/80 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider font-mono">Cerrado</span>)}
                         </div>
                       </div>
                     );
                   })}
-
                 {(!currentSplit?.equipos || currentSplit.equipos.filter((team: any) => team.id !== escuderiaId).flatMap((team: any) => team.pilotos || []).length === 0) && (
                   <div className="text-center py-12 text-white/25 italic text-xs uppercase font-mono tracking-widest">Sin pilotos rivales contratados</div>
                 )}
               </div>
             </div>
 
-            {/* Column 2: Free Agents Bolsa */}
             <div className="bg-black/45 border border-white/5 rounded-xl p-4 flex flex-col h-[520px]">
-              <div className="flex items-center gap-2 mb-4">
-                <UserPlus className="w-4 h-4 text-emerald-400" />
-                <h3 className="font-bold text-sm text-white uppercase tracking-tight">Agentes Libres Bolsa</h3>
-              </div>
-              
+              <div className="flex items-center gap-2 mb-4"><UserPlus className="w-4 h-4 text-emerald-400" /><h3 className="font-bold text-sm text-white uppercase tracking-tight">Agentes Libres Bolsa</h3></div>
               <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
                 {freeAgentsList.map((p: any, i: number) => {
                   const cost = p.precio_compra_split || 10;
                   const canBuy = currentSplit?.fichajes_abiertos && canViewBudget && (miEscuderia?.presupuesto >= cost);
-
                   return (
                     <div key={`freeagent-${p.id}-${i}`} className="p-3 bg-white/5 border border-white/5 rounded-lg text-xs hover:border-white/15 transition-all">
                       <div className="flex justify-between items-start mb-1.5">
                         <div>
-                          <p 
-                            className="font-extrabold text-white text-sm hover:text-emerald-400 cursor-pointer transition-colors" 
-                            onClick={() => {
-                              setSelectedPilotForProfileId(p.id);
-                              setActiveProfileTab("profile");
-                              setIsCompareViewOpen(true);
-                            }}
-                            title="Ver ficha de rendimiento de este piloto"
-                          >
-                            {p.nombre}
-                          </p>
+                          <p className="font-extrabold text-white text-sm hover:text-emerald-400 cursor-pointer transition-colors" onClick={() => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }} title="Ver ficha de rendimiento de este piloto">{p.nombre}</p>
                           <p className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest">Bolsa Independiente</p>
                         </div>
-                        <span className="text-[10px] bg-emerald-500/15 text-emerald-400 font-bold px-1.5 py-0.5 rounded font-mono">
-                          {p.rating_piloto || 70} RTG
-                        </span>
+                        <span className="text-[10px] bg-emerald-500/15 text-emerald-400 font-bold px-1.5 py-0.5 rounded font-mono">{p.rating_piloto || 70} RTG</span>
                       </div>
-                      
                       <div className="flex justify-between items-center text-[10px] font-mono border-t border-white/5 pt-2 mt-2">
-                        <div>
-                          <span className="text-white/40">Fichaje:</span>
-                          <span className="text-white font-bold ml-1">{cost.toFixed(1)}M</span>
-                        </div>
-                        
-                        {currentSplit?.fichajes_abiertos ? (
-                          canViewBudget ? (
-                            <button
-                              disabled={transacting || !canBuy}
-                              onClick={() => handleFicharFreeAgent(p)}
-                              className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 active:scale-95 ${
-                                canBuy 
-                                ? "bg-emerald-500 text-black font-black hover:bg-emerald-400 shadow-md shadow-emerald-950/20" 
-                                : "bg-white/10 text-white/30 cursor-not-allowed"
-                              }`}
-                            >
-                              <UserPlus className="w-3.5 h-3.5" />
-                              Contratar
-                            </button>
-                          ) : (
-                            <span className="text-[9px] text-white/20 italic">Solo Jeques</span>
-                          )
-                        ) : (
-                          <span className="text-[9px] bg-red-500/10 text-red-500/80 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider font-mono">Cerrado</span>
-                        )}
+                        <div><span className="text-white/40">Fichaje:</span><span className="text-white font-bold ml-1">{cost.toFixed(1)}M</span></div>
+                        {currentSplit?.fichajes_abiertos ? (canViewBudget ? (<button disabled={transacting || !canBuy} onClick={() => handleFicharFreeAgent(p)} className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 active:scale-95 ${canBuy ? "bg-emerald-500 text-black font-black hover:bg-emerald-400 shadow-md shadow-emerald-950/20" : "bg-white/10 text-white/30 cursor-not-allowed"}`}><UserPlus className="w-3.5 h-3.5" /> Contratar</button>) : (<span className="text-[9px] text-white/20 italic">Solo Jeques</span>)) : (<span className="text-[9px] bg-red-500/10 text-red-500/80 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider font-mono">Cerrado</span>)}
                       </div>
                     </div>
                   );
                 })}
-
-                {freeAgentsList.length === 0 && (
-                  <div className="text-center py-12 text-white/25 italic text-xs uppercase font-mono tracking-widest">Todos los pilotos registrados están en escuderías</div>
-                )}
+                {freeAgentsList.length === 0 && (<div className="text-center py-12 text-white/25 italic text-xs uppercase font-mono tracking-widest">Todos los pilotos registrados están en escuderías</div>)}
               </div>
             </div>
 
-            {/* Column 3: Timeline history */}
             <div className="bg-black/45 border border-white/5 rounded-xl p-4 flex flex-col h-[520px]">
-              <div className="flex items-center gap-2 mb-4 border-b border-white/5 pb-2">
-                <History className="w-4 h-4 text-white/60" />
-                <h3 className="font-bold text-sm text-white uppercase tracking-tight">Noticias del Mercado</h3>
-              </div>
-              
+              <div className="flex items-center gap-2 mb-4 border-b border-white/5 pb-2"><History className="w-4 h-4 text-white/60" /><h3 className="font-bold text-sm text-white uppercase tracking-tight">Noticias del Mercado</h3></div>
               <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin">
                 {transfers.map((log: any) => {
                   const dateExpr = log.timestamp ? new Date(log.timestamp).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -1911,23 +1468,15 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                     <div key={log.id} className="relative pl-5 border-l border-white/10 text-xs">
                       <div className="absolute left-0 top-1.5 w-1.5 h-1.5 rounded-full bg-[#e10600] -ml-[3.5px]" />
                       <p className="text-white/80 font-medium leading-relaxed">{log.detalles}</p>
-                      <span className="text-[8px] font-mono text-white/20 uppercase mt-1 block flex items-center gap-1">
-                        <Clock className="w-2.5 h-2.5" />
-                        Hoy, {dateExpr}
-                      </span>
+                      <span className="text-[8px] font-mono text-white/20 uppercase mt-1 block flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Hoy, {dateExpr}</span>
                     </div>
                   );
                 })}
-
                 {transfers.length === 0 && (
-                  <div className="text-center py-16 text-white/15 italic text-[11px] uppercase font-mono tracking-widest flex flex-col items-center justify-center gap-3">
-                    <ShieldAlert className="w-8 h-8 opacity-25" />
-                    Sin transacciones en este Split
-                  </div>
+                  <div className="text-center py-16 text-white/15 italic text-[11px] uppercase font-mono tracking-widest flex flex-col items-center justify-center gap-3"><ShieldAlert className="w-8 h-8 opacity-25" /> Sin transacciones en este Split</div>
                 )}
               </div>
             </div>
-
           </div>
         </section>
       )}
@@ -1935,131 +1484,45 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
       {confirmModal && confirmModal.isOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-zinc-950 border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl relative text-left">
-            <h3 className="text-lg font-black text-white uppercase tracking-tight mb-2 flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-[#e10600]" />
-              {confirmModal.title}
-            </h3>
+            <h3 className="text-lg font-black text-white uppercase tracking-tight mb-2 flex items-center gap-2"><span className="w-1.5 h-4 bg-[#e10600]" /> {confirmModal.title}</h3>
             <p className="text-xs text-white/60 leading-relaxed mb-6">{confirmModal.message}</p>
             <div className="flex justify-end gap-3 font-semibold text-[10px] uppercase tracking-wider">
-              {confirmModal.showCancel !== false && (
-                <button
-                  onClick={() => setConfirmModal(null)}
-                  className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors border border-white/5"
-                >
-                  Cancelar
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  confirmModal.onConfirm();
-                  setConfirmModal(null);
-                }}
-                className="px-4 py-2.5 bg-[#e10600] text-white rounded-lg hover:bg-red-700 transition-colors shadow-lg shadow-red-900/40"
-              >
-                Confirmar
-              </button>
+              {confirmModal.showCancel !== false && (<button onClick={() => setConfirmModal(null)} className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors border border-white/5">Cancelar</button>)}
+              <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} className="px-4 py-2.5 bg-[#e10600] text-white rounded-lg hover:bg-red-700 transition-colors shadow-lg shadow-red-900/40">Confirmar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE COMPARADOR Y PERFILES Y TELEMETRÍA */}
       {isCompareViewOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 overflow-y-auto p-4 md:p-6 text-left">
           <div className="max-w-5xl mx-auto bg-zinc-950 border border-white/10 rounded-2xl shadow-2xl p-6 relative my-4">
-            
-            {/* Header / Close button */}
             <div className="flex justify-between items-start border-b border-[#e10600]/20 pb-4 mb-6">
               <div>
                 <span className="text-[10px] font-black tracking-[0.2em] text-[#e10600] uppercase font-mono block">CENTRAL DE TELEMETRÍA GP</span>
-                <h2 className="text-xl md:text-2xl font-black italic tracking-tight text-white uppercase flex items-center gap-2 mt-0.5">
-                  <TrendingUp className="w-6 h-6 text-amber-500" />
-                  RIVALIDAD & RENDIMIENTO PADDOCK
-                </h2>
+                <h2 className="text-xl md:text-2xl font-black italic tracking-tight text-white uppercase flex items-center gap-2 mt-0.5"><TrendingUp className="w-6 h-6 text-amber-500" /> RIVALIDAD & RENDIMIENTO PADDOCK</h2>
               </div>
-              <button
-                onClick={() => {
-                  setIsCompareViewOpen(false);
-                  setSelectedPilotForProfileId(null);
-                }}
-                className="p-2 hover:bg-white/5 text-white/50 hover:text-white rounded-lg transition-all border border-white/5 hover:border-white/10 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="p-2 hover:bg-white/5 text-white/50 hover:text-white rounded-lg transition-all border border-white/5 hover:border-white/10 cursor-pointer"><X className="w-5 h-5" /></button>
             </div>
 
-            {/* TAB SELECTOR */}
             <div className="flex border-b border-white/5 mb-6 gap-2">
-              <button
-                onClick={() => {
-                  setActiveProfileTab("profile");
-                  if (!selectedPilotForProfileId && allPaddockPilots.length > 0) {
-                    setSelectedPilotForProfileId(allPaddockPilots[0].id);
-                  }
-                }}
-                className={`flex-1 md:flex-initial px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-                  activeProfileTab === "profile"
-                    ? "border-[#e10600] text-white bg-white/[0.02]"
-                    : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"
-                }`}
-              >
-                👤 Ficha Individual de Piloto
-              </button>
-              <button
-                onClick={() => {
-                  setActiveProfileTab("compare");
-                  if (!comparePilotIdA && allPaddockPilots.length > 0) {
-                    setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id);
-                  }
-                  if (!comparePilotIdB && allPaddockPilots.length > 0) {
-                    const firstId = selectedPilotForProfileId || allPaddockPilots[0].id;
-                    const other = allPaddockPilots.filter(p => p.id !== firstId)[0];
-                    setComparePilotIdB(other?.id || firstId);
-                  }
-                }}
-                className={`flex-1 md:flex-initial px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-                  activeProfileTab === "compare"
-                    ? "border-[#e10600] text-white bg-white/[0.02]"
-                    : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"
-                }`}
-              >
-                ⚔️ Comparador Cara a Cara
-              </button>
+              <button onClick={() => { setActiveProfileTab("profile"); if (!selectedPilotForProfileId && allPaddockPilots.length > 0) setSelectedPilotForProfileId(allPaddockPilots[0].id); }} className={`flex-1 md:flex-initial px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "profile" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}>👤 Ficha Individual de Piloto</button>
+              <button onClick={() => { setActiveProfileTab("compare"); if (!comparePilotIdA && allPaddockPilots.length > 0) setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id); if (!comparePilotIdB && allPaddockPilots.length > 0) { const firstId = selectedPilotForProfileId || allPaddockPilots[0].id; const other = allPaddockPilots.filter(p => p.id !== firstId)[0]; setComparePilotIdB(other?.id || firstId); } }} className={`flex-1 md:flex-initial px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "compare" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}>⚔️ Comparador Cara a Cara</button>
             </div>
 
-            {/* TAB CONTENT: PROFILE VIEW */}
             {activeProfileTab === "profile" && (
               <div className="space-y-6">
-                
-                {/* Search / Selector */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/[0.02] border border-white/5 p-4 rounded-xl">
                   <div>
                     <label className="text-[10px] text-white/40 uppercase font-mono tracking-wider mb-1.5 block">Explorar Ficha de Piloto</label>
-                    <select
-                      value={selectedPilotForProfileId || ""}
-                      onChange={(e) => setSelectedPilotForProfileId(e.target.value)}
-                      className="bg-zinc-900 border border-white/10 rounded-lg text-xs px-3 py-2 text-white font-bold w-full md:w-64 focus:border-red-500 hover:border-white/20 transition-all cursor-pointer"
-                    >
+                    <select value={selectedPilotForProfileId || ""} onChange={(e) => setSelectedPilotForProfileId(e.target.value)} className="bg-zinc-900 border border-white/10 rounded-lg text-xs px-3 py-2 text-white font-bold w-full md:w-64 focus:border-red-500 hover:border-white/20 transition-all cursor-pointer">
                       <option value="" disabled>-- Selecciona un piloto --</option>
-                      {allPaddockPilots.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.team})
-                        </option>
-                      ))}
+                      {allPaddockPilots.map((p) => (<option key={p.id} value={p.id}>{p.name} ({p.team})</option>))}
                     </select>
                   </div>
                   {selectedPilotForProfileId && (
-                    <button
-                      onClick={() => {
-                        setComparePilotIdA(selectedPilotForProfileId);
-                        const other = allPaddockPilots.filter(p => p.id !== selectedPilotForProfileId)[0];
-                        if (other) setComparePilotIdB(other.id);
-                        setActiveProfileTab("compare");
-                      }}
-                      className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-extrabold uppercase text-[10px] tracking-wider px-4 py-2.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                    >
-                      <TrendingUp className="w-4 h-4" />
-                      Comparar este piloto ⚔️
+                    <button onClick={() => { setComparePilotIdA(selectedPilotForProfileId); const other = allPaddockPilots.filter(p => p.id !== selectedPilotForProfileId)[0]; if (other) setComparePilotIdB(other.id); setActiveProfileTab("compare"); }} className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-extrabold uppercase text-[10px] tracking-wider px-4 py-2.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95">
+                      <TrendingUp className="w-4 h-4" /> Comparar este piloto ⚔️
                     </button>
                   )}
                 </div>
@@ -2067,42 +1530,29 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                 {pilotProfileStats ? (
                   <div className="space-y-6">
                     <div className="flex flex-col lg:flex-row gap-6">
-                      
-                      {/* F1 25 Style Rating Card */}
                       <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 h-[440px] bg-gradient-to-br from-zinc-800 via-zinc-900 to-black rounded-t-3xl rounded-br-3xl rounded-bl-md border border-white/10 shadow-[0_15px_40px_rgba(225,6,0,0.15)] overflow-hidden group">
                         <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-400 via-[#e10600] to-purple-500"></div>
                         <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#e10600]/20 blur-[50px] rounded-full pointer-events-none group-hover:bg-[#e10600]/30 transition-all duration-500"></div>
-                        
-                        {/* OVR & Team */}
                         <div className="absolute top-5 left-5 flex flex-col items-center z-20 drop-shadow-md">
-                          <span className="text-[42px] font-black italic text-white leading-none tracking-tighter">{pilotProfileStats.rating.toFixed(0)}</span>
+                          <span className="text-[42px] font-black italic text-white leading-none tracking-tighter">{pilotProfileStats.rating}</span>
                           <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest mt-1">OVR</span>
                           <div className="w-8 h-[2px] bg-white/20 my-2.5"></div>
-                          <div className="text-[11px] font-black text-white/50 uppercase tracking-widest" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-                            {pilotProfileStats.escuderiaName.substring(0, 16)}
-                          </div>
+                          <div className="text-[11px] font-black text-white/50 uppercase tracking-widest" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{pilotProfileStats.escuderiaName ? pilotProfileStats.escuderiaName.substring(0, 16) : 'EQ'}</div>
                         </div>
-
-                        {/* Pilot Image */}
                         <div className="absolute bottom-28 left-1/2 -translate-x-1/2 w-[220px] h-[220px] z-10 flex items-end justify-center transition-transform duration-500 group-hover:scale-105">
                           {pilotProfileStats.fotoUrl ? (
                             <img src={pilotProfileStats.fotoUrl} alt={pilotProfileStats.name} className="max-w-full max-h-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]" />
                           ) : (
-                            <div className="w-32 h-32 rounded-full bg-zinc-800/80 border border-white/5 flex items-center justify-center font-black text-5xl text-white/10 mb-6 drop-shadow-xl">{pilotProfileStats.name.substring(0, 2).toUpperCase()}</div>
+                            <div className="w-32 h-32 rounded-full bg-zinc-800/80 border border-white/5 flex items-center justify-center font-black text-5xl text-white/10 mb-6 drop-shadow-xl">{pilotProfileStats.name ? pilotProfileStats.name.substring(0, 2).toUpperCase() : '??'}</div>
                           )}
                         </div>
-
-                        {/* Bottom Info Section */}
                         <div className="absolute bottom-0 w-full bg-gradient-to-t from-black via-black/95 to-transparent pt-16 pb-6 px-6 z-20">
                           <h3 className="text-2xl font-black italic text-white uppercase tracking-tighter text-center whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-md">{pilotProfileStats.name}</h3>
-                          
                           <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent my-3.5"></div>
-
                           <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-1">
                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">PTS</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.totalPoints}</span></div>
                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">WIN</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.victorias}</span></div>
                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">POD</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.podiums}</span></div>
-                            
                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">POL</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.poles}</span></div>
                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">VR</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.fastestLaps}</span></div>
                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">DNF</span><span className="text-base leading-none font-black text-red-400">{pilotProfileStats.dnfs}</span></div>
@@ -2110,10 +1560,7 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                         </div>
                       </div>
                       
-                      {/* Extended Details Grid */}
                       <div className="flex-1 flex flex-col gap-4">
-                        
-                        {/* Financials / Rating Bar */}
                         <div className="bg-black/40 border border-white/5 p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-6">
                           <div className="w-full sm:flex-1">
                             <div className="flex justify-between items-end mb-2">
@@ -2133,38 +1580,17 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                           </div>
                         </div>
 
-                        {/* Smaller Stats Grid */}
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Puntos</span>
-                            <span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.avgPoints}</span>
-                          </div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Qualy</span>
-                            <span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">P{pilotProfileStats.avgQualy}</span>
-                          </div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Carrera</span>
-                            <span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">P{pilotProfileStats.avgRace}</span>
-                          </div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Carreras Limpias</span>
-                            <span className="text-2xl font-black text-teal-400 font-mono mt-1 tabular-nums">{pilotProfileStats.cleanRaces}</span>
-                          </div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Piloto del Día</span>
-                            <span className="text-2xl font-black text-amber-400 font-mono mt-1 tabular-nums">{pilotProfileStats.dotds}</span>
-                          </div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between">
-                            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">GPs Disputados</span>
-                            <span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.participaciones}</span>
-                          </div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Puntos</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.avgPoints}</span></div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Qualy</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">P{pilotProfileStats.avgQualy}</span></div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Carrera</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">P{pilotProfileStats.avgRace}</span></div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Carreras Limpias</span><span className="text-2xl font-black text-teal-400 font-mono mt-1 tabular-nums">{pilotProfileStats.cleanRaces}</span></div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Piloto del Día</span><span className="text-2xl font-black text-amber-400 font-mono mt-1 tabular-nums">{pilotProfileStats.dotds}</span></div>
+                          <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">GPs Disputados</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.participaciones}</span></div>
                         </div>
-
                       </div>
                     </div>
 
-                    {/* Timeline GPs */}
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-widest text-[#e10600] font-mono mb-3 block">HISTORIAL CRONOLÓGICO DE CARRERAS</h4>
                       {pilotProfileStats.history && pilotProfileStats.history.length > 0 ? (
@@ -2172,12 +1598,7 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                           <table className="w-full text-xs font-mono text-left text-gray-300">
                             <thead>
                               <tr className="bg-white/[0.03] text-white/30 uppercase text-[9px] tracking-wider border-b border-white/5">
-                                <th className="p-3">Split</th>
-                                <th className="p-3">Gran Premio / Circuito</th>
-                                <th className="p-3 text-center">Pos. Qualy</th>
-                                <th className="p-3 text-center">Pos. Carrera</th>
-                                <th className="p-3 text-center">Puntos GP</th>
-                                <th className="p-3 text-center">Detalles</th>
+                                <th className="p-3">Split</th><th className="p-3">Gran Premio / Circuito</th><th className="p-3 text-center">Pos. Qualy</th><th className="p-3 text-center">Pos. Carrera</th><th className="p-3 text-center">Puntos GP</th><th className="p-3 text-center">Detalles</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2210,138 +1631,75 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                         </div>
                       )}
                     </div>
-
                   </div>
                 ) : (
                   <div className="bg-zinc-900 border border-white/5 rounded-2xl p-16 text-center text-white/30 italic">
                     Selecciona un piloto para explorar su telemetría e historial de rendimiento.
                   </div>
                 )}
-
               </div>
             )}
 
-            {/* TAB CONTENT: SIDE-BY-SIDE COMPARATOR */}
             {activeProfileTab === "compare" && (
               <div className="space-y-6">
-                
-                {/* Selectors Row */}
                 <div className="grid grid-cols-1 md:grid-cols-11 items-center gap-4 bg-white/[0.02] border border-white/5 p-5 rounded-2xl">
-                  
-                  {/* Selector Pilot A */}
                   <div className="md:col-span-5 flex flex-col">
                     <label className="text-[10px] text-amber-300 font-mono tracking-wider mb-1 uppercase font-bold">Piloto A (Derecha / Izquierda)</label>
-                    <select
-                      value={comparePilotIdA}
-                      onChange={(e) => setComparePilotIdA(e.target.value)}
-                      className="bg-zinc-900 border border-white/10 rounded-lg text-xs px-3 py-2 text-white font-bold focus:border-amber-500 hover:border-white/20 transition-all cursor-pointer"
-                    >
+                    <select value={comparePilotIdA} onChange={(e) => setComparePilotIdA(e.target.value)} className="bg-zinc-900 border border-white/10 rounded-lg text-xs px-3 py-2 text-white font-bold focus:border-amber-500 hover:border-white/20 transition-all cursor-pointer">
                       <option value="" disabled>-- Elige el primer piloto --</option>
-                      {allPaddockPilots.map((p) => (
-                        <option key={p.id} value={p.id} disabled={p.id === comparePilotIdB}>
-                          {p.name} ({p.team})
-                        </option>
-                      ))}
+                      {allPaddockPilots.map((p) => (<option key={p.id} value={p.id} disabled={p.id === comparePilotIdB}>{p.name} ({p.team})</option>))}
                     </select>
                   </div>
-
-                  {/* VS Indicator */}
-                  <div className="md:col-span-1 text-center font-black italic text-[#e10600] font-mono text-sm py-2">
-                    VS
-                  </div>
-
-                  {/* Selector Pilot B */}
+                  <div className="md:col-span-1 text-center font-black italic text-[#e10600] font-mono text-sm py-2">VS</div>
                   <div className="md:col-span-5 flex flex-col">
                     <label className="text-[10px] text-red-400 font-mono tracking-wider mb-1 uppercase font-bold">Piloto B (Contendiente)</label>
-                    <select
-                      value={comparePilotIdB}
-                      onChange={(e) => setComparePilotIdB(e.target.value)}
-                      className="bg-zinc-900 border border-white/10 rounded-lg text-xs px-3 py-2 text-white font-bold focus:border-red-500 hover:border-white/20 transition-all cursor-pointer"
-                    >
+                    <select value={comparePilotIdB} onChange={(e) => setComparePilotIdB(e.target.value)} className="bg-zinc-900 border border-white/10 rounded-lg text-xs px-3 py-2 text-white font-bold focus:border-red-500 hover:border-white/20 transition-all cursor-pointer">
                       <option value="" disabled>-- Elige el segundo piloto --</option>
-                      {allPaddockPilots.map((p) => (
-                        <option key={p.id} value={p.id} disabled={p.id === comparePilotIdA}>
-                          {p.name} ({p.team})
-                        </option>
-                      ))}
+                      {allPaddockPilots.map((p) => (<option key={p.id} value={p.id} disabled={p.id === comparePilotIdA}>{p.name} ({p.team})</option>))}
                     </select>
                   </div>
-
                 </div>
 
                 {statsA && statsB ? (
                   <div className="space-y-6">
-                    
-                    {/* Dual Cards Presentation */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Pilot A Card */}
                       <div className="bg-gradient-to-br from-amber-500/5 to-transparent border border-amber-500/20 rounded-2xl p-4 flex items-center gap-4">
                         {statsA.fotoUrl ? (
-                          <img
-                            src={statsA.fotoUrl}
-                            alt={statsA.name}
-                            className="w-16 h-16 rounded-xl object-cover border border-amber-500/40"
-                          />
+                          <img src={statsA.fotoUrl} alt={statsA.name} className="w-16 h-16 rounded-xl object-cover border border-amber-500/40" />
                         ) : (
-                          <div className="w-16 h-16 rounded-xl bg-zinc-850 border border-white/5 flex items-center justify-center font-bold text-lg text-white/30 uppercase">
-                            {statsA.name.substring(0, 2).toUpperCase()}
-                          </div>
+                          <div className="w-16 h-16 rounded-xl bg-zinc-850 border border-white/5 flex items-center justify-center font-bold text-lg text-white/30 uppercase">{statsA.name ? statsA.name.substring(0, 2).toUpperCase() : '??'}</div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className="text-[9px] bg-amber-500/10 text-amber-400 font-bold px-1.5 py-0.5 rounded uppercase font-mono">
-                            {statsA.escuderiaName}
-                          </span>
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 font-bold px-1.5 py-0.5 rounded uppercase font-mono">{statsA.escuderiaName}</span>
                           <h4 className="font-extrabold text-[#e10600] text-lg uppercase truncate mt-0.5">{statsA.name}</h4>
                           <p className="text-[10px] text-white/40 font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-white">{statsA.rating.toFixed(0)}</span> | Cláusula: <span className="text-white">{statsA.clause.toFixed(1)}M</span></p>
                         </div>
                       </div>
-
-                      {/* Pilot B Card */}
                       <div className="bg-gradient-to-br from-red-500/5 to-transparent border border-red-500/20 rounded-2xl p-4 flex items-center gap-4">
                         {statsB.fotoUrl ? (
-                          <img
-                            src={statsB.fotoUrl}
-                            alt={statsB.name}
-                            className="w-16 h-16 rounded-xl object-cover border border-red-500/40"
-                          />
+                          <img src={statsB.fotoUrl} alt={statsB.name} className="w-16 h-16 rounded-xl object-cover border border-red-500/40" />
                         ) : (
-                          <div className="w-16 h-16 rounded-xl bg-zinc-850 border border-white/5 flex items-center justify-center font-bold text-lg text-white/30 uppercase">
-                            {statsB.name.substring(0, 2).toUpperCase()}
-                          </div>
+                          <div className="w-16 h-16 rounded-xl bg-zinc-850 border border-white/5 flex items-center justify-center font-bold text-lg text-white/30 uppercase">{statsB.name ? statsB.name.substring(0, 2).toUpperCase() : '??'}</div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className="text-[9px] bg-red-500/10 text-red-400 font-bold px-1.5 py-0.5 rounded uppercase font-mono">
-                            {statsB.escuderiaName}
-                          </span>
+                          <span className="text-[9px] bg-red-500/10 text-red-400 font-bold px-1.5 py-0.5 rounded uppercase font-mono">{statsB.escuderiaName}</span>
                           <h4 className="font-extrabold text-[#e10600] text-lg uppercase truncate mt-0.5">{statsB.name}</h4>
                           <p className="text-[10px] text-white/40 font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-white">{statsB.rating.toFixed(0)}</span> | Cláusula: <span className="text-white">{statsB.clause.toFixed(1)}M</span></p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Head to Head Co-existence Card */}
                     {(() => {
-                      // Inline direct compute of head to head stats during rendering for maximum reliability
-                      let commonRaces = 0;
-                      let aheadA = 0;
-                      let aheadB = 0;
-                      let qualyA = 0;
-                      let qualyB = 0;
-
+                      let commonRaces = 0, aheadA = 0, aheadB = 0, qualyA = 0, qualyB = 0;
                       statsA.history.forEach((hA: any) => {
                         const matchB = statsB.history.find((hB: any) => hB.splitId === hA.splitId && hB.circuitId === hA.circuitId);
                         if (matchB) {
                           commonRaces++;
-                          // Qualy
                           if (hA.qualyPos < matchB.qualyPos) qualyA++;
                           else if (matchB.qualyPos < hA.qualyPos) qualyB++;
-
-                          // Race Pos
-                          if (hA.isDnfOwnError && !matchB.isDnfOwnError) {
-                            aheadB++;
-                          } else if (!hA.isDnfOwnError && matchB.isDnfOwnError) {
-                            aheadA++;
-                          } else {
+                          if (hA.isDnfOwnError && !matchB.isDnfOwnError) aheadB++;
+                          else if (!hA.isDnfOwnError && matchB.isDnfOwnError) aheadA++;
+                          else {
                             if (hA.racePos < matchB.racePos) aheadA++;
                             else if (matchB.racePos < hA.racePos) aheadB++;
                           }
@@ -2352,80 +1710,47 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                         return (
                           <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-5 text-center">
                             <span className="text-[9px] font-black tracking-[0.25em] text-[#e10600] uppercase font-mono block">MÉTRICAS CARA A CARA EN COEXISTENCIA</span>
-                            <h4 className="text-sm font-bold text-white uppercase italic tracking-tight mt-1 mb-4">
-                              Se han disputado la pista en <span className="text-amber-400 font-mono">{commonRaces} GPs</span> directos
-                            </h4>
-                            
+                            <h4 className="text-sm font-bold text-white uppercase italic tracking-tight mt-1 mb-4">Se han disputado la pista en <span className="text-amber-400 font-mono">{commonRaces} GPs</span> directos</h4>
                             <div className="space-y-4 max-w-xl mx-auto">
-                              
-                              {/* Finishing ahead count */}
                               <div>
                                 <div className="flex justify-between text-xs font-mono mb-1.5">
-                                  <span className="font-extrabold text-amber-400">{statsA.name}: {aheadA} veces</span>
-                                  <span className="text-white/40">Acabó por delante</span>
-                                  <span className="font-extrabold text-red-500">{aheadB} veces: {statsB.name}</span>
+                                  <span className="font-extrabold text-amber-400">{statsA.name}: {aheadA} veces</span><span className="text-white/40">Acabó por delante</span><span className="font-extrabold text-red-500">{aheadB} veces: {statsB.name}</span>
                                 </div>
                                 <div className="w-full bg-white/5 rounded-full h-3 overflow-hidden flex font-mono font-bold text-[9px] text-black">
-                                  <div className="bg-amber-400 h-full flex items-center justify-center transition-all" style={{ width: `${(aheadA / commonRaces) * 100}%` }}>
-                                    {aheadA > 0 && `${((aheadA / commonRaces) * 100).toFixed(0)}%`}
-                                  </div>
-                                  <div className="bg-[#e10600] h-full flex items-center justify-center transition-all" style={{ width: `${(aheadB / commonRaces) * 100}%` }}>
-                                    {aheadB > 0 && `${((aheadB / commonRaces) * 100).toFixed(0)}%`}
-                                  </div>
+                                  <div className="bg-amber-400 h-full flex items-center justify-center transition-all" style={{ width: `${(aheadA / commonRaces) * 100}%` }}>{aheadA > 0 && `${((aheadA / commonRaces) * 100).toFixed(0)}%`}</div>
+                                  <div className="bg-[#e10600] h-full flex items-center justify-center transition-all" style={{ width: `${(aheadB / commonRaces) * 100}%` }}>{aheadB > 0 && `${((aheadB / commonRaces) * 100).toFixed(0)}%`}</div>
                                 </div>
                               </div>
-
-                              {/* Qualy ahead count */}
                               <div>
                                 <div className="flex justify-between text-xs font-mono mb-1.5">
-                                  <span className="font-extrabold text-amber-400">{qualyA} veces</span>
-                                  <span className="text-white/40 font-sans">Mejor Posición de Clasificación</span>
-                                  <span className="font-extrabold text-red-500">{qualyB} veces</span>
+                                  <span className="font-extrabold text-amber-400">{qualyA} veces</span><span className="text-white/40 font-sans">Mejor Posición de Clasificación</span><span className="font-extrabold text-red-500">{qualyB} veces</span>
                                 </div>
                                 <div className="w-full bg-white/5 rounded-full h-3 overflow-hidden flex font-mono font-bold text-[9px] text-black">
-                                  <div className="bg-amber-400 h-full flex items-center justify-center transition-all" style={{ width: `${((qualyA) / ((qualyA + qualyB) || 1)) * 100}%` }}>
-                                    {qualyA > 0 && `${((qualyA / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}
-                                  </div>
-                                  <div className="bg-[#e10600] h-full flex items-center justify-center transition-all" style={{ width: `${((qualyB) / ((qualyA + qualyB) || 1)) * 100}%` }}>
-                                    {qualyB > 0 && `${((qualyB / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}
-                                  </div>
+                                  <div className="bg-amber-400 h-full flex items-center justify-center transition-all" style={{ width: `${((qualyA) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyA > 0 && `${((qualyA / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
+                                  <div className="bg-[#e10600] h-full flex items-center justify-center transition-all" style={{ width: `${((qualyB) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyB > 0 && `${((qualyB / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
                                 </div>
                               </div>
-
-                              {/* PLAN B - AI SCOUTING */}
                               <div className="mt-8 border-t border-white/5 pt-6 text-left">
                                 <div className="flex justify-between items-center mb-3">
                                   <span className="text-[10px] text-white/50 uppercase font-mono tracking-wider font-bold flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> Plan B - Analítica con IA</span>
-                                  <button
-                                    onClick={() => handleGenerateScouting(commonRaces, aheadA, aheadB)}
-                                    disabled={isGeneratingScouting}
-                                    className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 rounded text-[9px] uppercase font-black tracking-widest border border-blue-500/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-                                  >
+                                  <button onClick={() => handleGenerateScouting(commonRaces, aheadA, aheadB)} disabled={isGeneratingScouting} className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 rounded text-[9px] uppercase font-black tracking-widest border border-blue-500/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50">
                                     {isGeneratingScouting ? "Analizando..." : "Generar Scouting Report"}
                                   </button>
                                 </div>
                                 {aiScoutingReport && (
-                                  <div className="bg-black/40 border border-blue-500/20 p-4 rounded-xl shadow-inner">
-                                    <p className="text-xs text-blue-100/80 leading-relaxed font-sans italic">"{aiScoutingReport}"</p>
-                                  </div>
+                                  <div className="bg-black/40 border border-blue-500/20 p-4 rounded-xl shadow-inner"><p className="text-xs text-blue-100/80 leading-relaxed font-sans italic">"{aiScoutingReport}"</p></div>
                                 )}
                               </div>
                             </div>
                           </div>
                         );
                       } else {
-                        return (
-                          <div className="bg-zinc-900 border border-white/5 rounded-2xl p-4 text-center text-xs text-white/40 italic font-mono">
-                            No constan GPs cerrados disputados de forma simultánea en la temporada de este split.
-                          </div>
-                        );
+                        return <div className="bg-zinc-900 border border-white/5 rounded-2xl p-4 text-center text-xs text-white/40 italic font-mono">No constan GPs cerrados disputados de forma simultánea en la temporada de este split.</div>;
                       }
                     })()}
 
-                    {/* Stats Comparison Rows */}
                     <div className="bg-zinc-900 border border-white/5 rounded-2xl p-4 space-y-4">
                       <span className="text-[10px] font-black tracking-widest text-[#e10600] font-mono mb-2 block">ANÁLISIS COMPARATIVO DE TELEMETRÍA MUNDIAL</span>
-                      
                       {[
                         { label: "VALORACIÓN GENERAL (RATING)", valA: statsA.rating, valB: statsB.rating, format: (v: number) => v.toFixed(0), higherIsBetter: true },
                         { label: "PUNTOS GLOBALES SUMADOS", valA: statsA.totalPoints, valB: statsB.totalPoints, format: (v: number) => `${v} pts`, higherIsBetter: true },
@@ -2439,86 +1764,45 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                         { label: "VUELTAS RÁPIDAS (FASTEST LAPS)", valA: statsA.fastestLaps, valB: statsB.fastestLaps, format: (v: number) => `${v}`, higherIsBetter: true },
                         { label: "INCIDENTES / ABANDONOS (DNF)", valA: statsA.dnfs, valB: statsB.dnfs, format: (v: number) => `${v} 💥`, higherIsBetter: false }
                       ].map((metric, mIdx) => {
-                        const isABetter = metric.higherIsBetter 
-                          ? metric.valA > metric.valB 
-                          : metric.valA < metric.valB && metric.valA > 0;
-                        const isBBetter = metric.higherIsBetter 
-                          ? metric.valB > metric.valA 
-                          : metric.valB < metric.valA && metric.valB > 0;
-                        
+                        const isABetter = metric.higherIsBetter ? metric.valA > metric.valB : metric.valA < metric.valB && metric.valA > 0;
+                        const isBBetter = metric.higherIsBetter ? metric.valB > metric.valA : metric.valB < metric.valA && metric.valB > 0;
                         return (
                           <div key={`comp-metric-${mIdx}`} className="border-b border-white/5 last:border-0 pb-3 last:pb-0">
                             <div className="flex justify-between items-center text-xs font-semibold uppercase font-mono tracking-tight text-white/40 mb-1">
-                              <span className={isABetter ? "text-amber-400 font-extrabold" : "text-white/60"}>
-                                {metric.format(metric.valA)}
-                              </span>
+                              <span className={isABetter ? "text-amber-400 font-extrabold" : "text-white/60"}>{metric.format(metric.valA)}</span>
                               <span className="text-[10px] text-center">{metric.label}</span>
-                              <span className={isBBetter ? "text-red-400 font-extrabold" : "text-white/60"}>
-                                {metric.format(metric.valB)}
-                              </span>
+                              <span className={isBBetter ? "text-red-400 font-extrabold" : "text-white/60"}>{metric.format(metric.valB)}</span>
                             </div>
                             <div className="grid grid-cols-2 gap-1 bg-black/20 p-0.5 rounded-lg">
                               <div className="flex justify-end bg-white/[0.01] rounded-l h-2 overflow-hidden relative">
-                                <div 
-                                  className={`h-full rounded-l transition-all duration-500 bg-amber-400`} 
-                                  style={{ 
-                                    width: `${metric.higherIsBetter 
-                                      ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valA / (metric.valA + metric.valB || 1)) * 100 : 0 
-                                      : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valA / (metric.valA + metric.valB || 1))) * 100 : 0}%` 
-                                  }}
-                                ></div>
+                                <div className={`h-full rounded-l transition-all duration-500 bg-amber-400`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valA / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valA / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
                               </div>
                               <div className="flex justify-start bg-white/[0.01] rounded-r h-2 overflow-hidden relative">
-                                <div 
-                                  className={`h-full rounded-r transition-all duration-500 bg-[#e10600]`}
-                                  style={{ 
-                                    width: `${metric.higherIsBetter 
-                                      ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valB / (metric.valA + metric.valB || 1)) * 100 : 0
-                                      : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valB / (metric.valA + metric.valB || 1))) * 100 : 0}%` 
-                                  }}
-                                ></div>
+                                <div className={`h-full rounded-r transition-all duration-500 bg-[#e10600]`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valB / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valB / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
                               </div>
                             </div>
                           </div>
                         );
                       })}
-
                     </div>
-
                   </div>
                 ) : (
-                  <div className="bg-zinc-900 border border-white/5 rounded-2xl p-16 text-center text-white/30 italic">
-                    Configura ambos pilotos rivales de la lista del paddock arriba para iniciar la simulación analítica de rivalidad.
-                  </div>
+                  <div className="bg-zinc-900 border border-white/5 rounded-2xl p-16 text-center text-white/30 italic">Configura ambos pilotos rivales de la lista del paddock arriba para iniciar la simulación analítica de rivalidad.</div>
                 )}
-
               </div>
             )}
 
-            {/* Modal actions footer */}
             <div className="border-t border-white/5 pt-4 mt-6 flex justify-end">
-              <button
-                onClick={() => {
-                  setIsCompareViewOpen(false);
-                  setSelectedPilotForProfileId(null);
-                }}
-                className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs uppercase tracking-wider font-extrabold border border-white/5 cursor-pointer active:scale-95 transition-all"
-              >
-                Cerrar Telemetría
-              </button>
+              <button onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs uppercase tracking-wider font-extrabold border border-white/5 cursor-pointer active:scale-95 transition-all">Cerrar Telemetría</button>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* MODAL F1 TV EN DIRECTO */}
       {isF1TVOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[60] overflow-y-auto p-4 md:p-6 text-left">
           <div className="max-w-7xl mx-auto bg-zinc-950 border border-[#e10600]/30 rounded-3xl shadow-[0_0_50px_rgba(225,6,0,0.15)] p-4 md:p-6 relative my-4 overflow-hidden">
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#e10600]/10 blur-[120px] rounded-full pointer-events-none" />
-
-            {/* Header */}
             <div className="flex justify-between items-center border-b border-[#e10600]/20 pb-4 mb-6 relative z-10">
               <div className="flex items-center gap-4">
                 <div className="bg-[#e10600] text-white font-black italic tracking-tighter text-3xl px-3 py-1 rounded-lg">F1 TV</div>
@@ -2527,62 +1811,28 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                   <h2 className="text-xl font-bold uppercase tracking-tight text-white mt-0.5">On-Boards & Transmisiones</h2>
                 </div>
               </div>
-              <button
-                onClick={() => setIsF1TVOpen(false)}
-                className="p-2 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all border border-white/10"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              <button onClick={() => setIsF1TVOpen(false)} className="p-2 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all border border-white/10"><X className="w-6 h-6" /></button>
             </div>
-
-            {/* Twitch Streams Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10">
-              
-              {/* Piloto Toni */}
               <div className="bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex flex-col group shadow-xl">
                 <div className="bg-zinc-900 border-b border-white/5 px-4 py-3 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    <span className="font-bold text-white uppercase tracking-tight">Cámara: Piloto Toni</span>
-                  </div>
+                  <div className="flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /><span className="font-bold text-white uppercase tracking-tight">Cámara: Piloto Toni</span></div>
                   <span className="text-[10px] font-mono text-white/40 uppercase bg-black/40 px-2 py-1 rounded">@tonicotitular</span>
                 </div>
-                <div className="aspect-video w-full bg-black relative">
-                  <iframe
-                    src={`https://player.twitch.tv/?channel=tonicotitular&parent=${window.location.hostname || 'localhost'}`}
-                    height="100%"
-                    width="100%"
-                    allowFullScreen
-                    className="absolute inset-0"
-                  />
-                </div>
+                <div className="aspect-video w-full bg-black relative"><iframe src={`https://player.twitch.tv/?channel=tonicotitular&parent=${window.location.hostname || 'localhost'}`} height="100%" width="100%" allowFullScreen className="absolute inset-0" /></div>
               </div>
-
-              {/* Piloto Fabi */}
               <div className="bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex flex-col group shadow-xl">
                 <div className="bg-zinc-900 border-b border-white/5 px-4 py-3 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    <span className="font-bold text-white uppercase tracking-tight">Cámara: Piloto Fabi</span>
-                  </div>
+                  <div className="flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /><span className="font-bold text-white uppercase tracking-tight">Cámara: Piloto Fabi</span></div>
                   <span className="text-[10px] font-mono text-white/40 uppercase bg-black/40 px-2 py-1 rounded">@fabiml_204</span>
                 </div>
-                <div className="aspect-video w-full bg-black relative">
-                  <iframe
-                    src={`https://player.twitch.tv/?channel=fabiml_204&parent=${window.location.hostname || 'localhost'}`}
-                    height="100%"
-                    width="100%"
-                    allowFullScreen
-                    className="absolute inset-0"
-                  />
-                </div>
+                <div className="aspect-video w-full bg-black relative"><iframe src={`https://player.twitch.tv/?channel=fabiml_204&parent=${window.location.hostname || 'localhost'}`} height="100%" width="100%" allowFullScreen className="absolute inset-0" /></div>
               </div>
-
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
+
