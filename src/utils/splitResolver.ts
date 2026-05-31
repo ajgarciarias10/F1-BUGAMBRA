@@ -407,12 +407,14 @@ export function computePilotDynamicOVR(pilot: any): number {
  * MODELO DE ANÁLISIS ESTADÍSTICO DE MERCADO (Reutilizable en React Native)
  * Extrae la lógica pura para calcular qué pilotos son mejores inversiones.
  */
+import { POINTS_BY_POSITION } from "../services/economyService";
+
 export function computePilotMarketOpportunities(
   allPilots: any[],
   completedCircuits: any[],
   recommenderStrategy: "balanced" | "momentum" | "budget" | "premium"
 ) {
-  const localPOINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+  const localPOINTS_SCALE = POINTS_BY_POSITION;
 
   return allPilots.map((p: any) => {
     const historyScore: number[] = [];

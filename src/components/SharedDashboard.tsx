@@ -6,6 +6,7 @@ import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Flame, Coins, History, UserMinus, UserPlus, ShieldAlert, Award, Clock, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay } from "lucide-react";
 import { resolveAllSplits, isSplitUnlocked, computePilotMarketOpportunities } from "../utils/splitResolver";
+import { POINTS_BY_POSITION } from "../services/economyService";
 import { PilotRivalryPanel, JequeStrategyPanel } from "./RivalryPanels";
 import { NextRaceWidget } from "./NextRaceWidget";
 
@@ -653,7 +654,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       puntos: e.puntos_constructores || 0
     })).sort((a, b) => b.puntos - a.puntos);
 
-    const localPOINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+    const localPOINTS_SCALE = POINTS_BY_POSITION;
     const rRes: any[] = [];
     (currentSplit.circuitos || []).filter((c: any) => c.completado && c.resultados).forEach((c: any) => {
       rRes.push({
@@ -677,7 +678,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     let totalPoints = 0, victories = 0, podiums = 0, poles = 0, dnfs = 0;
     let cleanRaces = 0, dotds = 0, mvps = 0, fastestLaps = 0;
     const history: any[] = [];
-    const localPOINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+    const localPOINTS_SCALE = POINTS_BY_POSITION;
 
     const splitsToSearch = isGlobalView ? splits : splits.filter(s => s.id === activeSplitId);
 
@@ -1021,7 +1022,7 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
                 </div>
               )}
               <div className="text-right">
-                <p className="text-[9px] text-[#e10600] uppercase font-bold tracking-[0.15em] mb-1">Valor Total de Planta</p>
+                <p className="text-[9px] text-[#e10600] uppercase font-bold tracking-[0.15em] mb-1">Valor Total de Plantilla</p>
                 <div className="flex items-baseline justify-end gap-0.5">
                   <span className="text-2xl font-black italic text-white leading-none">{miEscuderia.valor_total.toFixed(1)}</span><span className="text-sm font-bold text-white/50">M</span>
                 </div>
