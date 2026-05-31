@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   Calendar, 
   Clock, 
@@ -43,6 +43,16 @@ interface TyreStrategyAdvice {
 }
 
 type StrategyDict = Record<string, TyreStrategyAdvice>;
+
+function extractYoutubeId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("?")[0];
+    return u.searchParams.get("v");
+  } catch {
+    return null;
+  }
+}
 
 export function NextRaceWidget({ currentSplit }: NextRaceWidgetProps) {
   // Find the upcoming race (closest date in the calendar)
@@ -281,60 +291,13 @@ Devuelve SOLO un JSON EXACTO con esta estructura:
 
   const meta = weatherMeta(weatherType);
 
-  // Forecast sintético basado en el tiempo configurado por el Administrador
-  const weekendForecast = useMemo(() => {
-    const fp1Temp = Math.round(temperature - 2);
-    const qpTemp = Math.round(temperature - 1);
-
-    let fpClima = "despejado";
-    let qpClima = "nublado";
-    let fpRain = Math.max(0, Math.round(rainProb - 10));
-    let qpRain = Math.max(0, Math.round(rainProb - 5));
-
-    if (weatherType === "lluvia_fuerte" || weatherType === "tormenta") {
-      fpClima = "lluvia_ligera";
-      qpClima = "lluvia_fuerte";
-      fpRain = Math.max(40, rainProb - 20);
-      qpRain = Math.max(60, rainProb - 5);
-    } else if (weatherType === "lluvia_ligera") {
-      fpClima = "nublado";
-      qpClima = "lluvia_ligera";
-      fpRain = 20;
-      qpRain = 40;
-    } else if (weatherType === "despejado") {
-      fpClima = "despejado";
-      qpClima = "despejado";
-      fpRain = 5;
-      qpRain = 5;
-    }
-
-    return [
-      {
-        day: "Sábado",
-        event: "Entrenamientos Libres (FP1 / FP2)",
-        clima: fpClima,
-        temp: fp1Temp,
-        rain: fpRain,
-        icon: fpClima === "despejado" ? <Sun className="w-4 h-4 text-amber-400" /> : fpClima === "lluvia_ligera" ? <CloudRain className="w-4 h-4 text-teal-400" /> : <Cloud className="w-4 h-4 text-sky-400" />
-      },
-      {
-        day: "Domingo",
-        event: "Clasificación oficial (QP)",
-        clima: qpClima,
-        temp: qpTemp,
-        rain: qpRain,
-        icon: qpClima === "lluvia_fuerte" ? <CloudRain className="w-4 h-4 text-indigo-400" /> : qpClima === "lluvia_ligera" ? <CloudRain className="w-4 h-4 text-teal-450" /> : qpClima === "despejado" ? <Sun className="w-4 h-4 text-amber-400" /> : <Cloud className="w-4 h-4 text-sky-400" />
-      },
-      {
-        day: "Domingo",
-        event: "Carrera (Gran Premio Oficial)",
-        clima: weatherType,
-        temp: temperature,
-        rain: rainProb,
-        icon: meta.icon
-      }
-    ];
-  }, [weatherType, temperature, rainProb, meta]);
+  const isRaceWeek = useMemo(() => {
+    if (!nextCircuit?.fecha || isCompleted) return false;
+    const raceDate = new Date(`${nextCircuit.fecha}T${nextCircuit.hora || "00:00"}:00`).getTime();
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    return raceDate - now <= sevenDays && raceDate > now;
+  }, [nextCircuit, isCompleted]);
 
   if (!nextCircuit) {
     return (
@@ -517,6 +480,28 @@ Devuelve SOLO un JSON EXACTO con esta estructura:
 
         </div>
       </div>
+
+      {isRaceWeek && nextCircuit.hotlap_url && (() => {
+        const videoId = extractYoutubeId(nextCircuit.hotlap_url);
+        if (!videoId) return null;
+        return (
+          <div className="mt-4 bg-black/90 border border-white/5 rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/5 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-[#e10600] block shrink-0" />
+              <span className="text-[10px] font-mono uppercase tracking-widest text-white/60">Hotlap Referencia · GP de {nextCircuit.nombre}</span>
+            </div>
+            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+              <iframe
+                className="absolute inset-0 w-full h-full"
+                src={`https://www.youtube.com/embed/${videoId}`}
+                title={`Hotlap GP ${nextCircuit.nombre}`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

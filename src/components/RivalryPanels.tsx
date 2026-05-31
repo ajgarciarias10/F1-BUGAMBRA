@@ -1,77 +1,100 @@
 import { useMemo, useState, useEffect } from "react";
 import { Trophy, TrendingUp, ShieldAlert, ArrowRight, Sparkles, Users, ChartBar, Loader2 } from "lucide-react";
 import { db } from "../services/firebase";
-import { doc, updateDoc, deleteField } from "firebase/firestore";
-import { buildRivalryTable, getRivalryGroupMember, computePilotDynamicOVR } from "../utils/splitResolver";
-import type { SplitRivalries } from "../utils/splitResolver";
+import { doc, updateDoc } from "firebase/firestore";
+import { buildRivalryTable, computePilotDynamicOVR } from "../utils/splitResolver";
 import { rivalryStyles as s } from "./rivalryStyles";
 
 const formatMillions = (value: number) => `${value.toFixed(1)}M`;
-const getPilotValue = (pilot: any) => pilot.precio_compra_split ?? pilot.clausula_actual ?? ((pilot.rating_piloto || 70) * 0.5) ?? 10;
+const getPilotValue = (pilot: any): number => {
+  if (pilot.precio_compra_split != null) return pilot.precio_compra_split;
+  if (pilot.clausula_actual != null) return pilot.clausula_actual;
+  return (pilot.rating_piloto || 70) * 0.5;
+};
 const getStatusLabel = (rank: number) => `Piloto ${rank}`;
 
-const sanitizeFirestoreData = (value: any): any => {
-  if (value === undefined) return undefined;
-  if (Array.isArray(value)) return value.map(sanitizeFirestoreData).filter((item) => item !== undefined);
-  if (value && typeof value === "object") {
-    return Object.entries(value).reduce((acc: Record<string, any>, [key, val]) => {
-      const sanitized = sanitizeFirestoreData(val);
-      if (sanitized !== undefined) {
-        acc[key] = sanitized;
-      }
-      return acc;
-    }, {});
-  }
-  return value;
-};
-
-function getWeaknessHints(pilot: any) {
+function getWeaknessHints(pilot: any): string[] {
   const rating = computePilotDynamicOVR(pilot);
   const points = pilot.puntos_piloto || 0;
   const wins = pilot.victorias || 0;
   const podiums = pilot.podios || 0;
   const dnfs = pilot.dnfs || 0;
   const poles = pilot.poles || 0;
+  const races = Math.max(1, (wins + podiums + (pilot.carreras_limpias || 0) + dnfs));
   const hints: string[] = [];
 
-  if (points < 30) hints.push("Refuerza tu ritmo de carrera para que cada GP rinda puntos constantes.");
-  if (dnfs > 0) hints.push("Reduce abandonos: cada DNF erosiona tu posición de mercado y tu confianza en carrera.");
-  if (wins === 0 && podiums > 0) hints.push("Convierte podios en victorias con una gestión más firme de neumáticos en las últimas vueltas.");
-  if (poles === 0 && points > 20) hints.push("Ataca la clasificación: al ser una sesión única por tiempo (sin Q1/Q2/Q3), lograr una vuelta perfecta en los últimos minutos te dará un bonus de pole inmediato.");
-  if (rating >= 80) hints.push("Tu base es sólida, pero cuidado con las sanciones: la limpieza es clave para mantener el impulso.");
-  if (hints.length === 0) hints.push("Buen perfil competitivo; añade algo de agresividad en las salidas o en la gestión de gomas para subir de nivel.");
+  // DNF es la señal más crítica — siempre priorizar
+  if (dnfs >= 2) hints.push(`${dnfs} abandonos penalizan tu OVR y tu posición de mercado. Cero errores propios es la prioridad del split.`);
+  else if (dnfs === 1) hints.push("Un abandono ya pesa en tu rating. Cuida los neumáticos en los primeros sectores para no repetirlo.");
 
-  return hints.slice(0, 4);
+  // Eficiencia de puntos: pocos puntos por carrera
+  const avgPts = points / races;
+  if (avgPts < 5 && points < 40) hints.push("Promedio bajo por GP. En una carrera corta al 35%, cada vuelta de posición en la salida vale más que en F1 real.");
+
+  // Sin victorias pero con podios: muy cerca
+  if (wins === 0 && podiums >= 2) hints.push("Dos podios sin victoria: la brecha es mental. Arriesga más en la frenada del sector 3 cuando ruedas 2º.");
+  else if (wins === 0 && podiums === 1) hints.push("Un podio en el casillero. La regularidad puntúa más que buscar la victoria a toda costa en estas carreras cortas.");
+
+  // Sin poles con buena puntuación
+  if (poles === 0 && points >= 30) hints.push("Buena carrera, clasificación mejorable. La vuelta de pole en sesión libre de tiempo es todo o nada: usa los neumáticos blandos al límite en el intento final.");
+
+  // Rendimiento alto — amenaza para el rival
+  if (rating >= 83) hints.push(`OVR ${rating} — rival peligroso. Su fuerte es la consistencia; busca presionarle en clasificación donde el margen es mínimo.`);
+  else if (rating >= 75 && wins >= 1) hints.push("Perfil ganador consolidado. La amenaza real viene si encadena otra victoria: actúa antes de que gane confianza.");
+
+  // Muy pocos puntos — principiante o split nuevo
+  if (points === 0) hints.push("Sin puntos registrados aún. Imposible estimar su nivel real; trátalo como incógnita y cúbrete en salida.");
+
+  // Fallback genérico si no hay señales claras
+  if (hints.length === 0) hints.push("Perfil equilibrado sin puntos débiles evidentes. Monitoriza su ritmo en clasificación para encontrar la ventana de ataque.");
+
+  return hints.slice(0, 3);
 }
 
-async function fetchAiAdviceFromApi(pilot: any, split: any): Promise<string[]> {
+async function fetchAiAdviceFromApi(pilot: any): Promise<string[]> {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   if (!apiKey) {
-    return getWeaknessHints(pilot); // Fallback al algoritmo local si no hay API configurada
+    return getWeaknessHints(pilot);
   }
 
-  const prompt = `Eres el ingeniero de pista IA de F1 Bugambra. 
-Analiza a este piloto: ${pilot.nombre}
-OVR: ${computePilotDynamicOVR(pilot)}
-Puntos: ${pilot.puntos_piloto || 0}
-Victorias: ${pilot.victorias || 0}
-Podios: ${pilot.podios || 0}
-Abandonos: ${pilot.dnfs || 0}
+  const ovr = computePilotDynamicOVR(pilot);
+  const races = Math.max(1, (pilot.victorias || 0) + (pilot.podios || 0) + (pilot.carreras_limpias || 0) + (pilot.dnfs || 0));
+  const avgPts = ((pilot.puntos_piloto || 0) / races).toFixed(1);
 
-Contexto:
-Clasificación única por tiempo (sin Q1/Q2/Q3). Carrera al 35% de vueltas.
+  const prompt = `Eres el ingeniero de pista de F1 Bugambra, una liga virtual entre amigos con formato diferente al F1 real:
+- Clasificación: sesión única de vuelta rápida (no Q1/Q2/Q3). Un intento perfecto al final lo decide todo.
+- Carrera: 35% de vueltas del GP real. Las salidas y la gestión de neumáticos en los primeros sectores son determinantes.
+- Sistema de puntos: 16-13-11-9-8-7-6-5-4-3-2-1 para los 12 primeros. Pole bonus: +2 pts.
+- Rating: OVR dinámico que mezcla base del piloto con rendimiento acumulado.
 
-Dame 3 consejos estratégicos cortos (máximo 15 palabras). Un consejo por línea. Sin viñetas, sin guiones, sin números al inicio.`;
+Datos de ${pilot.nombre}:
+- OVR actual: ${ovr}
+- Puntos: ${pilot.puntos_piloto || 0} (media ${avgPts} por GP)
+- Victorias: ${pilot.victorias || 0} | Podios: ${pilot.podios || 0} | Poles: ${pilot.poles || 0}
+- Abandonos propios: ${pilot.dnfs || 0} | Carreras limpias: ${pilot.carreras_limpias || 0}
+
+Escribe 3 consejos concretos para batir a este rival en el próximo GP de Bugambra. Sé específico con el formato de la liga. Máximo 20 palabras por consejo. Sin viñetas ni numeración. Un consejo por línea.`;
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: "gpt-3.5-turbo", messages: [{ role: "system", content: "Eres un ingeniero experto en telemetría de Fórmula 1." }, { role: "user", content: prompt }], temperature: 0.7 })
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: "Eres un ingeniero de pista experto en ligas virtuales de Fórmula 1 con formato de carrera corta. Conoces las diferencias entre el formato Bugambra y el F1 real." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.65
+      })
     });
     if (!response.ok) throw new Error("Error API OpenAI");
     const data = await response.json();
-    return data.choices[0].message.content.split('\n').map((l: string) => l.trim().replace(/^[-*•]\s*/, '')).filter((l: string) => l.length > 0).slice(0, 3);
+    return data.choices[0].message.content
+      .split('\n')
+      .map((l: string) => l.trim().replace(/^[-*•\d.]\s*/, ''))
+      .filter((l: string) => l.length > 0)
+      .slice(0, 3);
   } catch (error) {
     console.error("AI Fetch Error:", error);
     return getWeaknessHints(pilot);
@@ -84,10 +107,15 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
     return (miEscuderia.pilotos || []).find((p: any) => p.id === userPilotId || p.id === miEscuderia.pilotos?.find((x: any) => x.id === userPilotId)?.id);
   }, [miEscuderia, userPilotId]);
 
+  const resolvedRivalries = useMemo(() => {
+    if (split?.rivalries?.groups && Array.isArray(split.rivalries.groups)) return split.rivalries;
+    return buildRivalryTable(split);
+  }, [split]);
+
   const pilotGroup = useMemo(() => {
-    if (!split?.rivalries?.groups || !pilot) return null;
-    return split.rivalries.groups.find((group: any) => group.members.some((member: any) => member.id === pilot.id));
-  }, [split, pilot]);
+    if (!resolvedRivalries?.groups || !pilot) return null;
+    return resolvedRivalries.groups.find((group: any) => group.members.some((member: any) => member.id === pilot.id));
+  }, [resolvedRivalries, pilot]);
 
   if (!pilot || !pilotGroup) {
     return (
@@ -128,7 +156,7 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
           newAdvices[p.id] = p.ai_advice;
           hasChanges = true;
         } else {
-          const hints = await fetchAiAdviceFromApi(p, split);
+          const hints = await fetchAiAdviceFromApi(p);
           if (!isMounted) return;
           newAdvices[p.id] = hints;
           hasChanges = true;
@@ -192,7 +220,6 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
 
         <div className="grid gap-4">
           {rivals.map((rival: any) => {
-            const rivalRating = computePilotDynamicOVR(rival);
             return (
               <div key={rival.id} className={s.cardRival}>
                 <div className={s.glowLeft} />
@@ -210,7 +237,7 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
                   </div>
                   <div className={s.statBox}>
                     <p className={s.statTitle}>Valor</p>
-                    <p className={s.statValRed}>{formatMillions(getPilotValue(rival.price))}</p>
+                    <p className={s.statValRed}>{formatMillions(rival.price)}</p>
                   </div>
                 </div>
               </div>
@@ -454,10 +481,6 @@ export function JequeStrategyPanel({ split, miEscuderia, recommendedPilots }: { 
 }
 
 export function AdminRivalryControlPanel({ split }: { split: any }) {
-  const [groupType, setGroupType] = useState<"pair" | "triad">("pair");
-  const [selectedPilots, setSelectedPilots] = useState<string[]>(["", "", ""]);
-  const [adminMessage, setAdminMessage] = useState("");
-
   const teamsByPilotId = useMemo(() => {
     const map: Record<string, any> = {};
     split?.equipos?.forEach((team: any) => {
@@ -468,109 +491,12 @@ export function AdminRivalryControlPanel({ split }: { split: any }) {
     return map;
   }, [split]);
 
-  const pilots = useMemo(() => {
-    return (split?.equipos || []).flatMap((team: any) => (team.pilotos || []).map((pilot: any) => ({
-      ...pilot,
-      equipoId: team.id,
-      equipoNombre: team.nombre
-    })));
-  }, [split]);
-
   const currentRivalries = useMemo(() => {
     if (split?.rivalries && Array.isArray(split.rivalries.groups) && Array.isArray(split.rivalries.soloPilots)) {
       return split.rivalries;
     }
     return buildRivalryTable(split);
   }, [split]);
-
-  const assignedPilotIds = useMemo(() => {
-    const ids: string[] = [];
-    currentRivalries.groups.forEach((group: any) => {
-      group.members.forEach((member: any) => ids.push(member.id));
-    });
-    currentRivalries.soloPilots?.forEach((pilot: any) => ids.push(pilot.id));
-    return new Set(ids);
-  }, [currentRivalries]);
-
-  const selectedPilotCount = groupType === "triad" ? 3 : 2;
-  const selectedPilotIds = selectedPilots.slice(0, selectedPilotCount).filter(Boolean);
-
-  const handleClearRivalries = async () => {
-    if (!split?.id) return;
-    try {
-      setAdminMessage("Anulando rivalidades de Split 1...");
-      await updateDoc(doc(db, "splits", split.id), { rivalries: { groups: [], soloPilots: [] } });
-      setAdminMessage("Rivalidades de Split 1 anuladas. Ahora el admin puede asignarlas manualmente.");
-    } catch (err: any) {
-      setAdminMessage("Error anulando rivalidades: " + (err.message || err));
-    }
-  };
-
-  const handleRestoreDefault = async () => {
-    if (!split?.id) return;
-    try {
-      setAdminMessage("Restaurando rivalidades por defecto...");
-      await updateDoc(doc(db, "splits", split.id), { rivalries: deleteField() });
-      setAdminMessage("Rivalidades restauradas al comportamiento por defecto.");
-    } catch (err: any) {
-      setAdminMessage("Error restaurando rivalidades: " + (err.message || err));
-    }
-  };
-
-  const handleAssignGroup = async () => {
-    if (!split?.id || selectedPilotIds.length !== selectedPilotCount) {
-      setAdminMessage(`Selecciona ${selectedPilotCount} pilotos distintos para crear un grupo de rivalidad.`);
-      return;
-    }
-
-    const uniquePilots = new Set(selectedPilotIds);
-    if (uniquePilots.size !== selectedPilotCount) {
-      setAdminMessage("Los pilotos seleccionados deben ser distintos.");
-      return;
-    }
-
-    const members = selectedPilotIds.map((pilotId) => getRivalryGroupMember(split, pilotId)).filter(Boolean) as any[];
-    if (members.length !== selectedPilotCount) {
-      setAdminMessage("No se encontró uno de los pilotos seleccionados.");
-      return;
-    }
-
-    const statusRank = Math.min(...members.map((member) => member.statusRank));
-    const averageRating = members.reduce((sum, member) => sum + member.rating, 0) / members.length;
-    const spread = Math.max(...members.map((member) => member.rating)) - Math.min(...members.map((member) => member.rating));
-    const groupScore = groupType === "triad"
-      ? Math.max(0, averageRating - spread * 0.3)
-      : Math.max(0, averageRating - spread * 0.4);
-
-    const newGroup = {
-      id: `${split.id}-manual-${groupType}-${selectedPilotIds.join("-")}-${Date.now()}`,
-      statusRank,
-      type: groupType,
-      members,
-      groupScore
-    };
-
-    const existingGroups = currentRivalries.groups.filter((group: any) =>
-      !group.members.some((member: any) => selectedPilotIds.includes(member.id))
-    );
-    const existingSolo = (currentRivalries.soloPilots || []).filter((pilot: any) => !selectedPilotIds.includes(pilot.id));
-    const updatedGroups = [...existingGroups, newGroup];
-
-    try {
-      setAdminMessage("Guardando grupo manual...");
-      const payload = sanitizeFirestoreData({
-        rivalries: {
-          groups: updatedGroups,
-          soloPilots: existingSolo
-        }
-      });
-      await updateDoc(doc(db, "splits", split.id), payload);
-      setSelectedPilots(["", "", ""]);
-      setAdminMessage("Grupo de rivalidad manual guardado correctamente.");
-    } catch (err: any) {
-      setAdminMessage("Error guardando rivalidad: " + (err.message || err));
-    }
-  };
 
   const financials = useMemo(() => {
     const data: Record<string, { teamName: string; classification: number; race: number; total: number }> = {};
@@ -581,7 +507,6 @@ export function AdminRivalryControlPanel({ split }: { split: any }) {
     });
 
     const assignTeam = (pilotId: string) => teamsByPilotId[pilotId]?.teamId || "sin_equipo";
-
     const classificationRewards = [1.0, 0.5, 0];
     const raceRewards = [2.0, 1.0, 0];
 
@@ -591,7 +516,6 @@ export function AdminRivalryControlPanel({ split }: { split: any }) {
         if (!data[teamId]) {
           data[teamId] = { teamName: teamsByPilotId[result.pilotoId]?.teamName || "Sin Escudería", classification: 0, race: 0, total: 0 };
         }
-
         if (result.qualyPos >= 1 && result.qualyPos <= 2) {
           data[teamId].classification += classificationRewards[result.qualyPos - 1];
         }
@@ -613,87 +537,12 @@ export function AdminRivalryControlPanel({ split }: { split: any }) {
             <Users className="w-5 h-5 text-[#e10600]" />
             <h2 className={s.headerTitle}>Panel de Control de Rivalidades</h2>
           </div>
-          <p className={s.headerDesc}>Visualiza todos los emparejamientos del split actual y vigila el flujo financiero de cada rivalidad.</p>
+          <p className={s.headerDesc}>Rivalidades generadas automáticamente por el algoritmo de emparejamiento. Vigila el flujo financiero de cada grupo.</p>
         </div>
         <span className={s.jequeBadge}>Modo Administrador</span>
       </div>
 
       <div className={s.adminGrid}>
-        {split?.id === "split_1" && (
-          <div className={`${s.adminItem} space-y-4`}>
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleClearRivalries}
-                  className="bg-[#e10600] hover:bg-[#ff2d1e] text-white uppercase tracking-[0.18em] text-[10px] font-bold px-4 py-2 rounded-2xl"
-                >
-                  Anular rivalidades Split 1
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRestoreDefault}
-                  className="bg-white/5 hover:bg-white/10 text-white uppercase tracking-[0.18em] text-[10px] font-bold px-4 py-2 rounded-2xl border border-white/10"
-                >
-                  Restaurar por defecto
-                </button>
-              </div>
-              <p className="text-[11px] text-white/50">Usa estos controles para vaciar las rivalidades de Split 1 y definir pares manualmente.</p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`rounded-full px-4 py-2 text-[10px] uppercase tracking-[0.18em] font-bold ${groupType === "pair" ? "bg-[#e10600] text-white" : "bg-white/5 text-white/60 border border-white/10"}`}
-                onClick={() => setGroupType("pair")}
-              >
-                Dúo
-              </button>
-              <button
-                type="button"
-                className={`rounded-full px-4 py-2 text-[10px] uppercase tracking-[0.18em] font-bold ${groupType === "triad" ? "bg-[#e10600] text-white" : "bg-white/5 text-white/60 border border-white/10"}`}
-                onClick={() => setGroupType("triad")}
-              >
-                Trío
-              </button>
-            </div>
-
-            <div className={`grid gap-3 ${groupType === "triad" ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-              {Array.from({ length: selectedPilotCount }).map((_, index) => (
-                <label key={index} className="block text-[10px] uppercase tracking-[0.24em] text-white/40">
-                  Piloto {String.fromCharCode(65 + index)}
-                  <select
-                    value={selectedPilots[index]}
-                    onChange={(e) => setSelectedPilots((prev) => {
-                      const next = [...prev];
-                      next[index] = e.target.value;
-                      return next;
-                    })}
-                    className="mt-2 w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none"
-                  >
-                    <option value="">Seleccionar piloto</option>
-                    {pilots.map((pilot: any) => (
-                      <option key={pilot.id} value={pilot.id}>
-                        {pilot.nombre} ({pilot.equipoNombre})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleAssignGroup}
-              className="w-full bg-[#131315] border border-[#e10600]/20 text-white uppercase tracking-[0.18em] text-[10px] font-bold py-3 rounded-3xl"
-            >
-              Asignar grupo manual
-            </button>
-
-            {adminMessage && <p className="text-[11px] text-white/70">{adminMessage}</p>}
-          </div>
-        )}
-
         <div className={s.adminBox}>
           <p className={s.adminBoxTitle}>Emparejamientos del split</p>
           <div className="space-y-3">

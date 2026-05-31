@@ -13,7 +13,8 @@ export interface RaceResult {
   fastestLap: boolean;
 }
 
-const POINTS_SCALE = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+import { POINTS_BY_POSITION } from "./economyService";
+const POINTS_SCALE = POINTS_BY_POSITION; // [16, 13, 11, 9, 7, 6, 5, 4, 3, 2, 2, 1]
 
 export async function processRace(splitId: string, circuitoId: string, results: RaceResult[]) {
   try {
@@ -349,3 +350,4 @@ export async function inheritRatingsFromPrevSplit(
     return { fixed: 0, message: `Error al heredar ratings: ${error.message}` };
   }
 }
+

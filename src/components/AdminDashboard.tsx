@@ -2,14 +2,15 @@ import React, { useState, useEffect, useMemo } from "react";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { processRace, RaceResult, recalcSplit1PilotPoints, inheritRatingsFromPrevSplit } from "../services/raceProcessor";
-import { auth, db } from "../services/firebase";
+import { procesarEconomiaCarrera, procesarEconomiaRetroactivaSplit } from "../services/economyService";
+import { db } from "../services/firebase";
 import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot } from "firebase/firestore";
-import { updatePassword } from "firebase/auth";
-import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon, Lock, ShieldAlert } from "lucide-react";
+import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { resolveAllSplits, isSplitUnlocked } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
 import { AdminRivalryControlPanel } from "./RivalryPanels";
+import { EconomyAdminPanel } from "./EconomyAdminPanel";
 
 const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
   if (!circuitos || circuitos.length === 0) return null;
@@ -53,7 +54,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [plantilla, setPlantilla] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState<"championship" | "suggestions">("championship");
+  const [adminTab, setAdminTab] = useState<"championship" | "suggestions" | "economy">("championship");
 
   // ─── MIGRACIONES AUTOMÁTICAS AL MONTAR ───────────────────────────────────────
   // Se ejecutan UNA SOLA VEZ. Cada función tiene su propia guardia interna
@@ -176,6 +177,10 @@ export function AdminDashboard() {
   const [selectedCircuitoId, setSelectedCircuitoId] = useState("");
   const [isEditingFinished, setIsEditingFinished] = useState(false);
   const [isActaCerrada, setIsActaCerrada] = useState(false);
+  const [procesandoEconomia, setProcesandoEconomia] = useState(false);
+  const [economiaMsg, setEconomiaMsg] = useState("");
+  const [procesandoRetro, setProcesandoRetro] = useState(false);
+  const [retroLog, setRetroLog] = useState<string[]>([]);
 
   // Form State
   const [results, setResults] = useState<Record<string, Partial<RaceResult>>>({});
@@ -208,6 +213,8 @@ export function AdminDashboard() {
   // Schedule State
   const [fechaVal, setFechaVal] = useState("");
   const [horaVal, setHoraVal] = useState("");
+  const [hotlapUrl, setHotlapUrl] = useState("");
+  const [numeroCarrera, setNumeroCarrera] = useState<number>(1);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Auto-select next circuit on load or when splits change
@@ -233,6 +240,8 @@ export function AdminDashboard() {
       
       setFechaVal(circuito?.fecha || "");
       setHoraVal(circuito?.hora || "");
+      setHotlapUrl(circuito?.hotlap_url || "");
+      setNumeroCarrera(circuito?.numero_carrera ?? 1);
       
       if (circuito?.completado && circuito.resultados) {
         setIsEditingFinished(true);
@@ -258,7 +267,9 @@ export function AdminDashboard() {
       const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
       await updateDoc(ref, {
         fecha: fechaVal,
-        hora: horaVal
+        hora: horaVal,
+        hotlap_url: hotlapUrl.trim() || null,
+        numero_carrera: numeroCarrera
       });
       setMsg("Programación de la carrera guardada correctamente.");
       setTimeout(() => setMsg(""), 4000);
@@ -587,6 +598,12 @@ export function AdminDashboard() {
               // que ya incluye todos los ajustes de carrera aplicados por processRace.
               const inheritedRating = p.rating_piloto ?? 70;
 
+              // El precio de compra del split determina las nuevas valoraciones:
+              // mantener = precio × 3, clausula = precio × 2
+              const precioCompra = p.precio_compra_split ?? 10;
+              const mantenerInicial = Math.round(precioCompra * 3 * 10) / 10;
+              const clausulaInicial = Math.round(precioCompra * 2 * 10) / 10;
+
               await setDoc(doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, prevPilotDoc.id), {
                 id: prevPilotDoc.id,
                 nombre: p.nombre,
@@ -596,11 +613,15 @@ export function AdminDashboard() {
                 poles: 0,
                 dnfs: 0,
                 carreras_limpias: 0,
-                rating_piloto: inheritedRating,        // ← Rating final heredado del split anterior
-                precio_compra_split: p.precio_compra_split ?? 10,
-                clausula_actual: p.clausula_actual ?? 15,
-                mantener_actual: p.mantener_actual ?? 15,
-                precio_carrera_anterior: p.precio_carrera_anterior ?? 10
+                base_rating: inheritedRating,
+                rating_piloto: inheritedRating,
+                precio_compra_split: precioCompra,
+                mantener_actual: mantenerInicial,
+                clausula_actual: clausulaInicial,
+                mantener_inicial_split: mantenerInicial,  // ← referencia fija para el decay
+                clausula_inicial_split: clausulaInicial,
+                precio_carrera_anterior: mantenerInicial,
+                historial_precios: {}
               });
               pilotsInitialized++;
             }
@@ -760,10 +781,25 @@ export function AdminDashboard() {
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
             )}
           </button>
+          <button
+            onClick={() => setAdminTab("economy")}
+            className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
+              adminTab === "economy"
+                ? "text-white bg-white/5"
+                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
+            }`}
+          >
+            💰 Economía
+            {adminTab === "economy" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
+            )}
+          </button>
         </div>
 
         {adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
+        ) : adminTab === "economy" ? (
+          <EconomyAdminPanel splits={splits} />
         ) : (
           <>
             {/* Navegación de Splits */}
@@ -866,14 +902,47 @@ export function AdminDashboard() {
           </div>
           
           <div className="grid grid-cols-1 max-w-xl gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Nº Carrera en Split</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={numeroCarrera}
+                  onChange={(e) => setNumeroCarrera(parseInt(e.target.value) || 1)}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors text-center"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Fecha de Carrera</label>
+                <input
+                  type="date"
+                  value={fechaVal}
+                  onChange={(e) => setFechaVal(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Hora de Carrera</label>
+                <input
+                  type="time"
+                  value={horaVal}
+                  onChange={(e) => setHoraVal(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
+                />
+              </div>
+            </div>
             <div>
-              <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Fecha de Carrera</label>
+              <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">URL Hotlap del Circuito (YouTube)</label>
               <input
-                type="date"
-                value={fechaVal}
-                onChange={(e) => setFechaVal(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
+                type="url"
+                value={hotlapUrl}
+                onChange={(e) => setHotlapUrl(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors font-mono"
               />
+              <p className="text-[9px] text-white/30 mt-1 font-mono">Se mostrará a los pilotos durante la semana del GP (7 días antes de la carrera).</p>
             </div>
           </div>
           
@@ -917,15 +986,36 @@ export function AdminDashboard() {
               )}
 
               {isEditingFinished && !isActaCerrada && (
-                <button 
+                <button
                   onClick={handleCerrarActa}
                   className="px-6 py-3 rounded-lg border border-red-500/30 text-red-500 text-xs font-black uppercase hover:bg-red-500/10 transition-all"
                 >
                   Cerrar Acta
                 </button>
               )}
-              
-              <button 
+
+              {isActaCerrada && (
+                <button
+                  disabled={procesandoEconomia}
+                  onClick={async () => {
+                    setProcesandoEconomia(true);
+                    setEconomiaMsg("");
+                    const result = await procesarEconomiaCarrera(
+                      selectedSplitId,
+                      selectedCircuitoId,
+                      getCircuitName()
+                    );
+                    setEconomiaMsg(result.message);
+                    setProcesandoEconomia(false);
+                  }}
+                  className="px-6 py-3 rounded-lg border border-amber-500/40 text-amber-400 text-xs font-black uppercase hover:bg-amber-500/10 transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {procesandoEconomia ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {procesandoEconomia ? "Procesando..." : "Procesar Economía"}
+                </button>
+              )}
+
+              <button
                 onClick={handleSubmit}
                 disabled={loading || isActaCerrada}
                 className="group relative bg-[#e10600] px-8 py-3 rounded-lg font-black text-xs uppercase hover:bg-red-700 transition-all shadow-xl shadow-red-900/30 overflow-hidden active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
@@ -937,6 +1027,12 @@ export function AdminDashboard() {
               </button>
             </div>
           </div>
+
+          {economiaMsg && (
+            <div className="mt-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-400 font-mono">
+              {economiaMsg}
+            </div>
+          )}
 
           <AnimatePresence>
             {msg && (
@@ -1326,100 +1422,6 @@ export function AdminDashboard() {
           </div>
         </section>
 
-        {/* Change Admin Password Section */}
-        <section className="mt-12 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
-          
-          <div className="mb-6">
-            <h2 className="text-xl font-black italic tracking-tighter text-white flex items-center gap-3 lowercase">
-              <span className="w-1.5 h-6 bg-amber-500 block" />
-              Seguridad del Administrador
-            </h2>
-            <p className="text-[10px] text-white/40 uppercase tracking-widest mt-2 font-mono">
-              Cambia la contraseña de tu cuenta actual de forma local
-            </p>
-          </div>
-
-          <form 
-            className="max-w-md space-y-4 relative z-10"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const form = e.target as HTMLFormElement;
-              const newPass = (form.elements.namedItem('newPass') as HTMLInputElement).value;
-              const confirmPass = (form.elements.namedItem('confirmPass') as HTMLInputElement).value;
-              
-              if (newPass !== confirmPass) {
-                setMsg("Error: Las contraseñas no coinciden");
-                return;
-              }
-              if (newPass.length < 6) {
-                setMsg("Error: La contraseña debe tener al menos 6 caracteres");
-                return;
-              }
-
-              const user = auth.currentUser;
-              if (!user) {
-                setMsg("Error: No estás autenticado actualmente");
-                return;
-              }
-
-              setLoading(true);
-              try {
-                await updatePassword(user, newPass);
-                setMsg("¡Contraseña de administrador actualizada con éxito!");
-                form.reset();
-              } catch (error: any) {
-                if (error.code === 'auth/requires-recent-login') {
-                  setMsg("Error: Por seguridad, debes cerrar sesión y volver a entrar antes de cambiar la contraseña.");
-                } else {
-                  setMsg(`Error al cambiar contraseña: ${error.message}`);
-                }
-              } finally {
-                setLoading(false);
-              }
-            }}
-          >
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex gap-3 text-amber-500/90 text-xs mb-4">
-              <ShieldAlert className="w-5 h-5 flex-shrink-0" />
-              <p>Esta acción cambiará la contraseña de la cuenta con la que has iniciado sesión. Asegúrate de guardarla en un lugar seguro.</p>
-            </div>
-            
-            <div>
-              <label className="block text-[10px] uppercase tracking-widest text-white/50 mb-1.5 font-bold">Nueva Contraseña</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-3 text-white/30" />
-                <input 
-                  type="password" 
-                  name="newPass"
-                  required
-                  placeholder="Mínimo 6 caracteres"
-                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-xs outline-none focus:border-amber-500 transition-colors text-white"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase tracking-widest text-white/50 mb-1.5 font-bold">Confirmar Nueva Contraseña</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-3 text-white/30" />
-                <input 
-                  type="password" 
-                  name="confirmPass"
-                  required
-                  placeholder="Repite la contraseña"
-                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-xs outline-none focus:border-amber-500 transition-colors text-white"
-                />
-              </div>
-            </div>
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full bg-amber-500 hover:bg-amber-600 text-black font-black text-xs uppercase tracking-widest py-3 rounded-lg transition-colors flex justify-center items-center gap-2 mt-2"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cambiar Contraseña"}
-            </button>
-          </form>
-        </section>
-
         {/* Gestión de Usuarios */}
         <section className="mt-12 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
           <div className="mb-6">
@@ -1497,6 +1499,80 @@ export function AdminDashboard() {
             </table>
           </div>
         </section>
+
+        {/* Procesado Retroactivo de Economía */}
+        <section className="mt-12 bg-zinc-900/50 border border-white/10 rounded-2xl p-6 shadow-2xl">
+          <div className="mb-4">
+            <h2 className="text-xl font-black italic tracking-tighter text-white flex items-center gap-3 lowercase">
+              <span className="w-1.5 h-6 bg-amber-500 block" />
+              Economía Retroactiva
+            </h2>
+            <p className="text-[10px] text-white/40 uppercase tracking-widest mt-2 font-mono">
+              Inicializa precios y procesa todos los circuitos completados del split seleccionado en orden cronológico
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4 flex-wrap mb-4">
+            <select
+              id="retro-split-select"
+              className="bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-amber-500 transition-colors"
+              defaultValue=""
+            >
+              <option value="" disabled>Seleccionar split…</option>
+              {splits.map(s => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+            </select>
+
+            <button
+              disabled={procesandoRetro}
+              onClick={async () => {
+                const sel = (document.getElementById("retro-split-select") as HTMLSelectElement).value;
+                if (!sel) { setRetroLog(["⚠ Selecciona un split primero."]); return; }
+                setProcesandoRetro(true);
+                setRetroLog(["Iniciando…"]);
+                const result = await procesarEconomiaRetroactivaSplit(sel, (msg) => {
+                  setRetroLog(prev => [...prev, msg]);
+                });
+                // El resultado final siempre se muestra (incluso si no hubo onProgress)
+                setRetroLog(prev => {
+                  const last = prev[prev.length - 1];
+                  return last === result.message ? prev : [...prev, result.message];
+                });
+                setProcesandoRetro(false);
+              }}
+              className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-black font-black text-xs uppercase tracking-widest py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2"
+            >
+              {procesandoRetro ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              {procesandoRetro ? "Procesando…" : "Procesar Split"}
+            </button>
+
+            {retroLog.length > 0 && !procesandoRetro && (
+              <button
+                onClick={() => setRetroLog([])}
+                className="text-[10px] text-white/30 hover:text-white/60 font-mono uppercase tracking-widest transition-colors"
+              >
+                Limpiar log
+              </button>
+            )}
+          </div>
+
+          {retroLog.length > 0 && (
+            <div className="bg-black/80 border border-white/5 rounded-xl p-4 max-h-80 overflow-y-auto font-mono text-[10px] space-y-0.5">
+              {retroLog.map((line, i) => (
+                <p key={i} className={
+                  line.includes("✓") ? "text-emerald-400" :
+                  line.includes("⚠") ? "text-amber-400" :
+                  line.startsWith("  ·") ? "text-white/40" :
+                  "text-white/60"
+                }>
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
+
           </>
         )}
 

@@ -565,21 +565,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         }));
 
       const timeline: any[] = [];
-      
-      // Split 1 is seeded/completed baseline
-      timeline.push({
-        splitId: "split_1",
-        splitName: "Split 1",
-        completed: true,
-        winnerPilot: "Jose (I)",
-        winnerPilotTeam: "Zenith",
-        winnerPilotPoints: 87,
-        winnerTeam: "Roses",
-        winnerTeamPoints: 185
-      });
 
       splits.forEach(s => {
-        if (s.id === "split_1") return;
 
         const hasCircuits = s.circuitos && s.circuitos.length > 0;
         const allCompleted = hasCircuits && s.circuitos.every((c: any) => c.completado);
@@ -972,15 +959,19 @@ Escribe un único párrafo (máximo 45 palabras) determinando claramente quién 
             <span className="text-xs text-white/40 uppercase font-mono">Historial de Campeones Oficiales F1 Bugambra</span>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto">
-          <div className="bg-white/5 border border-white/5 rounded-xl px-4 py-2 flex items-center justify-between sm:justify-start gap-4 flex-1 lg:flex-initial">
-            <span className="text-[9px] text-amber-400/80 font-mono uppercase tracking-widest">🏆 Campeón Pilotos Split 1:</span>
-            <span className="font-extrabold text-xs text-white uppercase tracking-tight">Jose (I) [Zenith]</span>
-          </div>
-          <div className="bg-white/5 border border-white/5 rounded-xl px-4 py-2 flex items-center justify-between sm:justify-start gap-4 flex-1 lg:flex-initial">
-            <span className="text-[9px] text-[#e10600]/85 font-mono uppercase tracking-widest">🏎️ Campeón Escuderías Split 1:</span>
-            <span className="font-extrabold text-xs text-white uppercase tracking-tight">Roses</span>
-          </div>
+        <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto flex-wrap">
+          {championshipsTimeline.filter(t => t.completed).map((t: any) => (
+            <div key={t.splitId} className="flex flex-col sm:flex-row gap-2.5">
+              <div className="bg-white/5 border border-white/5 rounded-xl px-4 py-2 flex items-center justify-between sm:justify-start gap-4">
+                <span className="text-[9px] text-amber-400/80 font-mono uppercase tracking-widest">🏆 {t.splitName} Pilotos:</span>
+                <span className="font-extrabold text-xs text-white uppercase tracking-tight">{t.winnerPilot} [{t.winnerPilotTeam}]</span>
+              </div>
+              <div className="bg-white/5 border border-white/5 rounded-xl px-4 py-2 flex items-center justify-between sm:justify-start gap-4">
+                <span className="text-[9px] text-[#e10600]/85 font-mono uppercase tracking-widest">🏎️ {t.splitName} Escuderías:</span>
+                <span className="font-extrabold text-xs text-white uppercase tracking-tight">{t.winnerTeam}</span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

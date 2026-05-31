@@ -271,96 +271,22 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
     const isStarted = s.circuitos && s.circuitos.some((c: any) => c.completado);
     
     if (i === 0) {
-      // Split 1 is the starting point. Keep whatever points and stats are registered in the DB.
-      // If s.equipos is empty or missing, fallback to pre-seeding the teams based on Split 1 baseline stats.
-      let equipos = s.equipos;
-      if (!equipos || equipos.length === 0) {
-        equipos = [
-          {
-            id: "roses",
-            nombre: "Roses",
-            presupuesto: 100,
-            puntos_constructores: 185,
-            jeque_id: "",
-            pilotos: [
-              { id: "piloto_fabi", nombre: "Fabi (I)", puntos_piloto: 67, victorias: 1, podios: 4, rating_piloto: 75, precio_compra_split: 38, clausula_actual: 76, mantener_actual: 114, precio_carrera_anterior: 68.4 },
-              { id: "piloto_jota", nombre: "Jota", puntos_piloto: 70, victorias: 1, podios: 2, rating_piloto: 70, precio_compra_split: 28, clausula_actual: 56, mantener_actual: 84, precio_carrera_anterior: 47.1 },
-              { id: "piloto_samu", nombre: "Samu", puntos_piloto: 22, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 24, clausula_actual: 48, mantener_actual: 72, precio_carrera_anterior: 24 },
-              { id: "piloto_pabliyo", nombre: "Pabliyo", puntos_piloto: 26, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 0.5, clausula_actual: 1, mantener_actual: 1.5, precio_carrera_anterior: 1.5 }
-            ]
-          },
-          {
-            id: "alfa_romero",
-            nombre: "Alfa Romero",
-            presupuesto: 100,
-            puntos_constructores: 132,
-            jeque_id: "",
-            pilotos: [
-              { id: "piloto_mimic", nombre: "Mimic", puntos_piloto: 81, victorias: 1, podios: 6, rating_piloto: 81, precio_compra_split: 52, clausula_actual: 104, mantener_actual: 156, precio_carrera_anterior: 72.8 },
-              { id: "piloto_toni", nombre: "Toni", puntos_piloto: 33, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 24, clausula_actual: 48, mantener_actual: 72, precio_carrera_anterior: 24 },
-              { id: "piloto_pinilla", nombre: "Pinilla", puntos_piloto: 18, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 24, clausula_actual: 48, mantener_actual: 72, precio_carrera_anterior: 24 },
-              { id: "vacante_alfaromero", nombre: "Vacante Alfa Romero", puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15, precio_carrera_anterior: 10 }
-            ]
-          },
-          {
-            id: "zenith",
-            nombre: "Zenith",
-            presupuesto: 100,
-            puntos_constructores: 130,
-            jeque_id: "",
-            pilotos: [
-              { id: "piloto_jose", nombre: "Jose (I)", puntos_piloto: 87, victorias: 3, podios: 6, rating_piloto: 87, precio_compra_split: 40, clausula_actual: 80, mantener_actual: 120, precio_carrera_anterior: 96 },
-              { id: "piloto_moles", nombre: "Moles", puntos_piloto: 43, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 25, clausula_actual: 50, mantener_actual: 75, precio_carrera_anterior: 30.5 },
-              { id: "piloto_aparicio", nombre: "Aparicio", puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15, precio_carrera_anterior: 10 },
-              { id: "vacante_zenith", nombre: "Vacante Zenith", puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15, precio_carrera_anterior: 10 }
-            ]
-          }
-        ];
-      } else {
-        const defaultTeamPoints: Record<string, number> = {
-          "roses": 185,
-          "alfa_romero": 132,
-          "zenith": 130
-        };
-
-        const defaultPilotStats: Record<string, { puntos_piloto: number, victorias: number, podios: number, rating_piloto?: number, precio_compra_split?: number, clausula_actual?: number, mantener_actual?: number, precio_carrera_anterior?: number }> = {
-          "piloto_fabi": { puntos_piloto: 67, victorias: 1, podios: 4, rating_piloto: 75, precio_compra_split: 38, clausula_actual: 76, mantener_actual: 114, precio_carrera_anterior: 68.4 },
-          "piloto_jota": { puntos_piloto: 70, victorias: 1, podios: 2, rating_piloto: 70, precio_compra_split: 28, clausula_actual: 56, mantener_actual: 84, precio_carrera_anterior: 47.1 },
-          "piloto_samu": { puntos_piloto: 22, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 24, clausula_actual: 48, mantener_actual: 72, precio_carrera_anterior: 24 },
-          "piloto_pabliyo": { puntos_piloto: 26, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 0.5, clausula_actual: 1, mantener_actual: 1.5, precio_carrera_anterior: 1.5 },
-          "piloto_mimic": { puntos_piloto: 81, victorias: 1, podios: 6, rating_piloto: 81, precio_compra_split: 52, clausula_actual: 104, mantener_actual: 156, precio_carrera_anterior: 72.8 },
-          "piloto_toni": { puntos_piloto: 33, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 24, clausula_actual: 48, mantener_actual: 72, precio_carrera_anterior: 24 },
-          "piloto_pinilla": { puntos_piloto: 18, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 24, clausula_actual: 48, mantener_actual: 72, precio_carrera_anterior: 24 },
-          "vacante_alfaromero": { puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15, precio_carrera_anterior: 10 },
-          "piloto_jose": { puntos_piloto: 87, victorias: 3, podios: 6, rating_piloto: 87, precio_compra_split: 40, clausula_actual: 80, mantener_actual: 120, precio_carrera_anterior: 96 },
-          "piloto_moles": { puntos_piloto: 43, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 25, clausula_actual: 50, mantener_actual: 75, precio_carrera_anterior: 30.5 },
-          "piloto_aparicio": { puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15, precio_carrera_anterior: 10 },
-          "vacante_zenith": { puntos_piloto: 0, victorias: 0, podios: 0, rating_piloto: 70, precio_compra_split: 10, clausula_actual: 15, mantener_actual: 15, precio_carrera_anterior: 10 }
-        };
-
-        equipos = s.equipos.map((eq: any) => {
-          const defaultPts = defaultTeamPoints[eq.id.toLowerCase()] || 0;
-          return {
-            ...eq,
-            puntos_constructores: eq.puntos_constructores || defaultPts,
-            pilotos: (eq.pilotos || []).map((p: any) => {
-              const defPilot: any = defaultPilotStats[p.id] || {};
-              return {
-                ...p,
-                puntos_piloto: p.puntos_piloto || defPilot.puntos_piloto || 0,
-                victorias: p.victorias || defPilot.victorias || 0,
-                podios: p.podios || defPilot.podios || 0,
-                base_rating: p.base_rating || p.rating_piloto || defPilot.rating_piloto || 70,
-                rating_piloto: p.rating_piloto || defPilot.rating_piloto || 70,
-                precio_compra_split: p.precio_compra_split || defPilot.precio_compra_split || 10,
-                clausula_actual: p.clausula_actual || defPilot.clausula_actual || 15,
-                mantener_actual: p.mantener_actual || defPilot.mantener_actual || 15,
-                precio_carrera_anterior: p.precio_carrera_anterior || defPilot.precio_carrera_anterior || 10
-              };
-            })
-          };
-        });
-      }
+      const equipos = (s.equipos || []).map((eq: any) => ({
+        ...eq,
+        puntos_constructores: eq.puntos_constructores ?? 0,
+        pilotos: (eq.pilotos || []).map((p: any) => ({
+          ...p,
+          puntos_piloto: p.puntos_piloto ?? 0,
+          victorias: p.victorias ?? 0,
+          podios: p.podios ?? 0,
+          base_rating: p.base_rating ?? p.rating_piloto ?? 70,
+          rating_piloto: p.rating_piloto ?? 70,
+          precio_compra_split: p.precio_compra_split ?? 10,
+          clausula_actual: p.clausula_actual ?? 15,
+          mantener_actual: p.mantener_actual ?? 15,
+          precio_carrera_anterior: p.precio_carrera_anterior ?? 10
+        }))
+      }));
 
       resolved.push({
         ...s,
@@ -372,10 +298,9 @@ export function resolveAllSplits(rawSplits: any[]): any[] {
       // For split_2, split_3, split_4:
       const prevResolved = resolved[i - 1];
       
-      const baseTeamIds = ["zenith", "roses", "alfa_romero"];
       const currentTeamIds = s.equipos?.map((eq: any) => eq.id) || [];
       const prevTeamIds = prevResolved?.equipos?.map((eq: any) => eq.id) || [];
-      const teamIds = Array.from(new Set([...baseTeamIds, ...currentTeamIds, ...prevTeamIds]));
+      const teamIds = Array.from(new Set([...currentTeamIds, ...prevTeamIds]));
 
       const equipos = teamIds.map((teamId) => {
         const eqActual = s.equipos?.find((eq: any) => eq.id === teamId);
@@ -468,7 +393,7 @@ export function computePilotDynamicOVR(pilot: any): number {
 
   // Blend the original base rating and the performance base.
   // The more points they score, the more the performance overpowers the base.
-  const blendFactor = Math.min(1, points / 50); 
+  const blendFactor = Math.min(0.75, points / 150);
   
   let finalOvr = (base * (1 - blendFactor)) + (performanceBase * blendFactor);
   
