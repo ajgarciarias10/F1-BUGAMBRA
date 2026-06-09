@@ -3,7 +3,7 @@
  * This keeps the output extremely compact (50KB-120KB) so that it can be stored
  * directly in Firestore without performance issues or document size bottlenecks.
  */
-export function compressAndConvertImage(file: File, maxWidth = 300, maxHeight = 300, quality = 0.8): Promise<string> {
+export function compressAndConvertImage(file: File, maxWidth = 600, maxHeight = 900, quality = 0.92): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);

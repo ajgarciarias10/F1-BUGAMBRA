@@ -1,27 +1,26 @@
 import {
   doc, getDoc, collection, getDocs, updateDoc, addDoc,
-  serverTimestamp, increment
+  serverTimestamp, increment, writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import type { TipoTransaccion } from "../types";
 
 // ─── CONSTANTES ECONÓMICAS ────────────────────────────────────────────────────
 
 export const POINTS_BY_POSITION = [16, 13, 11, 9, 7, 6, 5, 4, 3, 2, 2, 1];
 
-// Millones por posición en clasificación (1° → 1M, 2° → 0.5M, resto → 0)
-const MCLASIF = [1, 0.5];
-// Millones por posición en carrera (1° → 2M, 2° → 1M, resto → 0)
-const MCARRERA = [2, 1];
+const MCLASIF  = [1, 0.5];   // 1°→1M, 2°→0.5M
+const MCARRERA = [2, 1];      // 1°→2M, 2°→1M
 
-export const M_POLE             = 2;    // bonus equipo: pole
-export const M_VUELTA_RAPIDA    = 1;    // bonus equipo: vuelta rápida
-export const M_SIN_SANCIONADOS  = 3;    // bonus equipo: ningún piloto penalizado
-export const M_PUNTOS_FACTOR    = 0.1; // por cada punto → 0.1M
-export const M_SOLO_POR_CARRERA = 1.5; // piloto sin rival en cada carrera
-export const M_RIVALIDAD_CLASIF = 1;   // H2H clasificación (mejor posición gana)
-export const M_RIVALIDAD_CARRERA = 2;  // H2H carrera (mejor posición gana)
+export const M_POLE             = 2;
+export const M_VUELTA_RAPIDA    = 1;
+export const M_SIN_SANCIONADOS  = 3;
+export const M_PUNTOS_FACTOR    = 0.1;
+export const M_SOLO_POR_CARRERA = 1.5;
+export const M_RIVALIDAD_CLASIF = 1;
+export const M_RIVALIDAD_CARRERA = 2;
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 export function calcularMillonesClasificacion(pos: number): number {
   return MCLASIF[pos - 1] ?? 0;
@@ -35,12 +34,15 @@ export function calcularPuntosPosicion(pos: number): number {
   return POINTS_BY_POSITION[pos - 1] ?? 0;
 }
 
+function r1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
 // ─── LOG DE TRANSACCIÓN ───────────────────────────────────────────────────────
 
 async function logTx(data: {
   equipo: string;
-  tipo: "fichaje" | "clausula" | "subasta" | "piloto_negativo" | "ingreso_puntos" |
-        "premio_carrera" | "rivalidad" | "pole" | "vuelta_rapida" | "sin_sancionados";
+  tipo: TipoTransaccion;
   piloto?: string;
   cantidad: number;
   esIngreso: boolean;
@@ -59,46 +61,43 @@ export async function ficharPiloto(params: {
   splitId: string;
   teamId: string;
   teamName: string;
-  pilotId: string;
+  pilotoId: string;
   pilotName: string;
   tipo: "fichaje" | "clausula" | "subasta";
   precio: number;
 }): Promise<{ success: boolean; message: string }> {
-  const { splitId, teamId, teamName, pilotId, pilotName, tipo, precio } = params;
+  const { splitId, teamId, teamName, pilotoId, pilotName, tipo, precio } = params;
 
   try {
-    const teamRef = doc(db, `splits/${splitId}/equipos`, teamId);
-
-    // Precio negativo → el equipo COBRA (es un ingreso)
     const esPrecioNegativo = precio < 0;
-    const delta = esPrecioNegativo ? Math.abs(precio) : -precio;
-
-    // El precio pagado define las nuevas valoraciones: mantener=×3, cláusula=×2
+    const delta    = esPrecioNegativo ? Math.abs(precio) : -precio;
     const precioAbs = Math.abs(precio);
-    const nuevaMantener = round1(precioAbs * 3);
-    const nuevaClausula = round1(precioAbs * 2);
+    const nuevaMantener = esPrecioNegativo ? r1(precioAbs / 3) : r1(precioAbs * 3);
+    const nuevaClausula = esPrecioNegativo ? r1(precioAbs / 2) : r1(precioAbs * 2);
 
-    const pilotRef = doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotId);
+    const teamRef   = doc(db, `splits/${splitId}/equipos`, teamId);
+    const rosterRef = doc(db, `splits/${splitId}/roster`, pilotoId);
 
     await Promise.all([
       updateDoc(teamRef, { presupuesto: increment(delta) }),
-      updateDoc(pilotRef, {
-        precio_compra_split: precioAbs,
-        mantener_actual: nuevaMantener,
-        clausula_actual: nuevaClausula,
+      updateDoc(rosterRef, {
+        equipoId:               teamId,
+        precio_compra:          precioAbs,
+        mantener_actual:        nuevaMantener,
+        clausula_actual:        nuevaClausula,
         mantener_inicial_split: nuevaMantener,
         clausula_inicial_split: nuevaClausula,
         precio_carrera_anterior: nuevaMantener,
-        historial_precios: {},
+        historial_precios:      {},
       }),
     ]);
 
     await logTx({
-      equipo: teamName,
-      tipo: esPrecioNegativo ? "piloto_negativo" : tipo,
-      piloto: pilotName,
-      cantidad: precioAbs,
-      esIngreso: esPrecioNegativo,
+      equipo:      teamName,
+      tipo:        esPrecioNegativo ? "piloto_negativo" : tipo,
+      piloto:      pilotName,
+      cantidad:    precioAbs,
+      esIngreso:   esPrecioNegativo,
       descripcion: esPrecioNegativo
         ? `Piloto precio negativo — ingreso al fichar: +${precioAbs}M`
         : `${tipo.charAt(0).toUpperCase() + tipo.slice(1)}: −${precioAbs}M → mantener ${nuevaMantener}M / cláusula ${nuevaClausula}M`,
@@ -118,11 +117,13 @@ export async function ficharPiloto(params: {
 export async function procesarEconomiaCarrera(
   splitId: string,
   circuitoId: string,
-  circuitName: string
+  circuitName: string,
+  onProgress?: (msg: string) => void,
+  previousCircuitIds?: string[]   // IDs de circuitos procesados ANTES que éste, en orden
 ): Promise<{ processed: number; message: string }> {
   try {
-    // Guardia de idempotencia: si ya se procesó, no volver a hacerlo
-    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    // Guardia de idempotencia
+    const circuitoRef  = doc(db, `splits/${splitId}/circuitos`, circuitoId);
     const circuitoSnap = await getDoc(circuitoRef);
     if (!circuitoSnap.exists()) return { processed: 0, message: "Circuito no encontrado." };
 
@@ -136,285 +137,313 @@ export async function procesarEconomiaCarrera(
       return { processed: 0, message: "No hay resultados registrados para procesar." };
     }
 
-    // ── Leer equipos y pilotos ──────────────────────────────────────────────
-    const teamsSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
-    const teamById: Record<string, { ref: any; nombre: string }> = {};
-    const teamByPilotId: Record<string, { teamId: string; teamNombre: string }> = {};
+    // Leer roster, equipos y split (rivalidades) en paralelo
+    const [rosterSnap, equiposSnap, splitSnap] = await Promise.all([
+      getDocs(collection(db, `splits/${splitId}/roster`)),
+      getDocs(collection(db, `splits/${splitId}/equipos`)),
+      getDoc(doc(db, "splits", splitId)),
+    ]);
+
+    // Leer nombres de pilotos globales
     const pilotNombre: Record<string, string> = {};
+    const pilotosSnap = await getDocs(collection(db, "pilotos"));
+    pilotosSnap.docs.forEach(d => { pilotNombre[d.id] = d.data().nombre || d.id; });
 
-    for (const teamDoc of teamsSnap.docs) {
-      const td = teamDoc.data();
-      teamById[teamDoc.id] = { ref: teamDoc.ref, nombre: td.nombre };
+    // Índices
+    const teamById: Record<string, { ref: any; nombre: string }> = {};
+    equiposSnap.docs.forEach(d => {
+      teamById[d.id] = { ref: d.ref, nombre: d.data().nombre };
+    });
 
-      const pilotsSnap = await getDocs(
-        collection(db, `splits/${splitId}/equipos/${teamDoc.id}/pilotos`)
-      );
-      for (const pDoc of pilotsSnap.docs) {
-        teamByPilotId[pDoc.id] = { teamId: teamDoc.id, teamNombre: td.nombre };
-        pilotNombre[pDoc.id] = pDoc.data().nombre || pDoc.id;
+    const teamByPilot: Record<string, string> = {}; // pilotoId → equipoId
+    rosterSnap.docs.forEach(d => {
+      const entry = d.data();
+      if (entry.equipoId && entry.equipoId !== "agente_libre") {
+        teamByPilot[d.id] = entry.equipoId;
       }
-    }
+    });
 
-    // ── Leer rivalidades del split ─────────────────────────────────────────
-    const splitSnap = await getDoc(doc(db, "splits", splitId));
+    // Rivalidades
     const rivalries = splitSnap.data()?.rivalries;
-    const groupByPilot: Record<string, any> = {};
     const soloPilotIds = new Set<string>((rivalries?.soloPilots || []).map((p: any) => p.id));
-
+    const groupByPilot: Record<string, any> = {};
     for (const group of rivalries?.groups || []) {
-      for (const member of group.members) {
-        groupByPilot[member.id] = group;
-      }
+      for (const member of group.members) groupByPilot[member.id] = group;
     }
 
-    // ── Calcular ganancias por equipo ──────────────────────────────────────
+    // ── Calcular ganancias ─────────────────────────────────────────────────────
+
     const earnings: Record<string, number> = {};
     const txQueue: Parameters<typeof logTx>[0][] = [];
 
-    const add = (teamId: string, teamNombre: string, amount: number,
-      tipo: Parameters<typeof logTx>[0]["tipo"], piloto?: string, descripcion?: string) => {
+    const add = (
+      teamId: string, amount: number,
+      tipo: TipoTransaccion, piloto?: string, descripcion?: string
+    ) => {
       earnings[teamId] = (earnings[teamId] || 0) + amount;
-      txQueue.push({ equipo: teamNombre, tipo, piloto, cantidad: amount, esIngreso: true, carrera: circuitName, descripcion });
+      txQueue.push({
+        equipo: teamById[teamId]?.nombre ?? teamId,
+        tipo, piloto, cantidad: amount, esIngreso: true,
+        carrera: circuitName, descripcion,
+      });
     };
 
-    // Equipos con al menos un piloto penalizado (para sin_sancionados)
     const dirtyTeams = new Set<string>();
-    for (const r of resultados) {
-      if (!r.isClean) {
-        const t = teamByPilotId[r.pilotoId];
-        if (t) dirtyTeams.add(t.teamId);
-      }
-    }
-
-    // Equipos que participaron
     const participatingTeams = new Set<string>();
+
     for (const r of resultados) {
-      const t = teamByPilotId[r.pilotoId];
-      if (t) participatingTeams.add(t.teamId);
+      const tid = teamByPilot[r.pilotoId];
+      if (!tid) continue;
+      participatingTeams.add(tid);
+      if (!r.isClean) dirtyTeams.add(tid);
     }
 
     for (const r of resultados) {
-      const { pilotoId, qualyPos, racePos, fastestLap } = r;
-      const t = teamByPilotId[pilotoId];
-      if (!t) continue;
+      const tid = teamByPilot[r.pilotoId];
+      if (!tid) continue;
 
-      const nombre = pilotNombre[pilotoId] || pilotoId;
-      const isDNF = racePos === 99;
+      const nombre = pilotNombre[r.pilotoId] || r.pilotoId;
+      const isDNF  = r.racePos === 99;
 
-      // 1. Dinero de clasificación (1M/0.5M/0)
-      const mClasif = calcularMillonesClasificacion(qualyPos);
-      if (mClasif > 0) {
-        add(t.teamId, t.teamNombre, mClasif, "premio_carrera", nombre,
-          `Clasificación P${qualyPos}: +${mClasif}M`);
-      }
+      // Clasificación
+      const mClasif = calcularMillonesClasificacion(r.qualyPos);
+      if (mClasif > 0) add(tid, mClasif, "premio_carrera", nombre, `Clasificación P${r.qualyPos}: +${mClasif}M`);
 
-      // 2. Dinero de carrera (2M/1M/0)
+      // Carrera
       if (!isDNF) {
-        const mCar = calcularMillonesCarrera(racePos);
-        if (mCar > 0) {
-          add(t.teamId, t.teamNombre, mCar, "premio_carrera", nombre,
-            `Carrera P${racePos}: +${mCar}M`);
-        }
+        const mCar = calcularMillonesCarrera(r.racePos);
+        if (mCar > 0) add(tid, mCar, "premio_carrera", nombre, `Carrera P${r.racePos}: +${mCar}M`);
       }
 
-      // 3. Millones por puntos (posición + pole + vRápida)
-      const ptsPos = isDNF ? 0 : calcularPuntosPosicion(racePos);
-      const ptsPole = qualyPos === 1 ? 2 : 0;
-      const ptsFL = fastestLap ? 2 : 0;
+      // Millones por puntos
+      const ptsPos  = isDNF ? 0 : calcularPuntosPosicion(r.racePos);
+      const ptsPole = r.qualyPos === 1 ? 2 : 0;
+      const ptsFL   = r.fastestLap ? 2 : 0;
       const totalPts = ptsPos + ptsPole + ptsFL;
-
       if (totalPts > 0) {
         const mPts = parseFloat((totalPts * M_PUNTOS_FACTOR).toFixed(2));
-        add(t.teamId, t.teamNombre, mPts, "ingreso_puntos", nombre,
-          `${totalPts} pts × ${M_PUNTOS_FACTOR}M = +${mPts}M`);
+        add(tid, mPts, "ingreso_puntos", nombre, `${totalPts} pts × ${M_PUNTOS_FACTOR}M = +${mPts}M`);
       }
 
-      // 4. Bonus Pole
-      if (qualyPos === 1) {
-        add(t.teamId, t.teamNombre, M_POLE, "pole", nombre,
-          `Pole position: +${M_POLE}M`);
-      }
+      // Bonus pole
+      if (r.qualyPos === 1) add(tid, M_POLE, "pole", nombre, `Pole position: +${M_POLE}M`);
 
-      // 5. Bonus Vuelta Rápida
-      if (fastestLap) {
-        add(t.teamId, t.teamNombre, M_VUELTA_RAPIDA, "vuelta_rapida", nombre,
-          `Vuelta rápida: +${M_VUELTA_RAPIDA}M`);
-      }
+      // Bonus vuelta rápida
+      if (r.fastestLap) add(tid, M_VUELTA_RAPIDA, "vuelta_rapida", nombre, `Vuelta rápida: +${M_VUELTA_RAPIDA}M`);
 
-      // 6. Rival solo → 1.5M automático
-      if (soloPilotIds.has(pilotoId)) {
-        add(t.teamId, t.teamNombre, M_SOLO_POR_CARRERA, "rivalidad", nombre,
-          `Piloto sin rival: +${M_SOLO_POR_CARRERA}M`);
+      // Piloto sin rival
+      if (soloPilotIds.has(r.pilotoId)) {
+        add(tid, M_SOLO_POR_CARRERA, "rivalidad", nombre, `Piloto sin rival: +${M_SOLO_POR_CARRERA}M`);
       }
     }
 
-    // 7. Rivalidades H2H por grupo
+    // Rivalidades H2H
     for (const group of rivalries?.groups || []) {
       if (group.type === "solo") continue;
 
-      const members: { pilotoId: string; qualyPos: number; racePos: number; teamId: string; teamNombre: string; nombre: string }[] = [];
-      for (const m of group.members) {
-        const r = resultados.find((res: any) => res.pilotoId === m.id);
-        const t = teamByPilotId[m.id];
-        if (r && t) {
-          members.push({ pilotoId: m.id, qualyPos: r.qualyPos, racePos: r.racePos, teamId: t.teamId, teamNombre: t.teamNombre, nombre: pilotNombre[m.id] || m.id });
-        }
-      }
+      const members = group.members
+        .map((m: any) => {
+          const r = resultados.find((res: any) => res.pilotoId === m.id);
+          const tid = teamByPilot[m.id];
+          if (!r || !tid) return null;
+          return { pilotoId: m.id, qualyPos: r.qualyPos, racePos: r.racePos, teamId: tid, nombre: pilotNombre[m.id] || m.id };
+        })
+        .filter(Boolean);
+
       if (members.length < 2) continue;
 
-      // H2H Clasificación: menor qualyPos gana
-      const qualyWinner = members.reduce((best, curr) => curr.qualyPos < best.qualyPos ? curr : best);
-      add(qualyWinner.teamId, qualyWinner.teamNombre, M_RIVALIDAD_CLASIF, "rivalidad", qualyWinner.nombre,
-        `Rivalidad clasificación H2H: +${M_RIVALIDAD_CLASIF}M`);
+      const qualyWinner = members.reduce((best: any, curr: any) => curr.qualyPos < best.qualyPos ? curr : best);
+      add(qualyWinner.teamId, M_RIVALIDAD_CLASIF, "rivalidad", qualyWinner.nombre, `Rivalidad clasificación H2H: +${M_RIVALIDAD_CLASIF}M`);
 
-      // H2H Carrera: menor racePos gana (99=DNF pierde)
-      const raceWinner = members.reduce((best, curr) => curr.racePos < best.racePos ? curr : best);
-      add(raceWinner.teamId, raceWinner.teamNombre, M_RIVALIDAD_CARRERA, "rivalidad", raceWinner.nombre,
-        `Rivalidad carrera H2H: +${M_RIVALIDAD_CARRERA}M`);
+      const raceWinner = members.reduce((best: any, curr: any) => curr.racePos < best.racePos ? curr : best);
+      add(raceWinner.teamId, M_RIVALIDAD_CARRERA, "rivalidad", raceWinner.nombre, `Rivalidad carrera H2H: +${M_RIVALIDAD_CARRERA}M`);
     }
 
-    // 8. Sin Sancionados por equipo
+    // Sin sancionados
     for (const teamId of participatingTeams) {
-      if (!dirtyTeams.has(teamId)) {
-        const t = teamById[teamId];
-        if (t) {
-          add(teamId, t.nombre, M_SIN_SANCIONADOS, "sin_sancionados", undefined,
-            `Equipo sin penalizados: +${M_SIN_SANCIONADOS}M`);
-        }
+      if (!dirtyTeams.has(teamId) && teamById[teamId]) {
+        add(teamId, M_SIN_SANCIONADOS, "sin_sancionados", undefined, `Equipo sin penalizados: +${M_SIN_SANCIONADOS}M`);
       }
     }
 
-    // ── Aplicar a Firestore en paralelo ────────────────────────────────────
-    const writes: Promise<any>[] = [];
+    // ── Aplicar con writeBatch ─────────────────────────────────────────────────
 
+    const batch = writeBatch(db);
+
+    // Presupuestos de equipos
     for (const [teamId, total] of Object.entries(earnings)) {
-      const t = teamById[teamId];
-      if (t) writes.push(updateDoc(t.ref, { presupuesto: increment(total) }));
+      if (teamById[teamId]) {
+        batch.update(teamById[teamId].ref, { presupuesto: increment(total) });
+      }
     }
 
-    for (const tx of txQueue) {
-      writes.push(logTx(tx));
-    }
+    // Decay de precios de pilotos
+    const decayLog: Array<{
+      nombre: string;
+      mantenerAntes: number;
+      mantenerDespues: number;
+      clausulaDespues: number;
+      congelado: boolean;
+    }> = [];
 
-    // 9. Decay de precios de pilotos por carrera
-    // Fórmula: clausula_N = clausula_(N-1) - precio_compra × 0.2
-    //          mantener_N = clausula_N × 1.5
-    // El historial guarda el precio VIGENTE (antes del decay) — lo que vale ESA carrera.
-    for (const teamDoc of teamsSnap.docs) {
-      const pilotsSnap = await getDocs(
-        collection(db, `splits/${splitId}/equipos/${teamDoc.id}/pilotos`)
-      );
-      for (const pDoc of pilotsSnap.docs) {
-        const d = pDoc.data();
-        const precioCompra = d.precio_compra_split ?? 0;
-        const clausulaActual = d.clausula_actual ?? 0;
+    for (const rosterDoc of rosterSnap.docs) {
+      const d = rosterDoc.data();
+      const precioCompra   = d.precio_compra   ?? 0;
+      const clausulaActual = d.clausula_actual  ?? 0;
+      if (precioCompra === 0 && clausulaActual === 0) continue;
 
-        if (precioCompra === 0 && clausulaActual === 0) continue;
+      const mantenerEstaCarrera = d.mantener_actual ?? 0;
+      const nombre = pilotNombre[rosterDoc.id] || rosterDoc.id;
+      const hasPendingTransfer = d.pending_equipoId != null || d.pending_precio_compra != null;
 
-        // Precio vigente ESTA carrera (se guarda en historial antes de decrementar)
-        const mantenerEstaCarrera = d.mantener_actual ?? 0;
-        const clausulaEstaCarrera = clausulaActual;
+      // Determinar si el freeze aplica a ESTE circuito específico
+      const isFrozenHere = (() => {
+        if (!d.congelado && !hasPendingTransfer) return false;
+        if (previousCircuitIds === undefined) return true; // compatibilidad: sin info de orden → congelado global
+        if (!d.congelado_en) return true; // congelado desde el inicio (antes de cualquier carrera)
+        // El freeze empieza en el circuito POSTERIOR a congelado_en
+        return previousCircuitIds.includes(d.congelado_en);
+      })();
 
-        // Nuevo precio para SIGUIENTE carrera
-        const stepC = round1(Math.abs(precioCompra) * 0.2);
-        const newClausula = round1(clausulaEstaCarrera - stepC);
-        const newMantener = round1(newClausula * 1.5);
-
-        writes.push(updateDoc(pDoc.ref, {
-          clausula_actual: newClausula,
-          mantener_actual: newMantener,
+      if (isFrozenHere) {
+        decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: mantenerEstaCarrera, clausulaDespues: clausulaActual, congelado: true });
+        batch.update(rosterDoc.ref, {
           precio_carrera_anterior: mantenerEstaCarrera,
           [`historial_precios.${circuitoId}`]: {
-            carrera: circuitName,
-            mantener: mantenerEstaCarrera,   // precio vigente ESTA carrera
-            clausula: clausulaEstaCarrera,
+            carrera:   circuitName,
+            mantener:  mantenerEstaCarrera,
+            clausula:  clausulaActual,
+            congelado: true,
           },
-        }));
+        });
+      } else if (precioCompra === -110) {
+        // Sentinel freeze price: no más cálculos hasta que el piloto salga de esta parte.
+        decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: mantenerEstaCarrera, clausulaDespues: clausulaActual, congelado: true });
+        batch.update(rosterDoc.ref, {
+          precio_carrera_anterior: mantenerEstaCarrera,
+          [`historial_precios.${circuitoId}`]: {
+            carrera:   circuitName,
+            mantener:  mantenerEstaCarrera,
+            clausula:  clausulaActual,
+            congelado: true,
+          },
+        });
+      } else if (precioCompra < 0) {
+        // Piloto con precio negativo: crecimiento lineal
+        // mantener: base(|p|/3) + 20% de base por carrera
+        // clausula: base(|p|/2) + 20% de base por carrera
+        const precioAbs = Math.abs(precioCompra);
+        const stepM      = r1(precioAbs / 3 * 0.2);
+        const stepCl     = r1(precioAbs / 2 * 0.2);
+        const newMantener = r1(mantenerEstaCarrera + stepM);
+        const newClausula = r1(clausulaActual + stepCl);
+
+        decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: newMantener, clausulaDespues: newClausula, congelado: false });
+        batch.update(rosterDoc.ref, {
+          clausula_actual:          newClausula,
+          mantener_actual:          newMantener,
+          precio_carrera_anterior:  mantenerEstaCarrera,
+          [`historial_precios.${circuitoId}`]: {
+            carrera:  circuitName,
+            mantener: mantenerEstaCarrera,
+            clausula: clausulaActual,
+          },
+        });
+      } else {
+        // Piloto con precio positivo: decay estándar
+        const stepC       = r1(Math.abs(precioCompra) * 0.2);
+        const newClausula = r1(clausulaActual - stepC);
+        const newMantener = r1(newClausula * 1.5);
+
+        decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: newMantener, clausulaDespues: newClausula, congelado: false });
+        batch.update(rosterDoc.ref, {
+          clausula_actual:          newClausula,
+          mantener_actual:          newMantener,
+          precio_carrera_anterior:  mantenerEstaCarrera,
+          [`historial_precios.${circuitoId}`]: {
+            carrera:  circuitName,
+            mantener: mantenerEstaCarrera,
+            clausula: clausulaActual,
+          },
+        });
       }
     }
 
-    // Marcar circuito como procesado (idempotencia)
-    writes.push(updateDoc(circuitoRef, { economia_procesada: true }));
+    // Marcar circuito como procesado
+    batch.update(circuitoRef, { economia_procesada: true });
 
-    await Promise.all(writes);
+    await batch.commit();
+
+    // Emitir log de resultados
+    if (onProgress) {
+      onProgress(`✓ ${circuitName} procesado`);
+      for (const [teamId, total] of Object.entries(earnings).sort((a, b) => b[1] - a[1])) {
+        onProgress(`equipo:${teamById[teamId]?.nombre ?? teamId}:${total.toFixed(1)}`);
+      }
+      for (const p of decayLog.sort((a, b) => a.nombre.localeCompare(b.nombre))) {
+        onProgress(`piloto:${p.nombre}:${p.mantenerAntes}:${p.mantenerDespues}:${p.clausulaDespues}:${p.congelado}`);
+      }
+    }
+
+    // Log de transacciones (fuera del batch — addDoc no es compatible con batch)
+    await Promise.all(txQueue.map(tx => logTx(tx)));
 
     return {
       processed: txQueue.length,
-      message: `Economía de ${circuitName} procesada: ${txQueue.length} movimientos, ${Object.entries(earnings).map(([id, m]) => `${teamById[id]?.nombre} +${m.toFixed(1)}M`).join(" · ")}`,
+      message: `Economía de ${circuitName} procesada: ${txQueue.length} movimientos, ${
+        Object.entries(earnings)
+          .map(([id, m]) => `${teamById[id]?.nombre ?? id} +${m.toFixed(1)}M`)
+          .join(" · ")
+      }`,
     };
   } catch (error: any) {
     return { processed: 0, message: `Error al procesar economía: ${error.message}` };
   }
 }
 
-// ─── PROCESADO RETROACTIVO ────────────────────────────────────────────────────
+// ─── PROCESADO RETROACTIVO DE UN SPLIT ───────────────────────────────────────
 
-/**
- * Procesa retroactivamente la economía de un split entero:
- * 1. Fija mantener_inicial_split / clausula_inicial_split desde precio_compra_split
- * 2. Resetea mantener_actual / clausula_actual al valor inicial (estado limpio)
- * 3. Procesa cada circuito completado en orden cronológico (salta los ya procesados)
- */
 export async function procesarEconomiaRetroactivaSplit(
   splitId: string,
   onProgress?: (msg: string) => void
 ): Promise<{ ok: number; skipped: number; message: string }> {
   try {
-    // ── 1. Leer pilotos y fijar precios iniciales ───────────────────────────
+    // 1. Resetear precios iniciales de pilotos del roster
     onProgress?.("Inicializando precios de pilotos…");
-    const teamsSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
-    const pilotResetWrites: Promise<any>[] = [];
+    const rosterSnap = await getDocs(collection(db, `splits/${splitId}/roster`));
+    const resetBatch = writeBatch(db);
+    let resetCount = 0;
 
-    for (const teamDoc of teamsSnap.docs) {
-      const pilotsSnap = await getDocs(
-        collection(db, `splits/${splitId}/equipos/${teamDoc.id}/pilotos`)
-      );
-      for (const pDoc of pilotsSnap.docs) {
-        const d = pDoc.data();
-        const precioCompra = d.precio_compra_split ?? 0;
+    for (const rDoc of rosterSnap.docs) {
+      const d = rDoc.data();
+      const precioCompra = d.precio_compra ?? 0;
 
-        // Si ya tiene mantener_inicial_split fijado, respetarlo; si no, calcularlo
-        const mantenerInicial = d.mantener_inicial_split != null
-          ? d.mantener_inicial_split
-          : round1(precioCompra * 3);
-        const clausulaInicial = d.clausula_inicial_split != null
-          ? d.clausula_inicial_split
-          : round1(precioCompra * 2);
+      const mantenerInicial = d.mantener_inicial_split != null ? d.mantener_inicial_split : r1(precioCompra * 3);
+      const clausulaInicial = d.clausula_inicial_split != null ? d.clausula_inicial_split : r1(precioCompra * 2);
+      if (mantenerInicial === 0 && clausulaInicial === 0) continue;
 
-        if (mantenerInicial === 0 && clausulaInicial === 0) continue;
-
-        pilotResetWrites.push(updateDoc(pDoc.ref, {
-          mantener_inicial_split: mantenerInicial,
-          clausula_inicial_split: clausulaInicial,
-          // Reset al estado limpio (antes de cualquier carrera)
-          mantener_actual: mantenerInicial,
-          clausula_actual: clausulaInicial,
-          precio_carrera_anterior: mantenerInicial,
-          historial_precios: {},
-        }));
-      }
+      resetBatch.update(rDoc.ref, {
+        mantener_inicial_split:  mantenerInicial,
+        clausula_inicial_split:  clausulaInicial,
+        mantener_actual:         mantenerInicial,
+        clausula_actual:         clausulaInicial,
+        precio_carrera_anterior: mantenerInicial,
+        historial_precios:       {},
+      });
+      resetCount++;
     }
+    await resetBatch.commit();
+    onProgress?.(resetCount > 0 ? `✓ ${resetCount} pilotos con precios inicializados.` : "⚠ Ningún piloto tiene precio_compra > 0.");
 
-    await Promise.all(pilotResetWrites);
-    onProgress?.(
-      pilotResetWrites.length > 0
-        ? `✓ ${pilotResetWrites.length} pilotos con precios inicializados.`
-        : `⚠ Ningún piloto tiene precio_compra_split > 0 — revisa los datos en Firebase.`
-    );
+    // 2. Limpiar economia_procesada en todos los circuitos
+    onProgress?.("Limpiando circuitos del split…");
+    const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
+    const circBatch = writeBatch(db);
+    circSnap.docs.forEach(d => circBatch.update(d.ref, { economia_procesada: false }));
+    await circBatch.commit();
+    onProgress?.(`✓ economia_procesada limpiada en ${circSnap.docs.length} circuitos.`);
 
-    // ── 2. Leer circuitos y resetear economia_procesada para forzar re-proceso ─
-    onProgress?.("Cargando y limpiando circuitos del split…");
-    const circuitosSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
-    const allCircuits = circuitosSnap.docs.map(d => ({ ref: d.ref, id: d.id, ...d.data() as any }));
-
-    // Limpiar economia_procesada en todos los circuitos para forzar reproceso correcto
-    const circuitResetWrites = allCircuits.map(c =>
-      updateDoc(c.ref, { economia_procesada: false })
-    );
-    await Promise.all(circuitResetWrites);
-    onProgress?.(`✓ economia_procesada limpiada en ${allCircuits.length} circuitos.`);
-
-    // Ordenar: numero_carrera > fecha (Timestamp o string) > id alfabético
+    // 3. Ordenar circuitos completados
     const toMs = (fecha: any): number => {
       if (!fecha) return 0;
       if (typeof fecha?.toMillis === "function") return fecha.toMillis();
@@ -422,50 +451,38 @@ export async function procesarEconomiaRetroactivaSplit(
       return 0;
     };
 
-    const completados = allCircuits
-      .filter(c => c.completado)
+    const completados = circSnap.docs
+      .map(d => ({ ref: d.ref, id: d.id, ...d.data() as any }))
+      .filter(c => c.completado && Array.isArray(c.resultados) && c.resultados.length > 0)
       .sort((a, b) => {
         if (a.numero_carrera && b.numero_carrera) return a.numero_carrera - b.numero_carrera;
-        if (a.numero_carrera) return -1;
-        if (b.numero_carrera) return 1;
         const fa = toMs(a.fecha), fb = toMs(b.fecha);
         if (fa !== fb) return fa - fb;
         return a.id.localeCompare(b.id);
       });
 
-    onProgress?.(`Circuitos completados (ordenados): ${completados.map(c => `${c.nombre || c.id}(${c.numero_carrera ?? '?'})`).join(" → ")}`);
+    onProgress?.(`Circuitos a procesar: ${completados.map(c => c.nombre || c.id).join(" → ")}`);
 
     if (completados.length === 0) {
-      onProgress?.("⚠ No hay circuitos con completado=true en este split. Verifica en Firebase.");
+      onProgress?.("⚠ No hay circuitos completados con resultados.");
       return { ok: 0, skipped: 0, message: "No hay circuitos completados para procesar." };
     }
 
-    const conResultados = completados.filter(c => Array.isArray(c.resultados) && c.resultados.length > 0);
-    if (conResultados.length < completados.length) {
-      onProgress?.(`⚠ ${completados.length - conResultados.length} circuito(s) sin resultados — se omiten.`);
-    }
-
-    if (conResultados.length === 0) {
-      onProgress?.("⚠ Ningún circuito completado tiene resultados. Verifica que processRace() se ejecutó.");
-      return { ok: 0, skipped: 0, message: "Circuitos completos pero sin resultados." };
-    }
-
-    onProgress?.(`Procesando ${conResultados.length} circuito(s) en orden: ${conResultados.map(c => c.nombre || c.id).join(" → ")}`);
-
-    // ── 3. Procesar en secuencia (el decay de precios depende del orden) ────
+    // 4. Procesar en secuencia (el decay depende del orden)
     let ok = 0;
     let skipped = 0;
+    const processedSoFar: string[] = []; // acumula IDs en orden para el check de freeze temporal
 
-    for (const c of conResultados) {
+    for (const c of completados) {
       if (c.economia_procesada) {
         skipped++;
+        processedSoFar.push(c.id);
         onProgress?.(`  ↳ ${c.nombre || c.id} — ya procesado, saltando.`);
         continue;
       }
-
       onProgress?.(`  ↳ Procesando ${c.nombre || c.id}…`);
-      const result = await procesarEconomiaCarrera(splitId, c.id, c.nombre || c.id);
-
+      const result = await procesarEconomiaCarrera(splitId, c.id, c.nombre || c.id, undefined, processedSoFar);
+      processedSoFar.push(c.id);
       if (result.processed > 0) {
         ok++;
         onProgress?.(`    ✓ ${result.message}`);
@@ -482,10 +499,4 @@ export async function procesarEconomiaRetroactivaSplit(
     onProgress?.(`⚠ ${errMsg}`);
     return { ok: 0, skipped: 0, message: errMsg };
   }
-}
-
-// ─── HELPERS INTERNOS ─────────────────────────────────────────────────────────
-
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
 }
