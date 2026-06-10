@@ -3,10 +3,13 @@ import { useAuth } from "../contexts/AuthContext";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { compressAndConvertImage } from "../utils/imageHelper";
-import { UploadCloud, Link as LinkIcon, Camera, User, BadgeAlert, Coins, Sparkles, Trophy, CheckCircle, Flame } from "lucide-react";
+import { useSplits } from "../hooks/useData";
+import { StorageImageUpload } from "./StorageImageUpload";
+import { UploadCloud, Link as LinkIcon, Camera, User, BadgeAlert, CheckCircle, ImageIcon } from "lucide-react";
 
 export function ProfileView() {
   const { user, userData } = useAuth();
+  const { splits } = useSplits();
   const [nombre, setNombre] = useState(userData?.nombre || "");
   const [fotoUrl, setFotoUrl] = useState(userData?.foto_url || "");
   const [urlInput, setUrlInput] = useState("");
@@ -14,8 +17,32 @@ export function ProfileView() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [dragActive, setDragActive] = useState(false);
-  
+  const [logoUrlInputs, setLogoUrlInputs] = useState<Record<string, string>>({});
+  const [savingLogo, setSavingLogo] = useState<string | null>(null);
+  const [logoMsg, setLogoMsg] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isJeque = userData?.rol === "jeque";
+  const escuderiaId = userData?.escuderia_id;
+
+  const mySplits = (splits || []).filter(
+    (s: any) => s.id !== "global" && s.activo && (s.equipos || []).some((e: any) => e.id === escuderiaId)
+  );
+
+  async function saveTeamLogo(splitId: string, logoUrl: string) {
+    if (!escuderiaId) return;
+    setSavingLogo(splitId);
+    try {
+      await updateDoc(doc(db, `splits/${splitId}/equipos`, escuderiaId), { logo_url: logoUrl || null });
+      setLogoMsg("Logo guardado.");
+      setTimeout(() => setLogoMsg(""), 2500);
+    } catch (err: any) {
+      setLogoMsg("Error: " + err.message);
+    } finally {
+      setSavingLogo(null);
+    }
+  }
 
   useEffect(() => {
     if (userData) {
@@ -109,6 +136,12 @@ export function ProfileView() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const currentLogoForSplit = (splitId: string) => {
+    const s = (splits || []).find((s: any) => s.id === splitId);
+    const eq = (s?.equipos || []).find((e: any) => e.id === escuderiaId);
+    return eq?.logo_url || "";
   };
 
   return (
@@ -279,6 +312,75 @@ export function ProfileView() {
             </button>
           </div>
         </form>
+
+        {/* Logo de equipo — solo para jeques */}
+        {isJeque && escuderiaId && mySplits.length > 0 && (
+          <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-5 mt-6">
+            <div className="border-b border-white/10 pb-4 flex items-center gap-2">
+              <span className="w-1.5 h-5 bg-[#e10600] inline-block" />
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-tight">Logo de tu Escudería</h3>
+                <p className="text-[10px] text-white/40 font-mono uppercase tracking-wider mt-0.5">
+                  Sube el escudo de tu escudería por temporada
+                </p>
+              </div>
+            </div>
+
+            {logoMsg && (
+              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs font-mono">
+                {logoMsg}
+              </div>
+            )}
+
+            <div className="space-y-5">
+              {mySplits.map((split: any) => {
+                const currentLogo = currentLogoForSplit(split.id);
+                const localUrl = logoUrlInputs[split.id] ?? currentLogo;
+                return (
+                  <div key={split.id} className="space-y-3">
+                    <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/30">
+                      Temporada — {split.nombre}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {/* Preview */}
+                      <div className="w-14 h-14 bg-white/[0.03] border border-white/10 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                        {currentLogo ? (
+                          <img src={currentLogo} className="w-full h-full object-contain p-1" />
+                        ) : (
+                          <ImageIcon className="w-5 h-5 text-white/10" />
+                        )}
+                      </div>
+                      {/* Upload via Storage */}
+                      <StorageImageUpload
+                        storagePath={`logos/${split.id}/${escuderiaId}`}
+                        currentUrl={currentLogo || undefined}
+                        onUpload={url => saveTeamLogo(split.id, url)}
+                        size="sm"
+                        className="shrink-0"
+                      />
+                      {/* URL alternativa */}
+                      <input
+                        type="url"
+                        value={localUrl}
+                        onChange={e => setLogoUrlInputs(prev => ({ ...prev, [split.id]: e.target.value }))}
+                        placeholder="o pega URL aquí"
+                        className="flex-1 min-w-0 bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white font-mono focus:outline-none focus:border-[#e10600] transition-colors"
+                      />
+                      <button
+                        type="button"
+                        disabled={savingLogo === split.id}
+                        onClick={() => saveTeamLogo(split.id, localUrl)}
+                        className="bg-[#e10600]/10 hover:bg-[#e10600]/20 border border-[#e10600]/30 text-[#e10600] text-[10px] font-bold uppercase px-3 py-2 rounded-lg transition-colors disabled:opacity-40 shrink-0"
+                      >
+                        {savingLogo === split.id ? "..." : "Guardar"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

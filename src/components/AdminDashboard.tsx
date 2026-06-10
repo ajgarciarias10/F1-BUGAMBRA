@@ -1,17 +1,18 @@
 ﻿import React, { useState, useEffect, useMemo } from "react";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
-import { processRace, RaceResult } from "../services/raceProcessor";
+import { processRace, recalcSplitPoints, RaceResult } from "../services/raceProcessor";
 import { procesarEconomiaCarrera } from "../services/economyService";
 import { db } from "../services/firebase";
-import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch, increment } from "firebase/firestore";
 import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { isSplitUnlocked } from "../utils/splitResolver";
+import { isSplitUnlocked, buildRivalryTable } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
 import { AdminRivalryControlPanel } from "./RivalryPanels";
 import { EconomyAdminPanel } from "./EconomyAdminPanel";
 import { StorageImageUpload } from "./StorageImageUpload";
+import { DatabaseExplorer } from "./DatabaseExplorer";
 
 const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
   if (!circuitos || circuitos.length === 0) return null;
@@ -54,11 +55,17 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [plantilla, setPlantilla] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState<"championship" | "suggestions" | "economy">("championship");
+  const [adminTab, setAdminTab] = useState<"championship" | "suggestions" | "economy" | "db">("championship");
   const [videoIntroUrl, setVideoIntroUrl] = useState("");
   const [savingVideoIntro, setSavingVideoIntro] = useState(false);
   const [logoEdits, setLogoEdits] = useState<Record<string, string>>({});
   const [savingLogo, setSavingLogo] = useState<string | null>(null);
+  const [photoEdits, setPhotoEdits] = useState<Record<string, string>>({});
+  const [savingPhoto, setSavingPhoto] = useState<string | null>(null);
+  const [recalcLoading, setRecalcLoading] = useState(false);
+  const [resetPointsLoading, setResetPointsLoading] = useState(false);
+  const [savingRivalries, setSavingRivalries] = useState(false);
+  const [rivalriesMsg, setRivalriesMsg] = useState("");
 
   // ─── MIGRACIONES AUTOMÁTICAS AL MONTAR ───────────────────────────────────────
   // Se ejecutan UNA SOLA VEZ. Cada función tiene su propia guardia interna
@@ -106,36 +113,6 @@ export function AdminDashboard() {
     return [...uPilots, ...uniquePPilots];
   }, [usuarios, plantilla]);
 
-  const paddockUsers = useMemo(() => {
-    const mergedByIdentity: Record<string, any> = {};
-
-    const preferUser = (existing: any, candidate: any) => {
-      const existingHasEmail = Boolean(existing?.email?.trim());
-      const candidateHasEmail = Boolean(candidate?.email?.trim());
-
-      if (existingHasEmail && !candidateHasEmail) return existing;
-      if (!existingHasEmail && candidateHasEmail) return candidate;
-
-      if (existing.rol === "piloto" && candidate.rol !== "piloto") return existing;
-      if (candidate.rol === "piloto" && existing.rol !== "piloto") return candidate;
-
-      return existing;
-    };
-
-    usuarios.forEach((user: any) => {
-      const identity = user.piloto_id || user.uid || user.id || "";
-      if (!identity) return;
-
-      if (!mergedByIdentity[identity]) {
-        mergedByIdentity[identity] = user;
-        return;
-      }
-
-      mergedByIdentity[identity] = preferUser(mergedByIdentity[identity], user);
-    });
-
-    return Object.values(mergedByIdentity);
-  }, [usuarios]);
 
   const [selectedCircuitoId, setSelectedCircuitoId] = useState("");
   const [isEditingFinished, setIsEditingFinished] = useState(false);
@@ -198,6 +175,22 @@ export function AdminDashboard() {
       setMsg("Error: " + err.message);
     } finally {
       setSavingLogo(null);
+    }
+  };
+
+  const handleSavePilotPhoto = async (pilotoId: string, photoUrl: string) => {
+    setSavingPhoto(pilotoId);
+    try {
+      const usuario = (usuarios || []).find((u: any) => u.uid === pilotoId || u.piloto_id === pilotoId);
+      const docId = usuario?.uid || pilotoId;
+      await updateDoc(doc(db, "usuarios", docId), { foto_url: photoUrl.trim() || null });
+      setPhotoEdits(prev => { const n = { ...prev }; delete n[pilotoId]; return n; });
+      setMsg("Foto de piloto actualizada.");
+      setTimeout(() => setMsg(""), 2500);
+    } catch (err: any) {
+      setMsg("Error foto: " + err.message);
+    } finally {
+      setSavingPhoto(null);
     }
   };
 
@@ -425,27 +418,34 @@ export function AdminDashboard() {
     }
   };
 
-  const handleUpdatePilotProps = async (_teamId: string, pilotId: string, props: any) => {
-    if (!selectedSplitId) return;
+  const handleUpdatePilotProps = async (teamId: string, pilotId: string, props: any) => {
+    if (!selectedSplitId || !teamId) return;
     setLoading(true);
     try {
-      await setDoc(doc(db, `splits/${selectedSplitId}/roster`, pilotId), {
+      const pilotRef = doc(db, `splits/${selectedSplitId}/equipos/${teamId}/pilotos`, pilotId);
+      const pilotSnap = await getDoc(pilotRef);
+      const oldPrecio = Number(pilotSnap.data()?.precio_compra ?? 0);
+      const newPrecio = Number(props.precio_compra || props.precio_compra_split || 0);
+
+      await setDoc(pilotRef, {
         clausula_actual: Number(props.clausula_actual || 0),
-        precio_compra: Number(props.precio_compra || props.precio_compra_split || 0),
-        puntos_piloto: Number(props.puntos_piloto || 0)
+        precio_compra:   newPrecio,
+        puntos_piloto:   Number(props.puntos_piloto || 0),
+        rating_piloto:   Number(props.rating_piloto || 0),
       }, { merge: true });
-      await setDoc(doc(db, "pilotos", pilotId), {
-        rating_piloto: Number(props.rating_piloto || 0)
-      }, { merge: true });
-      setEditStates(prev => {
-        const copy = { ...prev };
-        delete copy[pilotId];
-        return copy;
-      });
+
+      // Ajustar presupuesto por diferencia de precio
+      if (newPrecio !== oldPrecio) {
+        const teamRef = doc(db, `splits/${selectedSplitId}/equipos`, teamId);
+        const teamSnap = await getDoc(teamRef);
+        const currentBudget = Number(teamSnap.data()?.presupuesto ?? 0);
+        const delta = newPrecio - oldPrecio;
+        await setDoc(teamRef, { presupuesto: Number((currentBudget - delta).toFixed(1)) }, { merge: true });
+      }
+
+      setEditStates(prev => { const copy = { ...prev }; delete copy[pilotId]; return copy; });
       setMsg(`Piloto actualizado en este Split.`);
-      setTimeout(() => {
-        setMsg("");
-      }, 4000);
+      setTimeout(() => setMsg(""), 4000);
     } catch (err: any) {
       setMsg("Error: " + err.message);
     } finally {
@@ -458,23 +458,19 @@ export function AdminDashboard() {
     try {
       const pData = { ...pilotData };
       const rating = Number(pData.rating_piloto ?? pData.raw?.rating_piloto ?? 70);
-      const clause = Number(pData.clausula_actual ?? pData.raw?.clausula_actual ?? Math.round(rating * 0.5));
 
       const currentSplit = splits.find(s => s.id === selectedSplitId);
+      const existingEntryForPrice = currentSplit?.roster.find((r: any) => r.pilotoId === pilotId);
+      const precioCompra = Number(existingEntryForPrice?.precio_compra ?? pData.precio_compra ?? pData.raw?.precio_compra ?? 10);
 
-      // Adjust team budgets
-      if (fromTeamId && fromTeamId !== "agente_libre") {
-        const fromTeam = currentSplit?.equipos?.find((e: any) => e.id === fromTeamId);
-        const newFromBudget = Number(((fromTeam?.presupuesto ?? 100) + clause).toFixed(1));
-        await setDoc(doc(db, `splits/${selectedSplitId}/equipos`, fromTeamId), { presupuesto: newFromBudget }, { merge: true });
-      }
+      // Solo el equipo B paga el precio_compra; equipo A no recibe nada
       if (toTeamId && toTeamId !== "agente_libre") {
-        const toTeam = currentSplit?.equipos?.find((e: any) => e.id === toTeamId);
-        const newToBudget = Number(((toTeam?.presupuesto ?? 100) - clause).toFixed(1));
-        await setDoc(doc(db, `splits/${selectedSplitId}/equipos`, toTeamId), { presupuesto: newToBudget }, { merge: true });
+        await updateDoc(doc(db, `splits/${selectedSplitId}/equipos`, toTeamId), {
+          presupuesto: increment(-precioCompra),
+        });
       }
 
-      // Keep user's escuderia_id in sync
+      // Sincronizar escuderia_id del usuario
       const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
       if (matchedUser) {
         await setDoc(doc(db, "usuarios", matchedUser.uid), {
@@ -485,42 +481,44 @@ export function AdminDashboard() {
       const existingEntry = currentSplit?.roster.find(r => r.pilotoId === pilotId);
       const isFromFreeAgent = !fromTeamId || fromTeamId === "agente_libre";
 
-      if (toTeamId === "agente_libre") {
-        await deleteDoc(doc(db, `splits/${selectedSplitId}/roster`, pilotId));
-      } else {
+      // Borrar doc del equipo anterior
+      if (fromTeamId && fromTeamId !== "agente_libre") {
+        await deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${fromTeamId}/pilotos`, pilotId));
+      }
+
+      if (toTeamId !== "agente_libre") {
         const precioCompra = existingEntry?.precio_compra ?? pData.precio_compra ?? pData.precio_compra_split ?? 10;
-        await setDoc(doc(db, `splits/${selectedSplitId}/roster`, pilotId), {
-          pilotoId: pilotId,
-          equipoId: toTeamId,
-          precio_compra: precioCompra,
-          clausula_actual: existingEntry?.clausula_actual ?? clause,
-          mantener_actual: existingEntry?.mantener_actual ?? clause,
-          clausula_inicial_split: existingEntry?.clausula_inicial_split ?? clause,
-          mantener_inicial_split: existingEntry?.mantener_inicial_split ?? clause,
+        const precioAbs = Math.abs(precioCompra);
+        const defaultClausula = precioCompra < 0 ? Math.round(precioAbs / 2 * 10) / 10 : Math.round(precioAbs * 2 * 10) / 10;
+        const defaultMantener = precioCompra < 0 ? Math.round(precioAbs / 3 * 10) / 10 : Math.round(precioAbs * 3 * 10) / 10;
+        await setDoc(doc(db, `splits/${selectedSplitId}/equipos/${toTeamId}/pilotos`, pilotId), {
+          pilotoId:               pilotId,
+          equipoId:               toTeamId,
+          rating_piloto:          rating,
+          precio_compra:          precioCompra,
+          clausula_actual:        existingEntry?.clausula_actual        ?? defaultClausula,
+          mantener_actual:        existingEntry?.mantener_actual        ?? defaultMantener,
+          clausula_inicial_split: existingEntry?.clausula_inicial_split ?? defaultClausula,
+          mantener_inicial_split: existingEntry?.mantener_inicial_split ?? defaultMantener,
           precio_carrera_anterior: existingEntry?.precio_carrera_anterior ?? precioCompra,
-          historial_precios: existingEntry?.historial_precios ?? {},
-          puntos_piloto: isFromFreeAgent ? 0 : (existingEntry?.puntos_piloto ?? pData.puntos_piloto ?? 0),
-          victorias: isFromFreeAgent ? 0 : (existingEntry?.victorias ?? pData.victorias ?? 0),
-          podios: isFromFreeAgent ? 0 : (existingEntry?.podios ?? pData.podios ?? 0),
-          poles: isFromFreeAgent ? 0 : (existingEntry?.poles ?? pData.poles ?? 0),
-          dnfs: isFromFreeAgent ? 0 : (existingEntry?.dnfs ?? pData.dnfs ?? 0),
+          historial_precios:      existingEntry?.historial_precios      ?? {},
+          puntos_piloto:    isFromFreeAgent ? 0 : (existingEntry?.puntos_piloto    ?? pData.puntos_piloto    ?? 0),
+          victorias:        isFromFreeAgent ? 0 : (existingEntry?.victorias        ?? pData.victorias        ?? 0),
+          podios:           isFromFreeAgent ? 0 : (existingEntry?.podios           ?? pData.podios           ?? 0),
+          poles:            isFromFreeAgent ? 0 : (existingEntry?.poles            ?? pData.poles            ?? 0),
+          dnfs:             isFromFreeAgent ? 0 : (existingEntry?.dnfs             ?? pData.dnfs             ?? 0),
           carreras_limpias: isFromFreeAgent ? 0 : (existingEntry?.carreras_limpias ?? pData.carreras_limpias ?? 0),
         }, { merge: true });
 
-        // Ensure pilot exists in global pilotos collection
+        // Actualizar nombre en colección global de pilotos (solo nombre/foto)
         await setDoc(doc(db, "pilotos", pilotId), {
           nombre: pilotName || pData.nombre || "Piloto",
-          rating_piloto: rating,
         }, { merge: true });
       }
 
       let budgetStr = "";
-      if (fromTeamId !== "agente_libre" && toTeamId !== "agente_libre") {
-        budgetStr = ` (${fromTeamId} +${clause}M, ${toTeamId} -${clause}M)`;
-      } else if (fromTeamId !== "agente_libre") {
-        budgetStr = ` (${fromTeamId} +${clause}M por rescisión)`;
-      } else if (toTeamId !== "agente_libre") {
-        budgetStr = ` (${toTeamId} -${clause}M por fichaje)`;
+      if (toTeamId !== "agente_libre") {
+        budgetStr = ` (${toTeamId} -${precioCompra}M)`;
       }
 
       await addDoc(collection(db, `splits/${selectedSplitId}/transfers`), {
@@ -555,7 +553,7 @@ export function AdminDashboard() {
           const prevSplit = sortedSplits[currentIndex - 1];
           setMsg(`Leyendo roster de ${prevSplit.nombre}...`);
 
-          // Copy equipos from prev split (reset budget/points)
+          // Copiar equipos del split anterior (reset presupuesto/puntos)
           const prevTeamsSnap = await getDocs(collection(db, `splits/${prevSplit.id}/equipos`));
           for (const prevTeamDoc of prevTeamsSnap.docs) {
             const teamData = prevTeamDoc.data();
@@ -567,86 +565,78 @@ export function AdminDashboard() {
             }, { merge: true });
           }
 
-          // Clear existing roster for this split
-          const existingRosterSnap = await getDocs(collection(db, `splits/${splitId}/roster`));
-          for (const rDoc of existingRosterSnap.docs) {
-            await deleteDoc(doc(db, `splits/${splitId}/roster`, rDoc.id));
+          // Borrar pilotos anidados existentes en este split
+          const existingEquiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
+          for (const equipoDoc of existingEquiposSnap.docs) {
+            const pilotsSnap = await getDocs(
+              collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`)
+            );
+            for (const pd of pilotsSnap.docs) {
+              await deleteDoc(pd.ref);
+            }
           }
 
-          // Read current ratings from global pilotos collection
-          const pilotosSnap = await getDocs(collection(db, "pilotos"));
-          const pilotMap: Record<string, any> = {};
-          pilotosSnap.docs.forEach(d => { pilotMap[d.id] = d.data(); });
-
-          // Copy prev split roster with resetted stats and inherited rating
-          const prevRosterSnap = await getDocs(collection(db, `splits/${prevSplit.id}/roster`));
+          // Leer pilotos anidados del split anterior y copiarlos al nuevo
           let pilotsInitialized = 0;
-
-          // Track budget adjustments per team for pending transfers
           const budgetAdjustments: Record<string, number> = {};
 
-          for (const rDoc of prevRosterSnap.docs) {
-            const r = rDoc.data();
-            const pid = rDoc.id;
-            const inheritedRating = pilotMap[pid]?.rating_piloto ?? 70;
-            const precioCompra = r.precio_compra ?? 10;
-            const currentClausula = r.clausula_actual ?? Math.round(precioCompra * 2 * 10) / 10;
-            const mantenerInicial = Math.round(precioCompra * 3 * 10) / 10;
-            const clausulaInicial = Math.round(precioCompra * 2 * 10) / 10;
+          for (const prevEquipoDoc of prevTeamsSnap.docs) {
+            const prevPilotosSnap = await getDocs(
+              collection(db, `splits/${prevSplit.id}/equipos/${prevEquipoDoc.id}/pilotos`)
+            );
+            for (const prevPd of prevPilotosSnap.docs) {
+              const r = prevPd.data();
+              const pid = prevPd.id;
+              const inheritedRating = r.rating_piloto ?? 70;
+              const precioCompra = r.precio_compra ?? 10;
+              const nextEquipoId = r.pending_equipoId ?? r.equipoId;
+              const nextPrecioCompra = r.pending_precio_compra ?? precioCompra;
+              const isFreezeSentinel = nextPrecioCompra === -110;
+              const nextPrecioAbs = Math.abs(nextPrecioCompra);
+              const nextMantener = isFreezeSentinel
+                ? Math.round((r.mantener_actual ?? precioCompra * 3) * 10) / 10
+                : nextPrecioCompra < 0
+                  ? Math.round(nextPrecioAbs / 3 * 10) / 10
+                  : Math.round(nextPrecioAbs * 3 * 10) / 10;
+              const nextClausula = isFreezeSentinel
+                ? Math.round((r.clausula_actual ?? precioCompra * 2) * 10) / 10
+                : nextPrecioCompra < 0
+                  ? Math.round(nextPrecioAbs / 2 * 10) / 10
+                  : Math.round(nextPrecioAbs * 2 * 10) / 10;
 
-            const nextEquipoId = r.pending_equipoId ?? r.equipoId;
-            const nextPrecioCompra = r.pending_precio_compra ?? precioCompra;
-            const isFreezeSentinel = nextPrecioCompra === -110;
-            const nextMantener = isFreezeSentinel
-              ? Math.round((r.mantener_actual ?? precioCompra * 3) * 10) / 10
-              : Math.round(Math.abs(nextPrecioCompra) * 3 * 10) / 10;
-            const nextClausula = isFreezeSentinel
-              ? Math.round((r.clausula_actual ?? precioCompra * 2) * 10) / 10
-              : Math.round(Math.abs(nextPrecioCompra) * 2 * 10) / 10;
+              if (r.pending_equipoId && r.pending_equipoId !== r.equipoId) {
+                // Team A gets nothing; Team B pays the signing price
+                budgetAdjustments[nextEquipoId] = (budgetAdjustments[nextEquipoId] || 0) - nextPrecioCompra;
+              }
 
-            // Track budget adjustments for pending transfers
-            if (r.pending_equipoId && r.pending_equipoId !== r.equipoId) {
-              // Piloto se va del equipo actual: suma cláusula
-              budgetAdjustments[r.equipoId] = (budgetAdjustments[r.equipoId] || 0) + currentClausula;
-              // Piloto entra al equipo destino: resta precio_compra pendiente
-              budgetAdjustments[nextEquipoId] = (budgetAdjustments[nextEquipoId] || 0) - nextPrecioCompra;
+              await setDoc(doc(db, `splits/${splitId}/equipos/${nextEquipoId}/pilotos`, pid), {
+                pilotoId:               pid,
+                equipoId:               nextEquipoId,
+                rating_piloto:          inheritedRating,
+                rating_base:            inheritedRating,
+                tipo_fichaje:           r.pending_tipo_fichaje ?? r.tipo_fichaje,
+                puntos_piloto: 0, victorias: 0, podios: 0,
+                poles: 0, dnfs: 0, carreras_limpias: 0,
+                precio_compra:           nextPrecioCompra,
+                mantener_actual:         nextMantener,
+                clausula_actual:         nextClausula,
+                mantener_inicial_split:  nextMantener,
+                clausula_inicial_split:  nextClausula,
+                precio_carrera_anterior: nextMantener,
+                historial_precios:       {},
+                congelado:               isFreezeSentinel,
+                congelado_en:            undefined,
+              });
+
+              pilotsInitialized++;
             }
-
-            await setDoc(doc(db, `splits/${splitId}/roster`, pid), {
-              pilotoId: pid,
-              equipoId: nextEquipoId,
-              tipo_fichaje: r.pending_tipo_fichaje ?? r.tipo_fichaje,
-              puntos_piloto: 0,
-              victorias: 0,
-              podios: 0,
-              poles: 0,
-              dnfs: 0,
-              carreras_limpias: 0,
-              precio_compra: nextPrecioCompra,
-              mantener_actual: nextMantener,
-              clausula_actual: nextClausula,
-              mantener_inicial_split: nextMantener,
-              clausula_inicial_split: nextClausula,
-              precio_carrera_anterior: nextMantener,
-              historial_precios: {},
-              congelado: isFreezeSentinel,
-              congelado_en: undefined,
-            });
-
-            // Persist inherited rating back to global pilotos
-            if (pilotMap[pid]) {
-              await setDoc(doc(db, "pilotos", pid), { rating_piloto: inheritedRating }, { merge: true });
-            }
-
-            pilotsInitialized++;
           }
 
-          // Apply budget adjustments for pending transfers
+          // Aplicar ajustes de presupuesto por transferencias pendientes
           for (const [teamId, delta] of Object.entries(budgetAdjustments)) {
             if (delta !== 0) {
-              const newBudget = Math.round((100 + delta) * 10) / 10;
               await setDoc(doc(db, `splits/${splitId}/equipos`, teamId), {
-                presupuesto: newBudget,
+                presupuesto: Math.round((100 + delta) * 10) / 10,
               }, { merge: true });
             }
           }
@@ -778,41 +768,41 @@ export function AdminDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-slate-100 p-8 pb-24">
+    <div className="min-h-screen bg-[#0a0a0a] text-slate-100 p-4 pb-10">
       <div className="max-w-7xl mx-auto">
         <UserHeader title="Panel de Administración" />
 
         {/* Navigation Tabs */}
-        <div className="flex flex-wrap border-b border-white/10 mb-8 gap-2">
+        <div className="flex flex-wrap border-b border-white/10 mb-4 gap-0.5">
           <button
             onClick={() => setAdminTab("championship")}
-            className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
+            className={`px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
               adminTab === "championship"
                 ? "text-white bg-white/5"
                 : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
             }`}
           >
-            🏁 Gestión Carreras y Mercado
+            🏁 Carreras y mercado
             {adminTab === "championship" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
             )}
           </button>
           <button
             onClick={() => setAdminTab("suggestions")}
-            className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
+            className={`px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
               adminTab === "suggestions"
                 ? "text-white bg-white/5 animate-pulse"
                 : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
             }`}
           >
-            💡 Buzón de Mejoras
+            💡 Buzón de mejoras
             {adminTab === "suggestions" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
             )}
           </button>
           <button
             onClick={() => setAdminTab("economy")}
-            className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
+            className={`px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
               adminTab === "economy"
                 ? "text-white bg-white/5"
                 : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
@@ -823,16 +813,31 @@ export function AdminDashboard() {
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
             )}
           </button>
+          <button
+            onClick={() => setAdminTab("db")}
+            className={`px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
+              adminTab === "db"
+                ? "text-white bg-white/5"
+                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
+            }`}
+          >
+            🗄️ Base de datos
+            {adminTab === "db" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
+            )}
+          </button>
         </div>
 
         {adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
         ) : adminTab === "economy" ? (
           <EconomyAdminPanel splits={splits} />
+        ) : adminTab === "db" ? (
+          <DatabaseExplorer />
         ) : (
           <>
             {/* Navegación de Splits */}
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {splits.filter(s => isSplitUnlocked(s.id, splits)).map(s => (
             <button
               key={s.id}
@@ -841,9 +846,9 @@ export function AdminDashboard() {
                 const next = getNextCircuitOfSplit(s.circuitos) || s.circuitos[s.circuitos.length - 1];
                 if (next) setSelectedCircuitoId(next.id);
               }}
-              className={`px-4 py-2 rounded-sm font-black text-[10px] uppercase tracking-widest transition-all ${
-                selectedSplitId === s.id 
-                ? "bg-[#e10600] text-white shadow-lg shadow-red-900/20" 
+              className={`px-3 py-1.5 rounded-sm font-black text-[10px] uppercase tracking-widest transition-all ${
+                selectedSplitId === s.id
+                ? "bg-[#e10600] text-white shadow-lg shadow-red-900/20"
                 : "bg-white/[0.03] text-white/40 border border-white/5 hover:border-white/20"
               }`}
             >
@@ -851,35 +856,35 @@ export function AdminDashboard() {
             </button>
           ))}
         </div>
-        
+
         {/* Selector de Circuito */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white/[0.03] border border-white/10 rounded-sm p-4 flex items-center gap-4">
-            <div className="p-2 bg-[#e10600]/10 rounded-sm">
-              <Calendar className="w-5 h-5 text-[#e10600]" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div className="bg-white/[0.03] border border-white/10 rounded-sm p-3 flex items-center gap-3">
+            <div className="p-1.5 bg-[#e10600]/10 rounded-sm">
+              <Calendar className="w-4 h-4 text-[#e10600]" />
             </div>
-            <div className="flex-1">
-              <p className="text-[10px] text-white/40 uppercase tracking-widest font-mono">Circuito Seleccionado</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="font-bold text-sm tracking-tight">{getCircuitName()}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] text-white/40 uppercase tracking-widest font-mono">Circuito activo</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-bold text-xs tracking-tight truncate">{getCircuitName()}</span>
                 {isActaCerrada ? (
-                  <span className="flex items-center gap-1 text-[10px] bg-red-500/20 text-red-500 px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter">
-                    Acta Cerrada
+                  <span className="flex items-center gap-1 text-[9px] bg-red-500/20 text-red-500 px-1.5 py-0.5 font-bold uppercase tracking-tighter shrink-0">
+                    Cerrada
                   </span>
                 ) : isEditingFinished ? (
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
                 ) : null}
               </div>
             </div>
           </div>
 
-          <div className="col-span-2 bg-white/[0.03] border border-white/10 rounded-sm p-4">
-            <div className="flex items-center gap-4">
+          <div className="col-span-2 bg-white/[0.03] border border-white/10 rounded-sm p-3">
+            <div className="flex items-center gap-3">
                <div className="flex-1">
-                  <p className="text-[10px] text-white/40 uppercase tracking-widest font-mono mb-2 text-center md:text-left">Carga un nuevo GP o corrige uno Finalizado</p>
+                  <p className="text-[9px] text-white/40 uppercase tracking-widest font-mono mb-1.5">Seleccionar GP</p>
                   <select
                     style={{ colorScheme: "dark", backgroundColor: "#0d0d0d", color: "#fff" }}
-                    className="w-full border border-white/10 py-2.5 px-3 text-xs outline-none focus:border-[#e10600] transition-colors cursor-pointer"
+                    className="w-full border border-white/10 py-1.5 px-2.5 text-xs outline-none focus:border-[#e10600] transition-colors cursor-pointer"
                     value={`${selectedSplitId}|${selectedCircuitoId}`}
                     onChange={(e) => {
                       const [sid, cid] = e.target.value.split("|");
@@ -925,92 +930,101 @@ export function AdminDashboard() {
         </div>
 
         {/* PROGRAMACIÓN DEL CIRCUITO */}
-        <div className="bg-white/[0.03] border border-white/10 rounded-sm p-5 mb-8">
-          <div className="flex items-center gap-2 mb-4 border-b border-white/5 pb-2">
-            <Calendar className="w-4 h-4 text-[#e10600]" />
-            <h3 className="font-extrabold text-xs uppercase tracking-wider text-white">Programación de Carrera para {getCircuitName()}</h3>
+        <div className="bg-white/[0.03] border border-white/10 rounded-sm p-3 mb-4">
+          <div className="flex items-center gap-2 mb-3 border-b border-white/5 pb-2">
+            <Calendar className="w-3.5 h-3.5 text-[#e10600]" />
+            <h3 className="font-bold text-[10px] uppercase tracking-wider text-white">Programación — {getCircuitName()}</h3>
           </div>
-          
-          <div className="grid grid-cols-1 max-w-xl gap-4">
-            <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 max-w-2xl gap-3">
+            <div className="grid grid-cols-4 gap-3">
               <div>
-                <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Nº Carrera en Split</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={numeroCarrera}
+                <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Nº carrera</label>
+                <input type="number" min={1} max={20} value={numeroCarrera}
                   onChange={(e) => setNumeroCarrera(parseInt(e.target.value) || 1)}
-                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors text-center"
+                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-1.5 px-2.5 text-xs text-white outline-none focus:border-[#e10600] transition-colors text-center"
                 />
               </div>
               <div>
-                <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Fecha de Carrera</label>
-                <input
-                  type="date"
-                  value={fechaVal}
-                  onChange={(e) => setFechaVal(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
+                <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Fecha</label>
+                <input type="date" value={fechaVal} onChange={(e) => setFechaVal(e.target.value)}
+                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-1.5 px-2.5 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">Hora de Carrera</label>
-                <input
-                  type="time"
-                  value={horaVal}
-                  onChange={(e) => setHoraVal(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
+                <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Hora</label>
+                <input type="time" value={horaVal} onChange={(e) => setHoraVal(e.target.value)}
+                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-1.5 px-2.5 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
                 />
+              </div>
+              <div className="flex items-end">
+                <button onClick={handleSaveSchedule} disabled={isSavingSchedule}
+                  className="w-full border border-white/10 text-white/80 text-[9px] font-bold uppercase tracking-wider py-1.5 px-3 rounded-sm transition-all flex items-center justify-center gap-1.5 hover:bg-white/[0.06] cursor-pointer disabled:opacity-40"
+                >
+                  {isSavingSchedule ? <Loader2 className="w-3 h-3 animate-spin" /> : "Guardar"}
+                </button>
               </div>
             </div>
             <div>
-              <label className="block text-[10px] text-white/40 uppercase font-mono mb-1.5 font-bold">URL Hotlap del Circuito (YouTube)</label>
-              <input
-                type="url"
-                value={hotlapUrl}
-                onChange={(e) => setHotlapUrl(e.target.value)}
+              <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">URL Hotlap (YouTube)</label>
+              <input type="url" value={hotlapUrl} onChange={(e) => setHotlapUrl(e.target.value)}
                 placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-1.5 px-2.5 text-xs text-white outline-none focus:border-[#e10600] transition-colors font-mono"
               />
-              <p className="text-[9px] text-white/30 mt-1 font-mono">Se mostrará a los pilotos durante la semana del GP (7 días antes de la carrera).</p>
             </div>
-          </div>
-          
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={handleSaveSchedule}
-              disabled={isSavingSchedule}
-              className="bg-zinc-850 hover:bg-zinc-700 hover:text-white border border-white/10 text-white/95 text-[10px] font-bold uppercase tracking-wider py-2 px-6 rounded-sm transition-all flex items-center justify-center gap-1.5 shadow cursor-pointer"
-            >
-              {isSavingSchedule ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar Programación"}
-            </button>
           </div>
         </div>
         
         {currentRawSplit && (
-          <AdminRivalryControlPanel split={currentRawSplit} />
+          <div>
+            <AdminRivalryControlPanel split={currentRawSplit} />
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={async () => {
+                  if (!currentRawSplit || !selectedSplitId) return;
+                  setSavingRivalries(true);
+                  setRivalriesMsg("");
+                  try {
+                    const rivalries = buildRivalryTable(currentRawSplit);
+                    await updateDoc(doc(db, "splits", selectedSplitId), { rivalries });
+                    setRivalriesMsg("Rivalidades guardadas correctamente.");
+                  } catch (e: any) {
+                    setRivalriesMsg(`Error: ${e.message}`);
+                  } finally {
+                    setSavingRivalries(false);
+                  }
+                }}
+                disabled={savingRivalries}
+                className="px-4 py-2 bg-[#e10600] hover:bg-[#c10500] disabled:opacity-50 text-white text-xs font-bold uppercase tracking-widest transition-colors"
+              >
+                {savingRivalries ? "Guardando…" : "Guardar Rivalidades"}
+              </button>
+              {rivalriesMsg && (
+                <span className="text-xs font-mono text-white/60">{rivalriesMsg}</span>
+              )}
+            </div>
+          </div>
         )}
 
-        <section className="bg-white/[0.03] border border-white/10  p-6 relative overflow-hidden">
+        <section className="bg-white/[0.03] border border-white/10 p-4 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[#e10600]/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
-          
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
             <div>
-              <h2 className="text-2xl font-black italic tracking-tighter text-white flex items-center gap-3 lowercase">
-                <span className="w-1.5 h-8 bg-[#e10600] block" />
-                {isActaCerrada ? "ACTA CERRADA" : isEditingFinished ? "CORREGIR RESULTADOS" : "CARGA DE RESULTADOS"}
+              <h2 className="text-base font-black italic tracking-tighter text-white flex items-center gap-2.5">
+                <span className="w-1 h-5 bg-[#e10600] block" />
+                {isActaCerrada ? "Acta cerrada" : isEditingFinished ? "Corrección de resultados" : "Carga de resultados"}
               </h2>
-              <p className="text-xs text-white/40 uppercase tracking-widest mt-2 font-mono">
-                {isActaCerrada 
-                  ? "Este acta no se puede modificar" 
+              <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1 font-mono">
+                {isActaCerrada
+                  ? "Este acta no se puede modificar"
                   : isEditingFinished ? `Edición GP: ${getCircuitName()}` : `Registro GP: ${getCircuitName()}`}
               </p>
             </div>
-            
-            <div className="flex items-center gap-3">
+
+            <div className="flex items-center gap-2">
               {((Object.values(qualyCount) as number[]).some(c => c > 1) || (Object.values(raceCount) as number[]).some(c => c > 1)) && (
-                <div className="text-[10px] text-amber-400 font-mono flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-sm mr-2 max-w-xs">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <div className="text-[9px] text-amber-400 font-mono flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 mr-1 max-w-xs">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
                   <span>Posiciones duplicadas (en ámbar)</span>
                 </div>
               )}
@@ -1018,7 +1032,7 @@ export function AdminDashboard() {
               {isEditingFinished && !isActaCerrada && (
                 <button
                   onClick={handleCerrarActa}
-                  className="px-6 py-3 rounded-sm border border-red-500/30 text-red-500 text-xs font-black uppercase hover:bg-red-500/10 transition-all"
+                  className="px-4 py-1.5 rounded-sm border border-red-500/30 text-red-500 text-[10px] font-black uppercase hover:bg-red-500/10 transition-all"
                 >
                   Cerrar Acta
                 </button>
@@ -1045,9 +1059,9 @@ export function AdminDashboard() {
                     setEconomiaMsg(result.message);
                     setProcesandoEconomia(false);
                   }}
-                  className="px-6 py-3 rounded-sm border border-amber-500/40 text-amber-400 text-xs font-black uppercase hover:bg-amber-500/10 transition-all disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-1.5 rounded-sm border border-amber-500/40 text-amber-400 text-[10px] font-black uppercase hover:bg-amber-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {procesandoEconomia ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {procesandoEconomia ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                   {procesandoEconomia ? "Procesando..." : "Procesar Economía"}
                 </button>
               )}
@@ -1055,14 +1069,74 @@ export function AdminDashboard() {
               <button
                 onClick={handleSubmit}
                 disabled={loading || isActaCerrada}
-                className="group relative bg-[#e10600] px-8 py-3 rounded-sm font-black text-xs uppercase hover:bg-red-700 transition-all shadow-xl shadow-red-900/30 overflow-hidden active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="group relative bg-[#e10600] px-5 py-1.5 rounded-sm font-black text-[10px] uppercase hover:bg-red-700 transition-all shadow-lg shadow-red-900/30 overflow-hidden active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                <span className="relative z-10 flex items-center gap-2">
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : (isEditingFinished ? "Guardar Corrección" : "Procesar Carrera")}
+                <span className="relative z-10 flex items-center gap-1.5">
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : (isEditingFinished ? "Guardar Corrección" : "Procesar Carrera")}
                 </span>
                 <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
               </button>
             </div>
+          </div>
+
+          {/* Acciones sobre puntos del split */}
+          <div className="flex items-center gap-2 border-t border-white/[0.04] pt-3 mt-2">
+            <span className="text-[9px] font-mono text-white/20 uppercase tracking-widest mr-1">Split:</span>
+            <button
+              onClick={async () => {
+                if (!selectedSplitId) return;
+                setRecalcLoading(true);
+                const result = await recalcSplitPoints(selectedSplitId);
+                setMsg(result.message);
+                setTimeout(() => setMsg(""), 5000);
+                setRecalcLoading(false);
+              }}
+              disabled={recalcLoading || !selectedSplitId}
+              className="px-3 py-1 bg-white/[0.04] hover:bg-white/10 border border-white/10 text-[9px] uppercase font-bold tracking-wider text-white/50 hover:text-white transition-colors disabled:opacity-40 flex items-center gap-1"
+            >
+              {recalcLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
+              Recalcular puntos
+            </button>
+            <button
+              onClick={async () => {
+                if (!selectedSplitId) return;
+                if (!confirm(`¿Resetear puntos y circuitos de ${selectedSplitId}? Los resultados se conservan.`)) return;
+                setResetPointsLoading(true);
+                try {
+                  const [equiposSnap, circSnap] = await Promise.all([
+                    getDocs(collection(db, `splits/${selectedSplitId}/equipos`)),
+                    getDocs(collection(db, `splits/${selectedSplitId}/circuitos`)),
+                  ]);
+                  const b1 = writeBatch(db);
+                  for (const equipoDoc of equiposSnap.docs) {
+                    const pilotosSnap = await getDocs(
+                      collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`)
+                    );
+                    pilotosSnap.docs.forEach(d => b1.update(d.ref, {
+                      puntos_piloto: 0, victorias: 0, podios: 0,
+                      poles: 0, dnfs: 0, carreras_limpias: 0,
+                    }));
+                  }
+                  await b1.commit();
+                  const b2 = writeBatch(db);
+                  circSnap.docs.forEach(d => b2.update(d.ref, {
+                    completado: false, economia_procesada: false,
+                  }));
+                  await b2.commit();
+                  setMsg("Puntos y circuitos reseteados. Resultados conservados.");
+                  setTimeout(() => setMsg(""), 5000);
+                } catch (err: any) {
+                  setMsg("Error reset: " + err.message);
+                } finally {
+                  setResetPointsLoading(false);
+                }
+              }}
+              disabled={resetPointsLoading || !selectedSplitId}
+              className="px-3 py-1 bg-[#e10600]/[0.06] hover:bg-[#e10600]/15 border border-[#e10600]/20 text-[9px] uppercase font-bold tracking-wider text-[#e10600]/60 hover:text-[#e10600] transition-colors disabled:opacity-40 flex items-center gap-1"
+            >
+              {resetPointsLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
+              Reset circuitos
+            </button>
           </div>
 
           {economiaMsg && (
@@ -1073,37 +1147,37 @@ export function AdminDashboard() {
 
           <AnimatePresence>
             {msg && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className={`mb-6 overflow-hidden`}
+                className="mb-3 overflow-hidden"
               >
-                <div className={`p-4 border rounded-sm flex items-center gap-3 text-sm ${
-                  msg.toLowerCase().includes("error") 
-                  ? "bg-red-500/10 border-red-500/20 text-red-400" 
+                <div className={`p-3 border rounded-sm flex items-center gap-2.5 text-xs ${
+                  msg.toLowerCase().includes("error")
+                  ? "bg-red-500/10 border-red-500/20 text-red-400"
                   : "bg-green-500/10 border-green-500/20 text-green-400"
                 }`}>
-                  {msg.toLowerCase().includes("error") ? <AlertCircle className="w-5 h-5 flex-shrink-0" /> : <CheckCircle2 className="w-5 h-5 flex-shrink-0" />}
+                  {msg.toLowerCase().includes("error") ? <AlertCircle className="w-4 h-4 flex-shrink-0" /> : <CheckCircle2 className="w-4 h-4 flex-shrink-0" />}
                   <span className="font-medium">{msg}</span>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="overflow-x-auto -mx-6 px-6">
+          <div className="overflow-x-auto -mx-4 px-4">
             <table className="w-full text-sm text-left border-collapse">
               <thead>
-                <tr className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-mono border-b border-white/10 pb-4">
-                  <th className="pb-4 pl-4 font-normal">Piloto</th>
-                  <th className="pb-4 font-normal">Qualy</th>
-                  <th className="pb-4 font-normal">Race</th>
-                  <th className="pb-4 text-center font-normal">DNF</th>
-                  <th className="pb-4 text-center font-normal">SANC</th>
-                  <th className="pb-4 text-center font-normal">ADEL</th>
-                  <th className="pb-4 text-center font-normal">DOTD</th>
-                  <th className="pb-4 text-center font-normal">MVP</th>
-                  <th className="pb-4 text-center font-normal">V.R</th>
+                <tr className="text-[9px] text-white/30 uppercase tracking-[0.2em] font-mono border-b border-white/10 pb-2">
+                  <th className="pb-2 pl-3 font-normal">Piloto</th>
+                  <th className="pb-2 font-normal">Qualy</th>
+                  <th className="pb-2 font-normal">Race</th>
+                  <th className="pb-2 text-center font-normal">DNF</th>
+                  <th className="pb-2 text-center font-normal">SANC</th>
+                  <th className="pb-2 text-center font-normal">ADEL</th>
+                  <th className="pb-2 text-center font-normal">DOTD</th>
+                  <th className="pb-2 text-center font-normal">MVP</th>
+                  <th className="pb-2 text-center font-normal">V.R</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -1115,8 +1189,8 @@ export function AdminDashboard() {
                   const isRaceDuplicated = !isPilotDnf && typeof rPosVal === "number" && (raceCount[rPosVal] || 0) > 1;
                   return (
                     <tr key={`pilot-row-${p.pilotoId}-${i}`} className="group border-b border-white/5 hover:bg-white/5 transition-colors">
-                      <td className="py-4 pl-4">
-                        <div className="flex items-center gap-3">
+                      <td className="py-2.5 pl-3">
+                        <div className="flex items-center gap-2.5">
                           <span className="text-[10px] font-mono text-white/20 w-4">{i+1}</span>
                           <div>
                             <EditableName
@@ -1128,16 +1202,16 @@ export function AdminDashboard() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-4">
-                        <input 
-                          type="number" 
-                          min="1" 
-                          max="15" 
-                          className={`w-14 bg-[#1a1a1a]/50 border rounded-sm px-2 py-2 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${
+                      <td className="py-2.5">
+                        <input
+                          type="number"
+                          min="1"
+                          max="15"
+                          className={`w-12 bg-[#1a1a1a]/50 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${
                             isQualyDuplicated
-                              ? "border-amber-500/60 text-amber-300 bg-amber-500/5" 
+                              ? "border-amber-500/60 text-amber-300 bg-amber-500/5"
                               : "border-white/10 text-white"
-                          }`} 
+                          }`}
                           title={isQualyDuplicated ? "¡Posición de Qualy duplicada!" : undefined}
                           disabled={isActaCerrada || isPilotDnf}
                           value={isPilotDnf ? "" : (qPosVal ?? "")} 
@@ -1147,12 +1221,12 @@ export function AdminDashboard() {
                           }}
                         />
                       </td>
-                      <td className="py-4">
+                      <td className="py-2.5">
                         <input
                           type="number"
                           min="1"
                           max="15"
-                          className={`w-14 bg-[#1a1a1a]/50 border rounded-sm px-2 py-2 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${
+                          className={`w-12 bg-[#1a1a1a]/50 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${
                             isRaceDuplicated
                               ? "border-amber-500/60 text-amber-300 bg-amber-500/5"
                               : "border-white/10 text-white"
@@ -1166,8 +1240,8 @@ export function AdminDashboard() {
                           }}
                         />
                       </td>
-                      <td className="py-4 text-center">
-                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
+                      <td className="py-2.5 text-center">
+                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada}
                           checked={results[p.pilotoId]?.isDnfOwnError || false}
                           onChange={e => {
@@ -1208,28 +1282,28 @@ export function AdminDashboard() {
                           }}
                         />
                       </td>
-                      <td className="py-4 text-center">
-                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
+                      <td className="py-2.5 text-center">
+                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada || isPilotDnf}
                           checked={isPilotDnf ? false : !(results[p.pilotoId]?.isClean ?? true)} onChange={e => handleUpdate(p.pilotoId, "isClean", !e.target.checked)} />
                       </td>
-                      <td className="py-4 text-center">
-                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
+                      <td className="py-2.5 text-center">
+                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada || isPilotDnf}
                           checked={isPilotDnf ? false : (results[p.pilotoId]?.overtakesBoost || false)} onChange={e => handleUpdate(p.pilotoId, "overtakesBoost", e.target.checked)} />
                       </td>
-                      <td className="py-4 text-center">
-                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
+                      <td className="py-2.5 text-center">
+                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada || isPilotDnf}
                           checked={isPilotDnf ? false : (results[p.pilotoId]?.isDotd || false)} onChange={e => handleUpdate(p.pilotoId, "isDotd", e.target.checked)} />
                       </td>
-                      <td className="py-4 text-center">
-                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
+                      <td className="py-2.5 text-center">
+                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada || isPilotDnf}
                           checked={isPilotDnf ? false : (results[p.pilotoId]?.isMvp || false)} onChange={e => handleUpdate(p.pilotoId, "isMvp", e.target.checked)} />
                       </td>
-                      <td className="py-4 text-center">
-                        <input type="checkbox" className="w-4 h-4 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
+                      <td className="py-2.5 text-center">
+                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada || isPilotDnf}
                           checked={isPilotDnf ? false : (results[p.pilotoId]?.fastestLap || false)} onChange={e => handleUpdate(p.pilotoId, "fastestLap", e.target.checked)} />
                       </td>
@@ -1243,21 +1317,21 @@ export function AdminDashboard() {
 
 
         {/* MOVER PILOTOS */}
-        <section className="mt-12 bg-white/[0.03] border border-white/10 p-6 relative overflow-hidden">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <section className="mt-5 bg-white/[0.03] border border-white/10 p-4 relative overflow-hidden">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
             <div>
-              <h2 className="text-xl font-black italic tracking-tighter text-white flex items-center gap-3 lowercase">
-                <span className="w-1.5 h-6 bg-[#e10600] block" />
-                Mover Pilotos
+              <h2 className="text-sm font-black italic tracking-tighter text-white flex items-center gap-2.5">
+                <span className="w-1 h-5 bg-[#e10600] block" />
+                Edición de equipos y pilotos
               </h2>
-              <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1 font-mono">
-                Transferencias entre escuderías del split
+              <p className="text-[9px] text-white/40 uppercase tracking-widest mt-1 font-mono">
+                Gestión de transferencias, logos y fotos del split
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 bg-white/[0.02] p-2 border border-white/5">
-                <span className="text-[10px] font-mono uppercase text-white/40">MERCADO:</span>
-                <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-white/[0.02] p-1.5 border border-white/5">
+                <span className="text-[9px] font-mono uppercase text-white/40">MERCADO:</span>
+                <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
                   splits.find(s => s.id === selectedSplitId)?.fichajes_abiertos
                   ? "bg-green-500/20 text-green-400 border border-green-500/30"
                   : "bg-red-500/20 text-red-500 border border-red-500/30"
@@ -1265,13 +1339,13 @@ export function AdminDashboard() {
                   {splits.find(s => s.id === selectedSplitId)?.fichajes_abiertos ? "Abierto" : "Cerrado"}
                 </span>
                 <button onClick={handleToggleFichajes}
-                  className="px-3 py-1 bg-white/10 hover:bg-white/25 text-[10px] uppercase font-bold tracking-wider transition-colors">
+                  className="px-2.5 py-0.5 bg-white/10 hover:bg-white/25 text-[9px] uppercase font-bold tracking-wider transition-colors">
                   Cambiar
                 </button>
               </div>
-              <div className="flex items-center gap-2 bg-white/[0.02] p-2 border border-white/5">
-                <span className="text-[10px] font-mono uppercase text-white/40">WEB PÚBLICA:</span>
-                <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
+              <div className="flex items-center gap-1.5 bg-white/[0.02] p-1.5 border border-white/5">
+                <span className="text-[9px] font-mono uppercase text-white/40">WEB PÚBLICA:</span>
+                <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
                   splits.find(s => s.id === selectedSplitId)?.activo
                   ? "bg-[#e10600]/20 text-[#e10600] border border-[#e10600]/30"
                   : "bg-white/5 text-white/30 border border-white/10"
@@ -1279,7 +1353,7 @@ export function AdminDashboard() {
                   {splits.find(s => s.id === selectedSplitId)?.activo ? "Activo" : "Oculto"}
                 </span>
                 <button onClick={handleSetSplitActivo}
-                  className="px-3 py-1 bg-white/10 hover:bg-white/25 text-[10px] uppercase font-bold tracking-wider transition-colors">
+                  className="px-2.5 py-0.5 bg-white/10 hover:bg-white/25 text-[9px] uppercase font-bold tracking-wider transition-colors">
                   {splits.find(s => s.id === selectedSplitId)?.activo ? "Desactivar" : "Activar"}
                 </button>
               </div>
@@ -1287,7 +1361,7 @@ export function AdminDashboard() {
           </div>
 
           {/* Video Intro del Split */}
-          <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 border-t border-white/[0.04] pt-5">
+          <div className="mb-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 border-t border-white/[0.04] pt-3">
             <span className="text-[10px] font-mono uppercase text-white/40 shrink-0 w-20">Video Intro</span>
             <input
               type="url"
@@ -1307,8 +1381,8 @@ export function AdminDashboard() {
           </div>
 
           {/* Logos de escuderías */}
-          <div className="mb-6 pb-6 border-b border-white/[0.04] space-y-2">
-            <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-3">Logos de escuderías</p>
+          <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
+            <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Logos de escuderías</p>
             {(currentRawSplit?.equipos || []).map((team: any) => {
               const editVal = logoEdits[team.id] ?? (team.logo_url ?? "");
               const isSavingL = savingLogo === team.id;
@@ -1346,16 +1420,66 @@ export function AdminDashboard() {
             )}
           </div>
 
+          {/* Fotos de pilotos */}
+          <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
+            <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Fotos de pilotos</p>
+            {(currentRawSplit?.roster || [])
+              .slice()
+              .sort((a: any, b: any) => (a.nombre || "").localeCompare(b.nombre || ""))
+              .map((p: any) => {
+                const usuario = (usuarios || []).find((u: any) => u.uid === p.pilotoId || u.piloto_id === p.pilotoId);
+                const currentPhoto = usuario?.foto_url || "";
+                const editVal = photoEdits[p.pilotoId] ?? currentPhoto;
+                const isSaving = savingPhoto === p.pilotoId;
+                return (
+                  <div key={p.pilotoId} className="flex items-center gap-2">
+                    {/* Preview */}
+                    <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 shrink-0 bg-white/[0.02] flex items-center justify-center">
+                      {currentPhoto ? (
+                        <img src={currentPhoto} className="w-full h-full object-cover" />
+                      ) : (
+                        <UserIcon className="w-4 h-4 text-white/10" />
+                      )}
+                    </div>
+                    <span className="text-[10px] text-white/50 w-24 shrink-0 truncate font-mono">{p.nombre}</span>
+                    <StorageImageUpload
+                      storagePath={`fotos/pilotos/${p.pilotoId}`}
+                      currentUrl={currentPhoto || undefined}
+                      onUpload={url => handleSavePilotPhoto(p.pilotoId, url)}
+                      size="sm"
+                    />
+                    <input
+                      type="url"
+                      value={editVal}
+                      onChange={e => setPhotoEdits(prev => ({ ...prev, [p.pilotoId]: e.target.value }))}
+                      placeholder="o pega URL aquí"
+                      className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                    />
+                    <button
+                      onClick={() => handleSavePilotPhoto(p.pilotoId, editVal)}
+                      disabled={isSaving}
+                      className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                    >
+                      {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
+                    </button>
+                  </div>
+                );
+              })}
+            {(currentRawSplit?.roster || []).length === 0 && (
+              <p className="text-[9px] font-mono text-white/15">Sin pilotos en este split</p>
+            )}
+          </div>
+
           {!isSelectedSplitInitialized && selectedSplitId !== "split_1" && (
-            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
               <div>
-                <h4 className="text-sm font-bold text-amber-400 uppercase tracking-wider">⚠️ Split No Inicializado</h4>
-                <p className="text-xs text-white/60 mt-1 max-w-2xl">
+                <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">⚠️ Split no inicializado</h4>
+                <p className="text-[10px] text-white/60 mt-0.5 max-w-2xl">
                   Este split hereda dinámicamente el plantel del anterior. Inicialízalo para poder mover pilotos de forma independiente.
                 </p>
               </div>
               <button onClick={() => handleSyncSplitRosters(selectedSplitId)}
-                className="bg-amber-500 hover:bg-amber-600 text-black px-4 py-2 text-xs font-black uppercase tracking-wider shrink-0 transition-colors cursor-pointer">
+                className="bg-amber-500 hover:bg-amber-600 text-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider shrink-0 transition-colors cursor-pointer">
                 Inicializar Split
               </button>
             </div>
@@ -1366,10 +1490,10 @@ export function AdminDashboard() {
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[0.25em] text-white/25 font-normal">
-                  <th className="py-3 px-4 text-left font-normal">Piloto</th>
-                  <th className="py-3 px-4 text-left font-normal">Equipo actual</th>
-                  <th className="py-3 px-4 text-left font-normal">Precio next split</th>
-                  <th className="py-3 px-4 text-left font-normal">Mover a</th>
+                  <th className="py-2 px-3 text-left font-normal">Piloto</th>
+                  <th className="py-2 px-3 text-left font-normal">Equipo actual</th>
+                  <th className="py-2 px-3 text-left font-normal">Precio next split</th>
+                  <th className="py-2 px-3 text-left font-normal">Mover a</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
@@ -1380,16 +1504,16 @@ export function AdminDashboard() {
                     const teamNombre = (currentRawSplit?.equipos || []).find((e: any) => e.id === p.equipoId)?.nombre || p.equipoId || "Agente Libre";
                     return (
                       <tr key={p.pilotoId} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3 px-4 font-bold text-white/90">{p.nombre}</td>
-                        <td className="py-3 px-4 text-white/40 font-mono text-[10px]">{teamNombre}</td>
-                      <td className="py-3 px-4 text-white/40 font-mono text-[10px]">
+                        <td className="py-2 px-3 font-bold text-white/90">{p.nombre}</td>
+                        <td className="py-2 px-3 text-white/40 font-mono text-[10px]">{teamNombre}</td>
+                      <td className="py-2 px-3 text-white/40 font-mono text-[10px]">
                         {typeof p.pending_precio_compra === "number" ? `${p.pending_precio_compra}M` : `${p.precio_compra ?? 0}M`}
                         {p.pending_precio_compra != null && <span className="block text-[9px] text-white/30">siguiente split</span>}
                       </td>
-                        <td className="py-3 px-4">
+                        <td className="py-2 px-3">
                           <select
                             style={{ colorScheme: "dark", backgroundColor: "#0d0d0d" }}
-                            className="border border-white/10 px-2 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors cursor-pointer"
+                            className="border border-white/10 px-2 py-1 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors cursor-pointer"
                             value={p.equipoId || "agente_libre"}
                             onChange={e => {
                               const dest = e.target.value;
@@ -1419,9 +1543,9 @@ export function AdminDashboard() {
             const rosterIds = (currentRawSplit?.roster || []).map((r: any) => r.pilotoId);
             return !rosterIds.some((id: string) => id === u.uid || id === u.piloto_id);
           }).length > 0 && (
-            <div className="mt-6 border-t border-white/[0.06] pt-6">
-              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-3">Añadir piloto sin equipo</p>
-              <div className="flex items-center gap-3">
+            <div className="mt-4 border-t border-white/[0.06] pt-4">
+              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Añadir piloto sin equipo</p>
+              <div className="flex items-center gap-2.5">
                 <select
                   style={{ colorScheme: "dark", backgroundColor: "#0d0d0d" }}
                   className="border border-white/10 px-3 py-2 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors"
@@ -1448,104 +1572,23 @@ export function AdminDashboard() {
           )}
         </section>
 
-        {/* Gestión de Usuarios */}
-        <section className="mt-12 bg-white/[0.03] border border-white/10  p-6 relative overflow-hidden">
-          <div className="mb-6">
-            <h2 className="text-xl font-black italic tracking-tighter text-white flex items-center gap-3 lowercase">
-              <span className="w-1.5 h-6 bg-[#e10600] block" />
-              Gestión de Paddock
-            </h2>
-            <p className="text-[10px] text-white/40 uppercase tracking-widest mt-2 font-mono">
-              Usuarios registrados y vinculación con pilotos
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left border-collapse">
-              <thead>
-                <tr className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-mono border-b border-white/10 pb-4">
-                  <th className="pb-4 pl-4 font-normal">Usuario App</th>
-                  <th className="pb-4 font-normal">Email</th>
-                  <th className="pb-4 font-normal">Identidad Real</th>
-                  <th className="pb-4 font-normal">Rol</th>
-                  <th className="pb-4 font-normal">Escudería</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paddockUsers.map((p, i) => {
-                  const getPilotTeamLabel = (user: any) => {
-                    if (user.rol === "jeque") {
-                      return user.escuderia_id ? `Jeque (${user.escuderia_id.replace('_', ' ')})` : "Jeque (Sin asignar)";
-                    }
-                    if (user.rol === "admin") {
-                      return "Administrador";
-                    }
-                    if (user.rol === "piloto") {
-                      const splitView = splits.find(s => s.id === selectedSplitId);
-                      const rosterEntry = (splitView?.roster || []).find(
-                        (r: any) => r.pilotoId === user.uid || (user.piloto_id && r.pilotoId === user.piloto_id)
-                      );
-                      if (!rosterEntry || rosterEntry.equipoId === "agente_libre") return "Agente Libre";
-                      const team = (splitView?.equipos || []).find((eq: any) => eq.id === rosterEntry.equipoId);
-                      return team ? team.nombre : rosterEntry.equipoId;
-                    }
-                    return "N/A";
-                  };
-
-                  return (
-                    <tr key={`paddock-user-${p.uid}-${i}`} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
-                      <td className="py-4 pl-4">
-                        <EditableName
-                          pilotId={p.uid}
-                          initialName={p.nombre}
-                          className="font-bold text-white"
-                          onSave={handleUpdatePilotName}
-                        />
-                        <p className="text-[10px] text-white/20 font-mono">{p.uid}</p>
-                      </td>
-                      <td className="py-4 font-mono text-xs">{p.email}</td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-2">
-                          <UserIcon className="w-3 h-3 text-[#e10600]" />
-                          <span className="font-medium text-xs">{p.piloto_id || p.id || "N/A"}</span>
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${
-                          p.rol === 'admin' ? 'bg-red-500/20 text-red-500' : 
-                          p.rol === 'jeque' ? 'bg-amber-500/20 text-amber-500' : 
-                          'bg-blue-500/20 text-blue-500'
-                        }`}>
-                          {p.rol}
-                        </span>
-                      </td>
-                      <td className="py-4 capitalize font-mono text-xs text-white/60">
-                        {getPilotTeamLabel(p)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
+        {/* Paddock */}
 
           </>
         )}
 
         {confirmModal && confirmModal.isOpen && (
           <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
-            <div className="bg-[#0a0a0a] border border-white/10  p-6 max-w-sm w-full relative text-left">
-              <h3 className="text-lg font-black text-white uppercase tracking-tight mb-2 flex items-center gap-2">
-                <span className="w-1.5 h-4 bg-[#e10600]" />
+            <div className="bg-[#0a0a0a] border border-white/10 p-4 max-w-sm w-full relative text-left">
+              <h3 className="text-sm font-black text-white uppercase tracking-tight mb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-[#e10600]" />
                 {confirmModal.title}
               </h3>
-              <p className="text-xs text-white/60 leading-relaxed mb-6">{confirmModal.message}</p>
-              <div className="flex justify-end gap-3 font-semibold text-[10px] uppercase tracking-wider">
+              <p className="text-xs text-white/60 leading-relaxed mb-4">{confirmModal.message}</p>
+              <div className="flex justify-end gap-2 font-semibold text-[10px] uppercase tracking-wider">
                 <button
                   onClick={() => setConfirmModal(null)}
-                  className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-sm transition-colors border border-white/5"
+                  className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-sm transition-colors border border-white/5"
                 >
                   Cancelar
                 </button>
@@ -1554,7 +1597,7 @@ export function AdminDashboard() {
                     confirmModal.onConfirm();
                     setConfirmModal(null);
                   }}
-                  className="px-4 py-2.5 bg-[#e10600] text-white rounded-sm hover:bg-red-700 transition-colors shadow-lg shadow-red-900/30"
+                  className="px-3 py-2 bg-[#e10600] text-white rounded-sm hover:bg-red-700 transition-colors shadow-lg shadow-red-900/30"
                 >
                   Confirmar
                 </button>

@@ -1,5 +1,5 @@
 import {
-  doc, collection, getDocs, runTransaction, writeBatch,
+  doc, collection, getDocs, getDoc, runTransaction, writeBatch,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import { POINTS_BY_POSITION } from "./economyService";
@@ -17,25 +17,31 @@ export async function processRace(
   results: RaceResult[]
 ) {
   try {
-    // Pre-fetch roster, equipos y circuito (para obtener refs antes de la transacción)
-    const [rosterSnap, equiposSnap] = await Promise.all([
-      getDocs(collection(db, `splits/${splitId}/roster`)),
+    // Leer equipos y sus pilotos anidados para construir índices
+    const [equiposSnap, splitDoc] = await Promise.all([
       getDocs(collection(db, `splits/${splitId}/equipos`)),
+      getDoc(doc(db, "splits", splitId)),
     ]);
 
-    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    const usaEconomia = (splitDoc.data()?.orden ?? 1) > 1;
 
-    // Refs indexadas
-    const rosterRefMap: Record<string, { ref: any }> = {};
-    rosterSnap.docs.forEach(d => { rosterRefMap[d.id] = { ref: d.ref }; });
+    const pilotEquipoMap: Record<string, string> = {}; // pilotoId → equipoId
+    const pilotDocRefs: Record<string, any> = {};       // pilotoId → ref nested
+
+    for (const equipoDoc of equiposSnap.docs) {
+      const pilotosSnap = await getDocs(
+        collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`)
+      );
+      for (const pd of pilotosSnap.docs) {
+        pilotEquipoMap[pd.id] = equipoDoc.id;
+        pilotDocRefs[pd.id] = pd.ref;
+      }
+    }
 
     const equipoRefMap: Record<string, any> = {};
     equiposSnap.docs.forEach(d => { equipoRefMap[d.id] = d.ref; });
 
-    // Refs de pilotos globales (para actualizar rating)
-    const pilotIds = [...new Set(results.map(r => r.pilotoId))];
-    const pilotRefMap: Record<string, any> = {};
-    pilotIds.forEach(id => { pilotRefMap[id] = doc(db, "pilotos", id); });
+    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
 
     await runTransaction(db, async (tx) => {
       // ── Lecturas ────────────────────────────────────────────────────────────
@@ -45,25 +51,49 @@ export async function processRace(
         throw new Error("El acta de esta carrera está CERRADA y no puede modificarse.");
       }
 
-      // Leer roster y ratings de pilotos en paralelo dentro de la transacción
-      const rosterDocs = await Promise.all(rosterSnap.docs.map(d => tx.get(d.ref)));
-      const pilotDocs  = await Promise.all(pilotIds.map(id => tx.get(pilotRefMap[id])));
-      const equipoDocs = await Promise.all(equiposSnap.docs.map(d => tx.get(d.ref)));
+      const prevResults: RaceResult[] = circuitDoc.data()?.resultados ?? [];
+      const isCorrection = prevResults.length > 0;
+
+      const pilotDocEntries = Object.entries(pilotDocRefs);
+      const [pilotTxDocs, equipoTxDocs] = await Promise.all([
+        Promise.all(pilotDocEntries.map(([, ref]) => tx.get(ref))),
+        Promise.all(equiposSnap.docs.map(d => tx.get(d.ref))),
+      ]);
 
       const rosterData: Record<string, RosterEntry> = {};
-      rosterSnap.docs.forEach((d, i) => {
-        rosterData[d.id] = rosterDocs[i].data() as RosterEntry;
-      });
-
-      const pilotRating: Record<string, number> = {};
-      pilotIds.forEach((id, i) => {
-        pilotRating[id] = (pilotDocs[i].data() as any)?.rating_piloto ?? 70;
+      pilotDocEntries.forEach(([id], i) => {
+        rosterData[id] = pilotTxDocs[i].data() as RosterEntry;
       });
 
       const equipoData: Record<string, { presupuesto: number; puntos_constructores: number }> = {};
       equiposSnap.docs.forEach((d, i) => {
-        equipoData[d.id] = equipoDocs[i].data() as any ?? { presupuesto: 100, puntos_constructores: 0 };
+        equipoData[d.id] = equipoTxDocs[i].data() as any ?? { presupuesto: 100, puntos_constructores: 0 };
       });
+
+      // Contribución anterior de esta carrera por piloto (para restarla en correcciones)
+      type StatDelta = { pts: number; victorias: number; podios: number; poles: number; dnfs: number; limpias: number; rd: number };
+      const oldDelta: Record<string, StatDelta> = {};
+      if (isCorrection) {
+        for (const res of prevResults) {
+          const pts =
+            (res.racePos >= 1 && res.racePos <= 12 ? POINTS_SCALE[res.racePos - 1] : 0) +
+            (res.qualyPos === 1 ? 2 : 0);
+          let rd = 0;
+          if (res.qualyPos === 1) rd += 5;
+          if (res.racePos === 1)  rd += 5;
+          if (res.isDnfOwnError)  rd -= 3;
+          if (res.isClean)        rd += 2;
+          oldDelta[res.pilotoId] = {
+            pts,
+            victorias: res.racePos === 1 ? 1 : 0,
+            podios:    res.racePos >= 1 && res.racePos <= 3 ? 1 : 0,
+            poles:     res.qualyPos === 1 ? 1 : 0,
+            dnfs:      res.racePos > 12 || res.isDnfOwnError ? 1 : 0,
+            limpias:   res.isClean ? 1 : 0,
+            rd,
+          };
+        }
+      }
 
       // ── Cálculos ────────────────────────────────────────────────────────────
 
@@ -75,7 +105,8 @@ export async function processRace(
         const roster = rosterData[res.pilotoId];
         if (!roster) continue;
 
-        const { equipoId } = roster;
+        const equipoId = pilotEquipoMap[res.pilotoId];
+        if (!equipoId) continue;
         if (!teamStats[equipoId]) {
           teamStats[equipoId] = { pts: 0, poles: 0, fl: 0, clean: true };
         }
@@ -84,27 +115,27 @@ export async function processRace(
           (res.racePos >= 1 && res.racePos <= 12 ? POINTS_SCALE[res.racePos - 1] : 0) +
           (res.qualyPos === 1 ? 2 : 0);
 
-        // Acumular stats en roster
+        const old = oldDelta[res.pilotoId] ?? { pts: 0, victorias: 0, podios: 0, poles: 0, dnfs: 0, limpias: 0, rd: 0 };
         const prev = rosterUpdates[res.pilotoId] ?? { ...roster };
         rosterUpdates[res.pilotoId] = {
           ...prev,
-          puntos_piloto:    (prev.puntos_piloto    ?? 0) + pts,
-          victorias:        (prev.victorias        ?? 0) + (res.racePos === 1 ? 1 : 0),
-          podios:           (prev.podios           ?? 0) + (res.racePos <= 3 && res.racePos >= 1 ? 1 : 0),
-          poles:            (prev.poles            ?? 0) + (res.qualyPos === 1 ? 1 : 0),
-          dnfs:             (prev.dnfs             ?? 0) + (res.racePos > 12 || res.isDnfOwnError ? 1 : 0),
-          carreras_limpias: (prev.carreras_limpias ?? 0) + (res.isClean ? 1 : 0),
+          puntos_piloto:    Math.max(0, (prev.puntos_piloto    ?? 0) - old.pts       + pts),
+          victorias:        Math.max(0, (prev.victorias        ?? 0) - old.victorias + (res.racePos === 1 ? 1 : 0)),
+          podios:           Math.max(0, (prev.podios           ?? 0) - old.podios    + (res.racePos <= 3 && res.racePos >= 1 ? 1 : 0)),
+          poles:            Math.max(0, (prev.poles            ?? 0) - old.poles     + (res.qualyPos === 1 ? 1 : 0)),
+          dnfs:             Math.max(0, (prev.dnfs             ?? 0) - old.dnfs      + (res.racePos > 12 || res.isDnfOwnError ? 1 : 0)),
+          carreras_limpias: Math.max(0, (prev.carreras_limpias ?? 0) - old.limpias   + (res.isClean ? 1 : 0)),
         };
 
-        // Delta de rating global del piloto
         let rd = 0;
         if (res.qualyPos === 1)    rd += 5;
         if (res.racePos === 1)     rd += 5;
         if (res.isDnfOwnError)     rd -= 3;
         if (res.isClean)           rd += 2;
-        newRatings[res.pilotoId] = Math.max(0, Math.min(99, (pilotRating[res.pilotoId] ?? 70) + rd));
+        const currentRating = rosterData[res.pilotoId]?.rating_piloto ?? 70;
+        const baseRating = Math.max(0, Math.min(99, currentRating - old.rd));
+        newRatings[res.pilotoId] = Math.max(0, Math.min(99, baseRating + rd));
 
-        // Acumular stats de equipo
         teamStats[equipoId].pts += pts;
         if (res.qualyPos === 1) teamStats[equipoId].poles++;
         if (res.fastestLap)     teamStats[equipoId].fl++;
@@ -113,10 +144,10 @@ export async function processRace(
 
       // ── Escrituras ──────────────────────────────────────────────────────────
 
-      // Stats de pilotos en el roster del split (solo campos numéricos acumulables)
+      // Stats de pilotos en el doc anidado del split
       for (const [pilotoId, updates] of Object.entries(rosterUpdates)) {
-        if (rosterRefMap[pilotoId]) {
-          tx.update(rosterRefMap[pilotoId].ref, {
+        if (pilotDocRefs[pilotoId]) {
+          tx.update(pilotDocRefs[pilotoId], {
             puntos_piloto:    updates.puntos_piloto    ?? 0,
             victorias:        updates.victorias        ?? 0,
             podios:           updates.podios           ?? 0,
@@ -127,25 +158,28 @@ export async function processRace(
         }
       }
 
-      // Rating global de cada piloto
+      // Rating en el doc anidado del split y en el doc global pilotos/
       for (const [pilotoId, rating] of Object.entries(newRatings)) {
-        tx.update(pilotRefMap[pilotoId], { rating_piloto: rating });
-      }
-
-      // Presupuesto y puntos constructores de equipos (solo split_2 en adelante)
-      if (splitId !== "split_1") {
-        for (const [teamId, stats] of Object.entries(teamStats)) {
-          if (!equipoRefMap[teamId]) continue;
-          const current = equipoData[teamId];
-          const bonus = 4 + stats.pts * 0.1 + stats.poles * 2 + stats.fl + (stats.clean ? 3 : 0);
-          tx.update(equipoRefMap[teamId], {
-            presupuesto:         (current.presupuesto        ?? 100) + bonus,
-            puntos_constructores: (current.puntos_constructores ?? 0) + stats.pts,
-          });
+        if (pilotDocRefs[pilotoId]) {
+          tx.update(pilotDocRefs[pilotoId], { rating_piloto: rating });
+          tx.update(doc(db, "pilotos", pilotoId), { rating_piloto: rating });
         }
       }
 
-      // Circuito: marcar como completado
+      // Puntos constructores siempre; bonus de presupuesto solo con economía activa
+      for (const [teamId, stats] of Object.entries(teamStats)) {
+        if (!equipoRefMap[teamId]) continue;
+        const current = equipoData[teamId];
+        const updates: Record<string, number> = {
+          puntos_constructores: (current.puntos_constructores ?? 0) + stats.pts,
+        };
+        if (usaEconomia) {
+          updates.presupuesto = (current.presupuesto ?? 100) +
+            4 + stats.pts * 0.1 + stats.poles * 2 + stats.fl + (stats.clean ? 3 : 0);
+        }
+        tx.update(equipoRefMap[teamId], updates);
+      }
+
       tx.update(circuitoRef, { completado: true, resultados: results });
     });
   } catch (error) {
@@ -154,14 +188,13 @@ export async function processRace(
 }
 
 // ─── RECALCULAR PUNTOS DE UN SPLIT ───────────────────────────────────────────
-// Sobreescribe stats de roster y rating global leyendo los resultados guardados.
-// Usar cuando los acumulados están incorrectos.
+// Sobreescribe stats y rating leyendo los resultados guardados desde cero.
+// Usa rating_base del doc anidado como punto de partida limpio.
 
 export async function recalcSplitPoints(
   splitId: string
 ): Promise<{ ok: number; notFound: string[]; message: string }> {
   try {
-    // Leer circuitos completados, ordenados por numero_carrera
     const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
     const completed = circSnap.docs
       .map(d => ({ id: d.id, ...d.data() as any }))
@@ -175,37 +208,34 @@ export async function recalcSplitPoints(
       return { ok: 0, notFound: [], message: `Sin circuitos completados en ${splitId}.` };
     }
 
-    // Leer roster y pilotos globales
-    const [rosterSnap, pilotosSnap] = await Promise.all([
-      getDocs(collection(db, `splits/${splitId}/roster`)),
-      getDocs(collection(db, "pilotos")),
-    ]);
+    // Construir índice de pilotos desde docs anidados
+    const equiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
 
-    const rosterRefMap: Record<string, any> = {};
-    rosterSnap.docs.forEach(d => { rosterRefMap[d.id] = d.ref; });
-
-    const pilotRefMap: Record<string, any> = {};
-    pilotosSnap.docs.forEach(d => { pilotRefMap[d.id] = d.ref; });
-
-    // Acumuladores por piloto
+    const pilotDocRefs: Record<string, any> = {};
+    const pilotTeamMap: Record<string, string> = {};
     const pilotAccum: Record<string, {
       puntos_piloto: number; victorias: number; podios: number;
       poles: number; dnfs: number; carreras_limpias: number; rating: number;
     }> = {};
 
-    for (const pid of rosterSnap.docs.map(d => d.id)) {
-      pilotAccum[pid] = {
-        puntos_piloto: 0, victorias: 0, podios: 0,
-        poles: 0, dnfs: 0, carreras_limpias: 0, rating: 70,
-      };
+    for (const equipoDoc of equiposSnap.docs) {
+      const pilotosSnap = await getDocs(
+        collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`)
+      );
+      for (const pd of pilotosSnap.docs) {
+        pilotDocRefs[pd.id] = pd.ref;
+        pilotTeamMap[pd.id] = equipoDoc.id;
+        pilotAccum[pd.id] = {
+          puntos_piloto: 0, victorias: 0, podios: 0,
+          poles: 0, dnfs: 0, carreras_limpias: 0,
+          // rating_base guardado en el doc anidado al inicializar el split
+          rating: pd.data().rating_base ?? 70,
+        };
+      }
     }
 
-    // Leer ratings base de pilotos globales
-    pilotosSnap.docs.forEach(d => {
-      if (pilotAccum[d.id]) {
-        pilotAccum[d.id].rating = d.data().rating_piloto ?? 70;
-      }
-    });
+    const equipoRefMap: Record<string, any> = {};
+    equiposSnap.docs.forEach(d => { equipoRefMap[d.id] = d.ref; });
 
     const notFound: string[] = [];
 
@@ -237,25 +267,37 @@ export async function recalcSplitPoints(
       }
     }
 
-    // Escribir en batch (roster stats + rating global)
+    // Puntos constructores por equipo
+    const teamPts: Record<string, number> = {};
+    for (const [pid, acc] of Object.entries(pilotAccum)) {
+      const teamId = pilotTeamMap[pid];
+      if (teamId) teamPts[teamId] = (teamPts[teamId] ?? 0) + acc.puntos_piloto;
+    }
+
+    // Escribir en batch
     const batch = writeBatch(db);
     let ok = 0;
 
     for (const [pid, acc] of Object.entries(pilotAccum)) {
-      if (rosterRefMap[pid]) {
-        batch.update(rosterRefMap[pid], {
+      if (pilotDocRefs[pid]) {
+        batch.update(pilotDocRefs[pid], {
           puntos_piloto:    acc.puntos_piloto,
           victorias:        acc.victorias,
           podios:           acc.podios,
           poles:            acc.poles,
           dnfs:             acc.dnfs,
           carreras_limpias: acc.carreras_limpias,
+          rating_piloto:    acc.rating,
         });
+        batch.update(doc(db, "pilotos", pid), { rating_piloto: acc.rating });
+        ok++;
       }
-      if (pilotRefMap[pid]) {
-        batch.update(pilotRefMap[pid], { rating_piloto: acc.rating });
+    }
+
+    for (const [teamId, pts] of Object.entries(teamPts)) {
+      if (equipoRefMap[teamId]) {
+        batch.update(equipoRefMap[teamId], { puntos_constructores: pts });
       }
-      ok++;
     }
 
     await batch.commit();

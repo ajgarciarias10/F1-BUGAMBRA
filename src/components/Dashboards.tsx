@@ -80,7 +80,8 @@ export function JequeDashboard() {
     return (u as any)?.foto_url || "";
   };
 
-  const validSplits = (splits || []).filter((s: any) => s.id !== "global");
+  const allSplits = (splits || []).filter((s: any) => s.id !== "global");
+  const validSplits = (() => { const a = allSplits.filter((s: any) => s.activo); return a.length > 0 ? a : allSplits; })();
   const [albumSplitId, setAlbumSplitId] = useState<string>("");
   const resolvedAlbumSplitId = albumSplitId || validSplits[validSplits.length - 1]?.id || "";
   const albumSplit = validSplits.find((s: any) => s.id === resolvedAlbumSplitId) || validSplits[validSplits.length - 1];
@@ -128,7 +129,8 @@ export function PilotoDashboard() {
     return (u as any)?.foto_url || "";
   };
 
-  const validSplits = (splits || []).filter((s: any) => s.id !== "global");
+  const allSplits = (splits || []).filter((s: any) => s.id !== "global");
+  const validSplits = (() => { const a = allSplits.filter((s: any) => s.activo); return a.length > 0 ? a : allSplits; })();
   const [albumSplitId, setAlbumSplitId] = useState<string>("");
   const resolvedAlbumSplitId = albumSplitId || validSplits[validSplits.length - 1]?.id || "";
   const albumSplit = validSplits.find((s: any) => s.id === resolvedAlbumSplitId) || validSplits[validSplits.length - 1];

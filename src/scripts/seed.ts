@@ -79,6 +79,8 @@ function buildRosterEntry(pilotoId: string, equipoId: string, precio_compra: num
   return {
     pilotoId,
     equipoId,
+    rating_piloto: 70,
+    rating_base: 70,
     precio_compra,
     clausula_actual: clausula,
     mantener_actual: mantener,

@@ -53,7 +53,7 @@ export function useSplits() {
     const unsubs = [
       onSnapshot(collection(db, "splits"), bump, errHandler),
       onSnapshot(collectionGroup(db, "equipos"), bump, errHandler),
-      onSnapshot(collectionGroup(db, "roster"), bump, errHandler),
+      onSnapshot(collectionGroup(db, "pilotos"), bump, errHandler),
       onSnapshot(collectionGroup(db, "circuitos"), bump, errHandler),
     ];
     return () => unsubs.forEach(u => u());
@@ -111,54 +111,25 @@ export function useSplits() {
             ...d.data(),
           })) as Equipo[];
 
-          // Intentar modelo nuevo (roster plano); si falla por permisos, usar modelo antiguo
-          let roster: PilotInRoster[] = [];
-          try {
-            const rosterSnap = await getDocs(collection(db, `splits/${sid}/roster`));
-            roster = rosterSnap.docs.map(d => {
-              const entry = d.data() as RosterEntry;
-              const piloto = pilotMap[d.id];
-              return {
-                ...entry,
-                pilotoId: d.id,
-                nombre: piloto?.nombre ?? entry.pilotoId ?? d.id,
-                rating_piloto: piloto?.rating_piloto ?? 70,
-                foto_url: piloto?.foto_url,
-              };
-            });
-          } catch {
-            // Fallback: leer del modelo antiguo (equipos/pilotos) que sí tiene reglas públicas
-            for (const equipoDoc of equipSnap.docs) {
-              try {
-                const oldPilotos = await getDocs(
-                  collection(db, `splits/${sid}/equipos/${equipoDoc.id}/pilotos`)
-                );
-                for (const pd of oldPilotos.docs) {
-                  const data = pd.data() as any;
-                  roster.push({
-                    pilotoId: pd.id,
-                    equipoId: equipoDoc.id,
-                    nombre: data.nombre ?? pd.id,
-                    rating_piloto: data.rating_piloto ?? 70,
-                    foto_url: data.foto_url,
-                    precio_compra: data.precio_compra ?? data.precio_compra_split ?? 0,
-                    clausula_actual: data.clausula_actual ?? 0,
-                    mantener_actual: data.mantener_actual ?? 0,
-                    clausula_inicial_split: data.clausula_inicial_split ?? 0,
-                    mantener_inicial_split: data.mantener_inicial_split ?? 0,
-                    precio_carrera_anterior: data.precio_carrera_anterior ?? 0,
-                    historial_precios: data.historial_precios ?? [],
-                    puntos_piloto: data.puntos_piloto ?? 0,
-                    victorias: data.victorias ?? 0,
-                    podios: data.podios ?? 0,
-                    poles: data.poles ?? 0,
-                    dnfs: data.dnfs ?? 0,
-                    carreras_limpias: data.carreras_limpias ?? 0,
-                  } as PilotInRoster);
-                }
-              } catch {
-                // Equipo individual inaccesible, continuar
+          // Leer pilotos desde splits/{sid}/equipos/{equipoId}/pilotos
+          const roster: PilotInRoster[] = [];
+          for (const equipoDoc of equipSnap.docs) {
+            try {
+              const pilotosSnap = await getDocs(
+                collection(db, `splits/${sid}/equipos/${equipoDoc.id}/pilotos`)
+              );
+              for (const pd of pilotosSnap.docs) {
+                const entry = pd.data() as RosterEntry;
+                const piloto = pilotMap[pd.id];
+                roster.push({
+                  ...entry,
+                  pilotoId: pd.id,
+                  nombre: piloto?.nombre ?? (entry as any).nombre ?? pd.id,
+                  foto_url: piloto?.foto_url ?? (entry as any).foto_url,
+                });
               }
+            } catch {
+              // Equipo individual inaccesible, continuar
             }
           }
 

@@ -42,13 +42,15 @@ export interface Equipo {
 }
 
 // ─── ROSTER (pilotos asignados a equipos por split) ───────────────────────────
-// Colección: splits/{splitId}/roster/{pilotoId}
+// Colección: splits/{splitId}/equipos/{equipoId}/pilotos/{pilotoId}
 
 export type TipoFichaje = "subasta" | "clausula" | "mantener";
 
 export interface RosterEntry {
   pilotoId: string;
   equipoId: string; // "agente_libre" si no tiene equipo
+  rating_piloto: number;   // rating actual en este split (0-99)
+  rating_base?: number;    // rating de inicio del split, para recalcular desde cero
   tipo_fichaje?: TipoFichaje;
   // Precios del split
   precio_compra: number;
@@ -73,10 +75,9 @@ export interface RosterEntry {
   carreras_limpias: number;
 }
 
-// RosterEntry enriquecida con datos del piloto (para uso en UI)
+// RosterEntry enriquecida con nombre/foto del piloto global (para uso en UI)
 export interface PilotInRoster extends RosterEntry {
   nombre: string;
-  rating_piloto: number;
   foto_url?: string;
 }
 

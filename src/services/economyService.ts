@@ -1,5 +1,5 @@
 import {
-  doc, getDoc, collection, getDocs, updateDoc, addDoc,
+  doc, getDoc, collection, getDocs, updateDoc, addDoc, deleteDoc, setDoc,
   serverTimestamp, increment, writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -7,10 +7,10 @@ import type { TipoTransaccion } from "../types";
 
 // ─── CONSTANTES ECONÓMICAS ────────────────────────────────────────────────────
 
-export const POINTS_BY_POSITION = [16, 13, 11, 9, 7, 6, 5, 4, 3, 2, 2, 1];
+export const POINTS_BY_POSITION = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
-const MCLASIF  = [1, 0.5];   // 1°→1M, 2°→0.5M
-const MCARRERA = [2, 1];      // 1°→2M, 2°→1M
+const MCLASIF  = [1, 0.5];
+const MCARRERA = [2, 1];
 
 export const M_POLE             = 2;
 export const M_VUELTA_RAPIDA    = 1;
@@ -55,6 +55,24 @@ async function logTx(data: {
   await addDoc(collection(db, "transacciones"), payload);
 }
 
+// ─── HELPER: buscar doc anidado de un piloto en un split ─────────────────────
+
+export async function findPilotEntry(
+  splitId: string,
+  pilotoId: string,
+  equiposSnap?: Awaited<ReturnType<typeof getDocs>>
+): Promise<{ ref: any; data: any; equipoId: string } | null> {
+  const snap = equiposSnap ?? await getDocs(collection(db, `splits/${splitId}/equipos`));
+  for (const equipoDoc of snap.docs) {
+    const ref = doc(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`, pilotoId);
+    const pd = await getDoc(ref);
+    if (pd.exists()) {
+      return { ref, data: pd.data(), equipoId: equipoDoc.id };
+    }
+  }
+  return null;
+}
+
 // ─── FICHAJE DE PILOTO ────────────────────────────────────────────────────────
 
 export async function ficharPiloto(params: {
@@ -70,27 +88,48 @@ export async function ficharPiloto(params: {
 
   try {
     const esPrecioNegativo = precio < 0;
-    const delta    = esPrecioNegativo ? Math.abs(precio) : -precio;
+    const delta     = esPrecioNegativo ? Math.abs(precio) : -precio;
     const precioAbs = Math.abs(precio);
     const nuevaMantener = esPrecioNegativo ? r1(precioAbs / 3) : r1(precioAbs * 3);
     const nuevaClausula = esPrecioNegativo ? r1(precioAbs / 2) : r1(precioAbs * 2);
 
-    const teamRef   = doc(db, `splits/${splitId}/equipos`, teamId);
-    const rosterRef = doc(db, `splits/${splitId}/roster`, pilotoId);
+    const teamRef = doc(db, `splits/${splitId}/equipos`, teamId);
 
-    await Promise.all([
-      updateDoc(teamRef, { presupuesto: increment(delta) }),
-      updateDoc(rosterRef, {
-        equipoId:               teamId,
-        precio_compra:          precioAbs,
-        mantener_actual:        nuevaMantener,
-        clausula_actual:        nuevaClausula,
-        mantener_inicial_split: nuevaMantener,
-        clausula_inicial_split: nuevaClausula,
-        precio_carrera_anterior: nuevaMantener,
-        historial_precios:      {},
-      }),
-    ]);
+    // Buscar doc actual del piloto (puede estar en otro equipo)
+    const current = await findPilotEntry(splitId, pilotoId);
+
+    const priceFields = {
+      equipoId:               teamId,
+      precio_compra:          precioAbs,
+      mantener_actual:        nuevaMantener,
+      clausula_actual:        nuevaClausula,
+      mantener_inicial_split: nuevaMantener,
+      clausula_inicial_split: nuevaClausula,
+      precio_carrera_anterior: nuevaMantener,
+      historial_precios:      {},
+    };
+
+    const newRef = doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotoId);
+
+    if (current && current.equipoId !== teamId) {
+      // Mover de equipo: preservar datos existentes + actualizar precios
+      await setDoc(newRef, { ...current.data, ...priceFields });
+      await deleteDoc(current.ref);
+    } else if (current) {
+      // Mismo equipo: solo actualizar precios
+      await updateDoc(current.ref, priceFields);
+    } else {
+      // Piloto sin doc en este split: crear con stats en 0
+      await setDoc(newRef, {
+        pilotoId,
+        rating_piloto: 70,
+        puntos_piloto: 0, victorias: 0, podios: 0,
+        poles: 0, dnfs: 0, carreras_limpias: 0,
+        ...priceFields,
+      });
+    }
+
+    await updateDoc(teamRef, { presupuesto: increment(delta) });
 
     await logTx({
       equipo:      teamName,
@@ -119,10 +158,9 @@ export async function procesarEconomiaCarrera(
   circuitoId: string,
   circuitName: string,
   onProgress?: (msg: string) => void,
-  previousCircuitIds?: string[]   // IDs de circuitos procesados ANTES que éste, en orden
+  previousCircuitIds?: string[]
 ): Promise<{ processed: number; message: string }> {
   try {
-    // Guardia de idempotencia
     const circuitoRef  = doc(db, `splits/${splitId}/circuitos`, circuitoId);
     const circuitoSnap = await getDoc(circuitoRef);
     if (!circuitoSnap.exists()) return { processed: 0, message: "Circuito no encontrado." };
@@ -137,39 +175,41 @@ export async function procesarEconomiaCarrera(
       return { processed: 0, message: "No hay resultados registrados para procesar." };
     }
 
-    // Leer roster, equipos y split (rivalidades) en paralelo
-    const [rosterSnap, equiposSnap, splitSnap] = await Promise.all([
-      getDocs(collection(db, `splits/${splitId}/roster`)),
+    const [equiposSnap, splitSnap] = await Promise.all([
       getDocs(collection(db, `splits/${splitId}/equipos`)),
       getDoc(doc(db, "splits", splitId)),
     ]);
 
-    // Leer nombres de pilotos globales
     const pilotNombre: Record<string, string> = {};
     const pilotosSnap = await getDocs(collection(db, "pilotos"));
     pilotosSnap.docs.forEach(d => { pilotNombre[d.id] = d.data().nombre || d.id; });
 
-    // Índices
     const teamById: Record<string, { ref: any; nombre: string }> = {};
     equiposSnap.docs.forEach(d => {
       teamById[d.id] = { ref: d.ref, nombre: d.data().nombre };
     });
 
-    const teamByPilot: Record<string, string> = {}; // pilotoId → equipoId
-    rosterSnap.docs.forEach(d => {
-      const entry = d.data();
-      if (entry.equipoId && entry.equipoId !== "agente_libre") {
-        teamByPilot[d.id] = entry.equipoId;
-      }
-    });
+    // Construir teamByPilot y pilotDocRefs iterando pilotos anidados
+    const teamByPilot: Record<string, string> = {};
+    const pilotDocRefs: Record<string, any> = {};
+    const pilotDocData: Record<string, any> = {};
 
-    // Rivalidades
+    for (const equipoDoc of equiposSnap.docs) {
+      const pilotosSubSnap = await getDocs(
+        collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`)
+      );
+      for (const pd of pilotosSubSnap.docs) {
+        const d = pd.data();
+        if (d.equipoId && d.equipoId !== "agente_libre") {
+          teamByPilot[pd.id] = equipoDoc.id;
+        }
+        pilotDocRefs[pd.id] = pd.ref;
+        pilotDocData[pd.id] = d;
+      }
+    }
+
     const rivalries = splitSnap.data()?.rivalries;
     const soloPilotIds = new Set<string>((rivalries?.soloPilots || []).map((p: any) => p.id));
-    const groupByPilot: Record<string, any> = {};
-    for (const group of rivalries?.groups || []) {
-      for (const member of group.members) groupByPilot[member.id] = group;
-    }
 
     // ── Calcular ganancias ─────────────────────────────────────────────────────
 
@@ -205,17 +245,14 @@ export async function procesarEconomiaCarrera(
       const nombre = pilotNombre[r.pilotoId] || r.pilotoId;
       const isDNF  = r.racePos === 99;
 
-      // Clasificación
       const mClasif = calcularMillonesClasificacion(r.qualyPos);
       if (mClasif > 0) add(tid, mClasif, "premio_carrera", nombre, `Clasificación P${r.qualyPos}: +${mClasif}M`);
 
-      // Carrera
       if (!isDNF) {
         const mCar = calcularMillonesCarrera(r.racePos);
         if (mCar > 0) add(tid, mCar, "premio_carrera", nombre, `Carrera P${r.racePos}: +${mCar}M`);
       }
 
-      // Millones por puntos
       const ptsPos  = isDNF ? 0 : calcularPuntosPosicion(r.racePos);
       const ptsPole = r.qualyPos === 1 ? 2 : 0;
       const ptsFL   = r.fastestLap ? 2 : 0;
@@ -225,19 +262,14 @@ export async function procesarEconomiaCarrera(
         add(tid, mPts, "ingreso_puntos", nombre, `${totalPts} pts × ${M_PUNTOS_FACTOR}M = +${mPts}M`);
       }
 
-      // Bonus pole
       if (r.qualyPos === 1) add(tid, M_POLE, "pole", nombre, `Pole position: +${M_POLE}M`);
-
-      // Bonus vuelta rápida
       if (r.fastestLap) add(tid, M_VUELTA_RAPIDA, "vuelta_rapida", nombre, `Vuelta rápida: +${M_VUELTA_RAPIDA}M`);
 
-      // Piloto sin rival
       if (soloPilotIds.has(r.pilotoId)) {
         add(tid, M_SOLO_POR_CARRERA, "rivalidad", nombre, `Piloto sin rival: +${M_SOLO_POR_CARRERA}M`);
       }
     }
 
-    // Rivalidades H2H
     for (const group of rivalries?.groups || []) {
       if (group.type === "solo") continue;
 
@@ -259,7 +291,6 @@ export async function procesarEconomiaCarrera(
       add(raceWinner.teamId, M_RIVALIDAD_CARRERA, "rivalidad", raceWinner.nombre, `Rivalidad carrera H2H: +${M_RIVALIDAD_CARRERA}M`);
     }
 
-    // Sin sancionados
     for (const teamId of participatingTeams) {
       if (!dirtyTeams.has(teamId) && teamById[teamId]) {
         add(teamId, M_SIN_SANCIONADOS, "sin_sancionados", undefined, `Equipo sin penalizados: +${M_SIN_SANCIONADOS}M`);
@@ -270,14 +301,13 @@ export async function procesarEconomiaCarrera(
 
     const batch = writeBatch(db);
 
-    // Presupuestos de equipos
     for (const [teamId, total] of Object.entries(earnings)) {
       if (teamById[teamId]) {
         batch.update(teamById[teamId].ref, { presupuesto: increment(total) });
       }
     }
 
-    // Decay de precios de pilotos
+    // Decay de precios en docs anidados de pilotos
     const decayLog: Array<{
       nombre: string;
       mantenerAntes: number;
@@ -286,95 +316,70 @@ export async function procesarEconomiaCarrera(
       congelado: boolean;
     }> = [];
 
-    for (const rosterDoc of rosterSnap.docs) {
-      const d = rosterDoc.data();
+    for (const [pilotoId, d] of Object.entries(pilotDocData)) {
+      const ref = pilotDocRefs[pilotoId];
+      if (!ref) continue;
+
       const precioCompra   = d.precio_compra   ?? 0;
       const clausulaActual = d.clausula_actual  ?? 0;
       if (precioCompra === 0 && clausulaActual === 0) continue;
 
       const mantenerEstaCarrera = d.mantener_actual ?? 0;
-      const nombre = pilotNombre[rosterDoc.id] || rosterDoc.id;
+      const nombre = pilotNombre[pilotoId] || pilotoId;
       const hasPendingTransfer = d.pending_equipoId != null || d.pending_precio_compra != null;
 
-      // Determinar si el freeze aplica a ESTE circuito específico
       const isFrozenHere = (() => {
         if (!d.congelado && !hasPendingTransfer) return false;
-        if (previousCircuitIds === undefined) return true; // compatibilidad: sin info de orden → congelado global
-        if (!d.congelado_en) return true; // congelado desde el inicio (antes de cualquier carrera)
-        // El freeze empieza en el circuito POSTERIOR a congelado_en
+        if (previousCircuitIds === undefined) return true;
+        if (!d.congelado_en) return true;
+        // congelado_en = último circuito normal; freeze aplica a los circuitos posteriores
         return previousCircuitIds.includes(d.congelado_en);
       })();
 
       if (isFrozenHere) {
         decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: mantenerEstaCarrera, clausulaDespues: clausulaActual, congelado: true });
-        batch.update(rosterDoc.ref, {
+        batch.update(ref, {
           precio_carrera_anterior: mantenerEstaCarrera,
-          [`historial_precios.${circuitoId}`]: {
-            carrera:   circuitName,
-            mantener:  mantenerEstaCarrera,
-            clausula:  clausulaActual,
-            congelado: true,
-          },
+          [`historial_precios.${circuitoId}`]: { carrera: circuitName, mantener: null, clausula: null, congelado: true },
         });
       } else if (precioCompra === -110) {
-        // Sentinel freeze price: no más cálculos hasta que el piloto salga de esta parte.
         decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: mantenerEstaCarrera, clausulaDespues: clausulaActual, congelado: true });
-        batch.update(rosterDoc.ref, {
+        batch.update(ref, {
           precio_carrera_anterior: mantenerEstaCarrera,
-          [`historial_precios.${circuitoId}`]: {
-            carrera:   circuitName,
-            mantener:  mantenerEstaCarrera,
-            clausula:  clausulaActual,
-            congelado: true,
-          },
+          [`historial_precios.${circuitoId}`]: { carrera: circuitName, mantener: null, clausula: null, congelado: true },
         });
       } else if (precioCompra < 0) {
-        // Piloto con precio negativo: crecimiento lineal
-        // mantener: base(|p|/3) + 20% de base por carrera
-        // clausula: base(|p|/2) + 20% de base por carrera
-        const precioAbs = Math.abs(precioCompra);
-        const stepM      = r1(precioAbs / 3 * 0.2);
-        const stepCl     = r1(precioAbs / 2 * 0.2);
+        const precioAbs   = Math.abs(precioCompra);
+        const stepM       = r1(precioAbs / 3 * 0.2);
+        const stepCl      = r1(precioAbs / 2 * 0.2);
         const newMantener = r1(mantenerEstaCarrera + stepM);
         const newClausula = r1(clausulaActual + stepCl);
 
         decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: newMantener, clausulaDespues: newClausula, congelado: false });
-        batch.update(rosterDoc.ref, {
-          clausula_actual:          newClausula,
-          mantener_actual:          newMantener,
-          precio_carrera_anterior:  mantenerEstaCarrera,
-          [`historial_precios.${circuitoId}`]: {
-            carrera:  circuitName,
-            mantener: mantenerEstaCarrera,
-            clausula: clausulaActual,
-          },
+        batch.update(ref, {
+          clausula_actual:         newClausula,
+          mantener_actual:         newMantener,
+          precio_carrera_anterior: mantenerEstaCarrera,
+          [`historial_precios.${circuitoId}`]: { carrera: circuitName, mantener: mantenerEstaCarrera, clausula: clausulaActual },
         });
       } else {
-        // Piloto con precio positivo: decay estándar
         const stepC       = r1(Math.abs(precioCompra) * 0.2);
         const newClausula = r1(clausulaActual - stepC);
         const newMantener = r1(newClausula * 1.5);
 
         decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: newMantener, clausulaDespues: newClausula, congelado: false });
-        batch.update(rosterDoc.ref, {
-          clausula_actual:          newClausula,
-          mantener_actual:          newMantener,
-          precio_carrera_anterior:  mantenerEstaCarrera,
-          [`historial_precios.${circuitoId}`]: {
-            carrera:  circuitName,
-            mantener: mantenerEstaCarrera,
-            clausula: clausulaActual,
-          },
+        batch.update(ref, {
+          clausula_actual:         newClausula,
+          mantener_actual:         newMantener,
+          precio_carrera_anterior: mantenerEstaCarrera,
+          [`historial_precios.${circuitoId}`]: { carrera: circuitName, mantener: mantenerEstaCarrera, clausula: clausulaActual },
         });
       }
     }
 
-    // Marcar circuito como procesado
     batch.update(circuitoRef, { economia_procesada: true });
-
     await batch.commit();
 
-    // Emitir log de resultados
     if (onProgress) {
       onProgress(`✓ ${circuitName} procesado`);
       for (const [teamId, total] of Object.entries(earnings).sort((a, b) => b[1] - a[1])) {
@@ -385,7 +390,6 @@ export async function procesarEconomiaCarrera(
       }
     }
 
-    // Log de transacciones (fuera del batch — addDoc no es compatible con batch)
     await Promise.all(txQueue.map(tx => logTx(tx)));
 
     return {
@@ -408,30 +412,36 @@ export async function procesarEconomiaRetroactivaSplit(
   onProgress?: (msg: string) => void
 ): Promise<{ ok: number; skipped: number; message: string }> {
   try {
-    // 1. Resetear precios iniciales de pilotos del roster
+    // 1. Resetear precios iniciales de pilotos (docs anidados)
     onProgress?.("Inicializando precios de pilotos…");
-    const rosterSnap = await getDocs(collection(db, `splits/${splitId}/roster`));
+    const equiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
     const resetBatch = writeBatch(db);
     let resetCount = 0;
 
-    for (const rDoc of rosterSnap.docs) {
-      const d = rDoc.data();
-      const precioCompra = d.precio_compra ?? 0;
+    for (const equipoDoc of equiposSnap.docs) {
+      const pilotosSnap = await getDocs(
+        collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`)
+      );
+      for (const pd of pilotosSnap.docs) {
+        const d = pd.data();
+        const precioCompra = d.precio_compra ?? 0;
 
-      const mantenerInicial = d.mantener_inicial_split != null ? d.mantener_inicial_split : r1(precioCompra * 3);
-      const clausulaInicial = d.clausula_inicial_split != null ? d.clausula_inicial_split : r1(precioCompra * 2);
-      if (mantenerInicial === 0 && clausulaInicial === 0) continue;
+        const mantenerInicial = d.mantener_inicial_split != null ? d.mantener_inicial_split : r1(precioCompra * 3);
+        const clausulaInicial = d.clausula_inicial_split != null ? d.clausula_inicial_split : r1(precioCompra * 2);
+        if (mantenerInicial === 0 && clausulaInicial === 0) continue;
 
-      resetBatch.update(rDoc.ref, {
-        mantener_inicial_split:  mantenerInicial,
-        clausula_inicial_split:  clausulaInicial,
-        mantener_actual:         mantenerInicial,
-        clausula_actual:         clausulaInicial,
-        precio_carrera_anterior: mantenerInicial,
-        historial_precios:       {},
-      });
-      resetCount++;
+        resetBatch.update(pd.ref, {
+          mantener_inicial_split:  mantenerInicial,
+          clausula_inicial_split:  clausulaInicial,
+          mantener_actual:         mantenerInicial,
+          clausula_actual:         clausulaInicial,
+          precio_carrera_anterior: mantenerInicial,
+          historial_precios:       {},
+        });
+        resetCount++;
+      }
     }
+
     await resetBatch.commit();
     onProgress?.(resetCount > 0 ? `✓ ${resetCount} pilotos con precios inicializados.` : "⚠ Ningún piloto tiene precio_compra > 0.");
 
@@ -471,7 +481,7 @@ export async function procesarEconomiaRetroactivaSplit(
     // 4. Procesar en secuencia (el decay depende del orden)
     let ok = 0;
     let skipped = 0;
-    const processedSoFar: string[] = []; // acumula IDs en orden para el check de freeze temporal
+    const processedSoFar: string[] = [];
 
     for (const c of completados) {
       if (c.economia_procesada) {

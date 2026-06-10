@@ -235,73 +235,42 @@ export function AdminRivalryControlPanel({ split }: { split: any }) {
   }, [split, teamsByPilotId]);
 
   return (
-    <section className={s.jequePanel}>
-      <div className={s.jequeHeader}>
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Users className="w-5 h-5 text-[#e10600]" />
-            <h2 className={s.headerTitle}>Panel de Control de Rivalidades</h2>
-          </div>
-          <p className={s.headerDesc}>Rivalidades generadas automáticamente por el algoritmo de emparejamiento. Vigila el flujo financiero de cada grupo.</p>
-        </div>
-        <span className={s.jequeBadge}>Modo Administrador</span>
-      </div>
-
-      <div className={s.adminGrid}>
-        <div className={s.adminBox}>
-          <p className={s.adminBoxTitle}>Emparejamientos del split</p>
-          <div className="space-y-3">
-            {(currentRivalries.groups || []).map((group: any) => (
-              <div key={group.id} className={s.adminItem}>
-                <div className={s.adminItemHeader}>
-                  <span className="font-semibold">{group.type === "triad" ? "Grupo de 3" : group.type === "pair" ? "Dúo" : "Solo"}</span>
-                  <span className="text-xs text-white/40">Estatus {getStatusLabel(group.statusRank)}</span>
-                </div>
-                <div className="grid gap-2 text-[12px] text-white/70">
-                  {group.members.map((member: any) => (
-                    <div key={member.id} className={s.adminSubItem}>
-                      <div className="flex justify-between items-center gap-3">
-                        <span>{member.nombre}</span>
-                        <span className="text-xs uppercase text-white/40">{member.equipoNombre}</span>
-                      </div>
-                      <div className="mt-2 text-[11px] text-white/50">Valor {formatMillions(member.price)}</div>
-                    </div>
-                  ))}
-                </div>
+    <div className="mb-6 border border-white/[0.06] bg-white/[0.015]">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.04]">
+        <Users className="w-3.5 h-3.5 text-[#e10600] shrink-0" />
+        <span className="text-[9px] font-mono uppercase tracking-[0.35em] text-white/40">Rivalidades del split</span>
+        {financials.length > 0 && (
+          <div className="ml-auto flex items-center gap-3">
+            {financials.slice(0, 4).map((team: any) => (
+              <div key={team.teamName} className="flex items-center gap-1.5">
+                <span className="text-[9px] font-mono text-white/30 truncate max-w-[70px]">{team.teamName}</span>
+                <span className="text-[9px] font-black text-[#e10600]/80">{formatMillions(team.total)}</span>
               </div>
             ))}
           </div>
-        </div>
-
-        <div className={s.adminBox}>
-          <div className={s.adminBoxTitle}>
-            <ArrowRight className="w-4 h-4 text-[#e10600]" />
-            <p>Monitor Financiero</p>
-          </div>
-          <div className="space-y-3">
-            {financials.length === 0 ? (
-              <div className="rounded-3xl bg-white/5 p-4 text-sm text-white/50">No hay resultados procesados todavía.</div>
-            ) : financials.map((team: any) => (
-              <div key={team.teamName} className="rounded-3xl bg-black/70 p-4 border border-white/5">
-                <div className="flex items-center justify-between gap-3 text-white">
-                  <span className="font-semibold">{team.teamName}</span>
-                  <span className="font-bold text-[#e10600]">{formatMillions(team.total)}</span>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-[12px] text-white/60">
-                  <div className="rounded-2xl bg-white/5 p-3">
-                    <p className="uppercase tracking-[0.22em]">Clasificación</p>
-                    <p className="mt-2 font-semibold text-white">{formatMillions(team.classification)}</p>
-                  </div>
-                  <div className="rounded-2xl bg-white/5 p-3">
-                    <p className="uppercase tracking-[0.22em]">Carrera</p>
-                    <p className="mt-2 font-semibold text-white">{formatMillions(team.race)}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
-    </section>
+      <div className="flex flex-wrap gap-px p-0.5">
+        {(currentRivalries.groups || []).map((group: any) => (
+          <div key={group.id} className="flex items-center gap-0 bg-black/30 px-3 py-2 min-w-0">
+            <span className="text-[8px] font-mono text-white/20 uppercase mr-2 shrink-0">
+              {group.type === "triad" ? "3" : group.type === "pair" ? "2" : "1"}
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {group.members.map((member: any, idx: number) => (
+                <span key={member.id} className="flex items-center gap-1">
+                  {idx > 0 && <ArrowRight className="w-2.5 h-2.5 text-white/10 shrink-0" />}
+                  <span className="text-[10px] font-bold text-white/70">{member.nombre}</span>
+                  <span className="text-[8px] font-mono text-white/25">{member.equipoNombre}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+        {(currentRivalries.groups || []).length === 0 && (
+          <p className="text-[9px] font-mono text-white/15 px-3 py-2">Sin rivalidades generadas</p>
+        )}
+      </div>
+    </div>
   );
 }

@@ -108,7 +108,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
       await updateDoc(doc(db, `splits/${selectedSplitId}/circuitos`, circuit.id), {
         economia_procesada: false,
       });
-      // Circuitos que cronológicamente vienen ANTES que éste (para respetar freeze desde congelado_en)
       const circuitIndex = circuits.findIndex(c => c.id === circuit.id);
       const previousCircuitIds = circuits.slice(0, circuitIndex).map(c => c.id);
       await procesarEconomiaCarrera(
@@ -118,6 +117,50 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         (msg) => setProcessLog(prev => [...prev, msg]),
         previousCircuitIds
       );
+      await loadData(selectedSplitId);
+    } catch (err: any) {
+      setProcessLog(prev => [...prev, `Error: ${err.message}`]);
+    } finally {
+      setReprocesando(null);
+    }
+  }
+
+  // Parchea historial_precios para pilotos congelados desde congelado_en en adelante
+  async function fixFreezeHistorial(circuit: CircuitoCol) {
+    setReprocesando(circuit.id);
+    setProcessLog([`Corrigiendo freeze en ${circuit.nombre}…`]);
+    try {
+      const circuitIndex = circuits.findIndex(c => c.id === circuit.id);
+      const previousCircuitIds = circuits.slice(0, circuitIndex).map(c => c.id);
+      const equiposSnap = await getDocs(collection(db, `splits/${selectedSplitId}/equipos`));
+      const batch = writeBatch(db);
+      let fixed = 0;
+
+      for (const equipoDoc of equiposSnap.docs) {
+        const pilotosSnap = await getDocs(
+          collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`)
+        );
+        for (const pd of pilotosSnap.docs) {
+          const d = pd.data();
+          const hasPendingTransfer = d.pending_equipoId != null || d.pending_precio_compra != null;
+          if (!d.congelado && !hasPendingTransfer) continue;
+          const isFrozenHere = (() => {
+            if (!d.congelado_en) return true;
+            return previousCircuitIds.includes(d.congelado_en);
+          })();
+          if (!isFrozenHere) continue;
+          const existingEntry = d.historial_precios?.[circuit.id];
+          if (existingEntry && (existingEntry.mantener != null || existingEntry.clausula != null)) {
+            batch.update(pd.ref, {
+              [`historial_precios.${circuit.id}`]: { carrera: circuit.nombre, mantener: null, clausula: null, congelado: true },
+            });
+            fixed++;
+          }
+        }
+      }
+
+      await batch.commit();
+      setProcessLog([`✓ ${fixed} piloto(s) con ❄ en ${circuit.nombre}`]);
       await loadData(selectedSplitId);
     } catch (err: any) {
       setProcessLog(prev => [...prev, `Error: ${err.message}`]);
@@ -144,19 +187,23 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     setLoading(true);
     setProcessLog([]);
     try {
-      const [rosterSnap, circSnap, equiposSnap] = await Promise.all([
-        getDocs(collection(db, `splits/${selectedSplitId}/roster`)),
+      const [circSnap, equiposSnap] = await Promise.all([
         getDocs(collection(db, `splits/${selectedSplitId}/circuitos`)),
         getDocs(collection(db, `splits/${selectedSplitId}/equipos`)),
       ]);
       const b1 = writeBatch(db);
-      rosterSnap.docs.forEach(d => b1.update(d.ref, {
-        precio_compra: 0, clausula_actual: 0, mantener_actual: 0,
-        clausula_inicial_split: 0, mantener_inicial_split: 0,
-        precio_carrera_anterior: 0, historial_precios: {},
-        congelado: false, congelado_en: null, tipo_fichaje: null,
-        pending_equipoId: null, pending_precio_compra: null, pending_tipo_fichaje: null,
-      }));
+      for (const equipoDoc of equiposSnap.docs) {
+        const pilotosSnap = await getDocs(
+          collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`)
+        );
+        pilotosSnap.docs.forEach(d => b1.update(d.ref, {
+          precio_compra: 0, clausula_actual: 0, mantener_actual: 0,
+          clausula_inicial_split: 0, mantener_inicial_split: 0,
+          precio_carrera_anterior: 0, historial_precios: {},
+          congelado: false, congelado_en: null, tipo_fichaje: null,
+          pending_equipoId: null, pending_precio_compra: null, pending_tipo_fichaje: null,
+        }));
+      }
       equiposSnap.docs.forEach(d => b1.update(d.ref, { presupuesto: 0, presupuesto_inicial: 0 }));
       await b1.commit();
       const b2 = writeBatch(db);
@@ -173,7 +220,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   async function setTipoFichaje(pilot: PilotRow, tipo: TipoFichaje | null) {
     setSavingTipo(pilot.id);
-    await updateDoc(doc(db, `splits/${pilot.splitId}/roster`, pilot.id), {
+    await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
       tipo_fichaje: tipo ?? null,
     });
     await loadData(pilot.splitId);
@@ -191,13 +238,16 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     }
   }
 
-  function getTeamPresupuesto(teamId: string): number | null {
+  function getTeamPresupuesto(teamId: string, overridePilotId?: string, overridePrice?: number): number | null {
     const team = teams.find(t => t.id === teamId);
     if (!team || team.presupuesto_inicial == null) return null;
 
     const teamCurrentCost = pilots
       .filter(p => p.equipoId === teamId)
-      .reduce((sum, p) => sum + (p.precio_compra || 0), 0);
+      .reduce((sum, p) => {
+        const price = overridePilotId === p.id ? (overridePrice ?? 0) : (p.precio_compra || 0);
+        return sum + price;
+      }, 0);
 
     const pendingIncomingCost = pilots
       .filter(p => p.pending_equipoId === teamId && p.pending_precio_compra != null && p.pending_equipoId !== p.equipoId)
@@ -228,7 +278,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   async function descongelar(pilot: PilotRow) {
     await revertPendingReservation(pilot);
-    await updateDoc(doc(db, `splits/${pilot.splitId}/roster`, pilot.id), {
+    await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
       congelado: false,
       congelado_en: null,
       pending_equipoId: null,
@@ -263,9 +313,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         await adjustTeamPresupuesto(splitId, freezeTeamId, deltaAdjustment);
       }
 
-      // 1. Actualizar roster: marcar congelado y setear transfer pendiente para el siguiente split.
-      // No se cambia el equipo ni el precio en el split actual.
-      await updateDoc(doc(db, `splits/${pilot.splitId}/roster`, pilot.id), {
+      await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
         congelado: true,
         congelado_en: lastDone?.id ?? null,
         pending_equipoId: freezeTeamId,
@@ -325,43 +373,45 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         teamNameMap[teamDoc.id] = td.nombre || teamDoc.id;
       }
 
-      // ── Roster (modelo nuevo) + pilotos globales ────────────────────────────
-      const [rosterSnap, pilotosSnap] = await Promise.all([
-        getDocs(collection(db, `splits/${splitId}/roster`)),
-        getDocs(collection(db, "pilotos")),
-      ]);
+      // ── Pilotos anidados + nombres globales ─────────────────────────────────
+      const pilotosSnap = await getDocs(collection(db, "pilotos"));
       const pilotGlobalMap: Record<string, any> = {};
       pilotosSnap.docs.forEach(d => { pilotGlobalMap[d.id] = d.data(); });
 
       const allPilots: PilotRow[] = [];
-      for (const rDoc of rosterSnap.docs) {
-        const pd = rDoc.data() as any;
-        const pg = pilotGlobalMap[rDoc.id] || {};
-        const hist: Record<string, { mantener: number | null; clausula: number | null }> = {};
-        sortedCircs.forEach(c => {
-          const h = pd.historial_precios?.[c.id];
-          hist[c.id] = { mantener: h?.mantener ?? null, clausula: h?.clausula ?? null };
-        });
-        allPilots.push({
-          id: rDoc.id,
-          nombre: pg.nombre || rDoc.id,
-          equipoId: pd.equipoId || "agente_libre",
-          equipoNombre: teamNameMap[pd.equipoId] || pd.equipoId || "Agente Libre",
-          splitId,
-          precio_compra: pd.precio_compra ?? 0,
-          mantener_actual: pd.mantener_actual ?? 0,
-          clausula_actual: pd.clausula_actual ?? 0,
-          mantener_inicial_split: pd.mantener_inicial_split ?? 0,
-          clausula_inicial_split: pd.clausula_inicial_split ?? 0,
-          historial: hist,
-          isLegacy: false,
-          tipo_fichaje: pd.tipo_fichaje,
-          congelado: !!pd.congelado,
-          congelado_en: pd.congelado_en,
-          pending_equipoId: pd.pending_equipoId,
-          pending_precio_compra: pd.pending_precio_compra,
-          pending_tipo_fichaje: pd.pending_tipo_fichaje,
-        });
+      for (const teamDoc of teamsSnap.docs) {
+        const pilotosSubSnap = await getDocs(
+          collection(db, `splits/${splitId}/equipos/${teamDoc.id}/pilotos`)
+        );
+        for (const rDoc of pilotosSubSnap.docs) {
+          const pd = rDoc.data() as any;
+          const pg = pilotGlobalMap[rDoc.id] || {};
+          const hist: Record<string, { mantener: number | null; clausula: number | null; congelado?: boolean }> = {};
+          sortedCircs.forEach(c => {
+            const h = pd.historial_precios?.[c.id];
+            hist[c.id] = { mantener: h?.mantener ?? null, clausula: h?.clausula ?? null, congelado: h?.congelado ?? false };
+          });
+          allPilots.push({
+            id: rDoc.id,
+            nombre: pg.nombre || rDoc.id,
+            equipoId: teamDoc.id,
+            equipoNombre: teamNameMap[teamDoc.id] || teamDoc.id,
+            splitId,
+            precio_compra:          pd.precio_compra ?? 0,
+            mantener_actual:        pd.mantener_actual ?? 0,
+            clausula_actual:        pd.clausula_actual ?? 0,
+            mantener_inicial_split: pd.mantener_inicial_split ?? 0,
+            clausula_inicial_split: pd.clausula_inicial_split ?? 0,
+            historial:    hist,
+            isLegacy:     false,
+            tipo_fichaje: pd.tipo_fichaje,
+            congelado:    !!pd.congelado,
+            congelado_en: pd.congelado_en,
+            pending_equipoId:       pd.pending_equipoId,
+            pending_precio_compra:  pd.pending_precio_compra,
+            pending_tipo_fichaje:   pd.pending_tipo_fichaje,
+          });
+        }
       }
 
       // Marcar pilotos legacy: en splits 2+, cualquier piloto con ID piloto_X
@@ -406,52 +456,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
       setTeams(newTeams.sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setPilots(allPilots.sort((a, b) => a.equipoNombre.localeCompare(b.equipoNombre) || a.nombre.localeCompare(b.nombre)));
-
-      // ── VALIDACIÓN RETROACTIVA: verificar y aplicar reservas faltantes ──────
-      // Si hay pilotos congelados sin reserva, hacerla
-      const reservasAjustes: Record<string, number> = {};
-      for (const pilot of allPilots) {
-        if (pilot.pending_equipoId && pilot.pending_precio_compra != null && pilot.pending_equipoId !== pilot.equipoId) {
-          const delta = pendingBudgetDelta(pilot.pending_precio_compra);
-          reservasAjustes[pilot.pending_equipoId] = (reservasAjustes[pilot.pending_equipoId] || 0) - delta;
-        }
-      }
-
-      // Calcular presupuestos esperados y comparar con reales
-      const expectedBudgets: Record<string, number> = {};
-      for (const team of newTeams) {
-        const currentCost = allPilots
-          .filter(p => p.equipoId === team.id)
-          .reduce((sum, p) => sum + (p.precio_compra || 0), 0);
-        const incomingCost = allPilots
-          .filter(p => p.pending_equipoId === team.id && p.pending_equipoId !== p.equipoId && p.pending_precio_compra != null)
-          .reduce((sum, p) => sum + (p.pending_precio_compra ?? 0), 0);
-        const ini = team.presupuesto_inicial ?? 100;
-        expectedBudgets[team.id] = Math.round((ini - currentCost - incomingCost) * 10) / 10;
-      }
-
-      // Aplicar ajustes si hay discrepancias
-      const batch = writeBatch(db);
-      const discrepanciasEncontradas: string[] = [];
-      for (const [teamId, expected] of Object.entries(expectedBudgets)) {
-        const actual = newTeams.find(t => t.id === teamId)?.presupuesto ?? 0;
-        if (Math.abs(expected - actual) > 0.05) {
-          // Hay discrepancia: aplicar ajuste retroactivamente
-          const teamName = newTeams.find(t => t.id === teamId)?.nombre || teamId;
-          discrepanciasEncontradas.push(`${teamName}: ${actual}M → ${expected}M`);
-          batch.update(doc(db, `splits/${splitId}/equipos`, teamId), { presupuesto: expected });
-        }
-      }
-      await batch.commit();
-
-      // Mostrar mensaje si hay ajustes retroactivos
-      if (discrepanciasEncontradas.length > 0) {
-        setProcessLog([
-          "✓ Validación retroactiva completada",
-          "Presupuestos ajustados:",
-          ...discrepanciasEncontradas
-        ]);
-      }
     } finally {
       setLoading(false);
     }
@@ -470,7 +474,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     const clausulaInicial = isNegativo
       ? Math.round((precioAbs / 2) * 10) / 10
       : Math.round(newPrecio * 2 * 10) / 10;
-    await updateDoc(doc(db, `splits/${pilot.splitId}/roster`, pilot.id), {
+    await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
       precio_compra: newPrecio,
       mantener_actual: mantenerInicial,
       clausula_actual: clausulaInicial,
@@ -480,13 +484,21 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
       historial_precios: {},
     });
 
-    // Recalcular presupuesto del equipo: inicial - suma de precios de todos sus pilotos
-    // Incluir reservas por fichajes pendientes entrantes al equipo.
-    const newPresupuesto = getTeamPresupuesto(pilot.equipoId);
+    // Recalcular presupuesto del equipo usando el nuevo precio (el estado local aún es el viejo)
+    const newPresupuesto = getTeamPresupuesto(pilot.equipoId, pilot.id, newPrecio);
     if (newPresupuesto != null) {
       await updateDoc(doc(db, `splits/${pilot.splitId}/equipos`, pilot.equipoId), {
         presupuesto: newPresupuesto,
       });
+    } else {
+      // Sin presupuesto_inicial: ajustar por diferencia respecto al precio anterior
+      const team = teams.find(t => t.id === pilot.equipoId);
+      if (team) {
+        const delta = newPrecio - pilot.precio_compra;
+        await updateDoc(doc(db, `splits/${pilot.splitId}/equipos`, pilot.equipoId), {
+          presupuesto: Math.round((team.presupuesto - delta) * 10) / 10,
+        });
+      }
     }
 
     setEditing(prev => { const n = { ...prev }; delete n[pilot.id]; return n; });
@@ -496,7 +508,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   async function deleteLegacy(pilot: PilotRow) {
     setDeletingId(pilot.id);
-    await deleteDoc(doc(db, `splits/${pilot.splitId}/roster`, pilot.id));
+    await deleteDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id));
     await loadData(pilot.splitId);
     setDeletingId(null);
   }
@@ -710,18 +722,20 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                     <span className="block text-[7px] text-white/15 tracking-normal normal-case font-normal mt-0.5">
                       mant. / claus.
                     </span>
-                    {c.economia_procesada
-                      ? <span className="block text-[7px] text-emerald-500/60 tracking-normal normal-case font-normal">eco. ok</span>
-                      : c.completado
-                        ? <button
-                            onClick={() => reprocesarEconomia(c)}
-                            disabled={reprocesando === c.id}
-                            className="flex items-center gap-0.5 text-[7px] text-amber-400/70 hover:text-amber-300 tracking-normal normal-case font-normal transition-colors mt-0.5"
-                          >
-                            {reprocesando === c.id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
-                            {reprocesando === c.id ? "..." : "procesar"}
-                          </button>
-                        : null
+                    {c.completado
+                      ? <button
+                          onClick={() => c.economia_procesada ? fixFreezeHistorial(c) : reprocesarEconomia(c)}
+                          disabled={reprocesando === c.id}
+                          className={`flex items-center gap-0.5 text-[7px] tracking-normal normal-case font-normal transition-colors mt-0.5 ${
+                            c.economia_procesada
+                              ? "text-emerald-500/50 hover:text-amber-300"
+                              : "text-amber-400/70 hover:text-amber-300"
+                          }`}
+                        >
+                          {reprocesando === c.id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+                          {reprocesando === c.id ? "..." : c.economia_procesada ? "eco. ok" : "procesar"}
+                        </button>
+                      : null
                     }
                   </th>
                 ))}
@@ -793,59 +807,94 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                           )}
                         </td>
                         <td className="py-3 px-3 text-right">
-                          {pilot.pending_precio_compra != null ? (
-                            <div className="space-y-1">
-                              <span className="text-blue-400 font-mono text-[10px]">next</span>
-                              <span className="block text-[10px] text-white/60">{r1(pilot.pending_precio_compra)}M</span>
-                            </div>
-                          ) : (
+                          {pilot.pending_precio_compra != null ? (() => {
+                            const pp = pilot.pending_precio_compra;
+                            const ppAbs = Math.abs(pp);
+                            const nextM  = pp < 0 ? Math.round(ppAbs / 3 * 10) / 10 : Math.round(pp * 3 * 10) / 10;
+                            const nextCl = pp < 0 ? Math.round(ppAbs / 2 * 10) / 10 : Math.round(pp * 2 * 10) / 10;
+                            return (
+                              <div className="space-y-0.5">
+                                <span className={`block tabular-nums font-bold text-[10px] ${cellBg(nextM)}`}>{r1(nextM)}</span>
+                                <span className={`block tabular-nums text-[9px] ${cellBg(nextCl)}`}>{r1(nextCl)}</span>
+                                <span className="block text-blue-400/60 text-[8px] font-mono">({r1(pp)}M)</span>
+                              </div>
+                            );
+                          })() : (
                             <span className="text-white/30">—</span>
                           )}
                         </td>
                         <td className="py-3 px-2 text-center">
                           {savingTipo === pilot.id
                             ? <Loader2 className="w-3 h-3 animate-spin text-white/30 mx-auto" />
-                            : (
-                              <div className="flex flex-col gap-0.5 items-center">
-                                {(["subasta", "clausula", "mantener"] as TipoFichaje[]).map(t => (
-                                  <button key={t}
-                                    onClick={() => setTipoFichaje(pilot, pilot.tipo_fichaje === t ? null : t)}
-                                    className={`text-[7px] uppercase tracking-[0.1em] px-1.5 py-0.5 w-full transition-colors leading-none ${
-                                      pilot.tipo_fichaje === t
-                                        ? t === "clausula" ? "bg-orange-500/80 text-white"
-                                        : t === "subasta" ? "bg-[#e10600]/80 text-white"
-                                        : "bg-blue-500/50 text-white"
-                                        : "text-white/15 hover:text-white/40"
-                                    }`}
-                                  >
-                                    {t === "subasta" ? "SUB" : t === "clausula" ? "CL" : "MNT"}
-                                  </button>
-                                ))}
-                              </div>
-                            )
+                            : pilot.congelado
+                              ? (() => {
+                                  const t = pilot.pending_tipo_fichaje ?? pilot.tipo_fichaje;
+                                  return (
+                                    <span className={`text-[8px] uppercase tracking-[0.1em] font-bold ${
+                                      t === "clausula" ? "text-orange-400"
+                                      : t === "subasta" ? "text-[#e10600]"
+                                      : t === "mantener" ? "text-blue-400"
+                                      : "text-white/20"
+                                    }`}>
+                                      {t === "subasta" ? "SUB" : t === "clausula" ? "CL" : t === "mantener" ? "MNT" : "—"}
+                                    </span>
+                                  );
+                                })()
+                              : (
+                                <div className="flex flex-col gap-0.5 items-center">
+                                  {(["subasta", "clausula", "mantener"] as TipoFichaje[]).map(t => (
+                                    <button key={t}
+                                      onClick={() => setTipoFichaje(pilot, pilot.tipo_fichaje === t ? null : t)}
+                                      className={`text-[7px] uppercase tracking-[0.1em] px-1.5 py-0.5 w-full transition-colors leading-none ${
+                                        pilot.tipo_fichaje === t
+                                          ? t === "clausula" ? "bg-orange-500/80 text-white"
+                                          : t === "subasta" ? "bg-[#e10600]/80 text-white"
+                                          : "bg-blue-500/50 text-white"
+                                          : "text-white/15 hover:text-white/40"
+                                      }`}
+                                    >
+                                      {t === "subasta" ? "SUB" : t === "clausula" ? "CL" : "MNT"}
+                                    </button>
+                                  ))}
+                                </div>
+                              )
                           }
                         </td>
 
                         {/* Historial por carrera — mantener + cláusula apilados */}
                         {circuits.map(c => {
-                          const m = pilot.historial[c.id]?.mantener ?? null;
-                          const cl = pilot.historial[c.id]?.clausula ?? null;
+                          const h = pilot.historial[c.id];
+                          const m = h?.mantener ?? null;
+                          const cl = h?.clausula ?? null;
+                          const isCongeladoEnCircuito = h?.congelado ?? false;
                           return (
                             <td key={c.id} className="py-3 px-3 text-right">
-                              <span className={`block tabular-nums font-bold ${cellBg(m)}`}>{r1(m)}</span>
-                              <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(cl)}`}>{r1(cl)}</span>
+                              {isCongeladoEnCircuito ? (
+                                <span className="text-blue-400/60 text-[11px]">❄</span>
+                              ) : (
+                                <>
+                                  <span className={`block tabular-nums font-bold ${cellBg(m)}`}>{r1(m)}</span>
+                                  <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(cl)}`}>{r1(cl)}</span>
+                                </>
+                              )}
                             </td>
                           );
                         })}
 
-                        {/* Mantener actual + Cláusula actual */}
+                        {/* Mantener actual + Cláusula actual — ocultos si congelado */}
                         <td className="py-3 px-3 text-right border-l border-white/[0.04]">
-                          <span className={`block tabular-nums font-black text-[11px] ${cellBg(pilot.mantener_actual)}`}>
-                            {r1(pilot.mantener_actual)}
-                          </span>
-                          <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(pilot.clausula_actual)}`}>
-                            {r1(pilot.clausula_actual)}
-                          </span>
+                          {pilot.congelado ? (
+                            <span className="text-blue-400 text-[11px]">❄</span>
+                          ) : (
+                            <>
+                              <span className={`block tabular-nums font-black text-[11px] ${cellBg(pilot.mantener_actual)}`}>
+                                {r1(pilot.mantener_actual)}
+                              </span>
+                              <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(pilot.clausula_actual)}`}>
+                                {r1(pilot.clausula_actual)}
+                              </span>
+                            </>
+                          )}
                         </td>
 
                         {showLegacy && pilot.isLegacy && (

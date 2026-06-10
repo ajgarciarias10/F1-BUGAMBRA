@@ -231,16 +231,16 @@ export function StickerAlbum({
 
       {/* Un bloque por cada split/temporada */}
       {validSplits.map((split) => {
-        // Campeón de pilotos: máximo puntos_piloto
+        const roster: any[] = split.roster || [];
+
+        // Campeón de pilotos: máximo puntos_piloto en el roster
         let champPilotId = "";
         let maxPilotPts = -1;
-        (split.equipos || []).forEach((eq: any) => {
-          (eq.pilotos || []).forEach((p: any) => {
-            if ((p.puntos_piloto || 0) > maxPilotPts) {
-              maxPilotPts = p.puntos_piloto || 0;
-              champPilotId = p.id;
-            }
-          });
+        roster.forEach((p: any) => {
+          if ((p.puntos_piloto || 0) > maxPilotPts) {
+            maxPilotPts = p.puntos_piloto || 0;
+            champPilotId = p.pilotoId;
+          }
         });
         if (maxPilotPts <= 0) champPilotId = "";
 
@@ -268,15 +268,29 @@ export function StickerAlbum({
 
             {/* Grid de equipos */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {split.equipos.map((equipo: any) => (
-                <EquipoCard
-                  key={equipo.id}
-                  equipo={equipo}
-                  usuarios={usuarios}
-                  champPilotId={champPilotId}
-                  champTeamId={champTeamId}
-                />
-              ))}
+              {split.equipos.map((equipo: any) => {
+                const equipoPilotos = roster
+                  .filter((p: any) => p.equipoId === equipo.id)
+                  .map((p: any) => {
+                    const usuario = usuarios.find(
+                      (u: any) => u.uid === p.pilotoId || u.piloto_id === p.pilotoId
+                    );
+                    return {
+                      ...p,
+                      id: p.pilotoId,
+                      foto_url: usuario?.foto_url || p.foto_url || "",
+                    };
+                  });
+                return (
+                  <EquipoCard
+                    key={equipo.id}
+                    equipo={{ ...equipo, pilotos: equipoPilotos }}
+                    usuarios={usuarios}
+                    champPilotId={champPilotId}
+                    champTeamId={champTeamId}
+                  />
+                );
+              })}
             </div>
           </div>
         );

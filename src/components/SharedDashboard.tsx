@@ -1,10 +1,10 @@
 ﻿import React, { useState, useMemo, useEffect, useRef } from "react";
-import { doc, updateDoc, runTransaction, collection } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { compressAndConvertImage } from "../utils/imageHelper";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { UserMinus, ShieldAlert, Award, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay } from "lucide-react";
+import { ShieldAlert, Award, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay } from "lucide-react";
 import { isSplitUnlocked } from "../utils/splitResolver";
 import { POINTS_BY_POSITION } from "../services/economyService";
 import { PilotRivalryPanel } from "./RivalryPanels";
@@ -23,7 +23,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   const [isCompareViewOpen, setIsCompareViewOpen] = useState(false);
   const [isF1TVOpen, setIsF1TVOpen] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<"profile" | "compare">("profile");
-  const [transacting, setTransacting] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -96,57 +95,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       }
     }
   }, [splits, activeSplitId]);
-
-  const handleDespedirPiloto = async (pilot: any) => {
-    if (!activeSplitId || !escuderiaId || !miEscuderia) return;
-    const pilotoId = pilot.pilotoId || pilot.id;
-    const refund = (pilot.precio_compra || pilot.precio_compra_split || 10) * 0.5;
-    setConfirmModal({
-      isOpen: true,
-      title: "Despedir Piloto",
-      message: `¿Quieres despedir a ${pilot.nombre}? Recibirás un reembolso del 50% (${refund.toFixed(1)}M).`,
-      onConfirm: async () => {
-        setTransacting(true);
-        try {
-          await runTransaction(db, async (trans) => {
-            const teamRef = doc(db, `splits/${activeSplitId}/equipos`, escuderiaId);
-            const rosterRef = doc(db, `splits/${activeSplitId}/roster`, pilotoId);
-
-            const teamDoc = await trans.get(teamRef);
-            const tData = teamDoc.data();
-
-            trans.update(teamRef, { presupuesto: (tData?.presupuesto || 0) + refund });
-            trans.update(rosterRef, { equipoId: "agente_libre" });
-
-            const transferRef = doc(collection(db, `splits/${activeSplitId}/transfers`));
-            trans.set(transferRef, {
-              detalles: `❌ ${miEscuderia.nombre} despidió a ${pilot.nombre}, obteniendo un reembolso de ${refund.toFixed(1)}M.`,
-              timestamp: new Date().toISOString(),
-              tipo: "despido"
-            });
-          });
-
-          setConfirmModal({
-            isOpen: true,
-            title: "Despido Procesado",
-            message: `Has despedido a ${pilot.nombre}.`,
-            showCancel: false,
-            onConfirm: () => { setConfirmModal(null); }
-          });
-        } catch (err: any) {
-          setConfirmModal({
-            isOpen: true,
-            title: "Error",
-            message: "Error al despedir: " + err.message,
-            showCancel: false,
-            onConfirm: () => {}
-          });
-        } finally {
-          setTransacting(false);
-        }
-      }
-    });
-  };
 
   const currentSplit = useMemo(() => splits.find(s => s.id === activeSplitId) || splits[0], [activeSplitId, splits]);
 
@@ -320,7 +268,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     const validRacePos = history.filter(h => h.racePos >= 1 && h.racePos <= 12).map(h => h.racePos);
     const avgRace = validRacePos.length > 0 ? Number((validRacePos.reduce((a, b) => a + b, 0) / validRacePos.length).toFixed(1)) : 0;
 
-    let finalRating = 70, baseClause = 10, escuderiaName = "Sin equipo";
+    let finalRating = 70, baseClause = 10, escuderiaName = "Sin equipo", isCongelado = false;
 
     if (isGlobalView) {
       const latestSplit = [...splits].reverse().find(s => (s.roster || []).some((p: any) => p.pilotoId === pilotId));
@@ -345,13 +293,14 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           escuderiaName = eMap[entry.equipoId] ?? "Sin equipo";
           finalRating = entry.rating_piloto ?? pilotUser?.rating_piloto ?? 70;
           baseClause = entry.clausula_actual ?? (finalRating * 0.5);
+          isCongelado = !!entry.congelado;
         } else {
           finalRating = pilotUser?.rating_piloto ?? 70;
         }
       }
     }
 
-    return { pilotId, name: pilotName, fotoUrl: getPilotPhoto(pilotId), rating: finalRating, clause: baseClause, escuderiaName, totalPoints, victorias: victories, podiums, poles, dnfs, cleanRaces, dotds, mvps, fastestLaps, participaciones, avgPoints, avgQualy, avgRace, history: history.sort((a, b) => b.splitId.localeCompare(a.splitId) || a.circuitId.localeCompare(b.circuitId)) };
+    return { pilotId, name: pilotName, fotoUrl: getPilotPhoto(pilotId), rating: finalRating, clause: baseClause, congelado: isCongelado, escuderiaName, totalPoints, victorias: victories, podiums, poles, dnfs, cleanRaces, dotds, mvps, fastestLaps, participaciones, avgPoints, avgQualy, avgRace, history: history.sort((a, b) => b.splitId.localeCompare(a.splitId) || a.circuitId.localeCompare(b.circuitId)) };
   };
 
   const pilotProfileStats = useMemo(() => {
@@ -586,19 +535,16 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                       showPrice={canViewBudget && !p.congelado}
                       footer={canViewBudget ? (
                         <div className="bg-white/[0.02] border border-t-0 border-white/[0.06] px-2.5 py-2 space-y-1.5">
-                          <div className="flex justify-between text-[9px] font-mono text-white/40">
-                            <span>Cláusula</span>
-                            <span className="text-[#e10600] font-bold">{p.clausula_actual || 0}M</span>
-                          </div>
-                          {currentSplit?.fichajes_abiertos && (
-                            <button
-                              disabled={transacting}
-                              onClick={e => { e.stopPropagation(); handleDespedirPiloto(p); }}
-                              className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-40"
-                            >
-                              <UserMinus className="w-3 h-3" />
-                              Despedir ({((p.precio_compra || 10) * 0.5).toFixed(1)}M)
-                            </button>
+                          {p.congelado ? (
+                            <div className="flex justify-between text-[9px] font-mono text-white/40">
+                              <span>Estado</span>
+                              <span className="text-blue-400 font-bold">❄ Congelado</span>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between text-[9px] font-mono text-white/40">
+                              <span>Cláusula</span>
+                              <span className="text-[#e10600] font-bold">{p.clausula_actual || 0}M</span>
+                            </div>
                           )}
                         </div>
                       ) : undefined}
@@ -810,8 +756,11 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       )}
 
       {isCompareViewOpen && (
-        <div className="fixed inset-0 bg-[#0a0a0a]/95z-50 overflow-y-auto p-4 md:p-6 text-left">
-          <div className="max-w-5xl mx-auto bg-[#0a0a0a] border border-white/10  p-6 relative my-4">
+        <div
+          className="fixed inset-0 bg-black/85 z-50 overflow-y-auto p-4 md:p-6 text-left backdrop-blur-sm"
+          onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }}
+        >
+          <div className="max-w-5xl mx-auto bg-[#0d0d0d] border border-white/[0.08] p-6 relative my-4" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start border-b border-[#e10600]/20 pb-4 mb-6">
               <div>
                 <span className="text-[10px] font-black tracking-[0.2em] text-[#e10600] uppercase font-mono block">CENTRAL DE TELEMETRÍA GP</span>
@@ -845,7 +794,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                 {pilotProfileStats ? (
                   <div className="space-y-6">
                     <div className="flex flex-col lg:flex-row gap-6">
-                      <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 h-[440px] bg-white/[0.02]border border-white/10 shadow-[0_15px_40px_rgba(225,6,0,0.15)] overflow-hidden group">
+                      <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 h-[440px] bg-white/[0.02] border border-white/10 shadow-[0_15px_40px_rgba(225,6,0,0.15)] overflow-hidden group">
                         <div className="absolute top-0 left-0 w-full h-1.5 bg-[#e10600]"></div>
                         <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#e10600]/20 rounded-full pointer-events-none group-hover:bg-[#e10600]/30 transition-all duration-500"></div>
                         <div className="absolute top-5 left-5 flex flex-col items-center z-20 drop-shadow-md">
@@ -861,9 +810,9 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                             <div className="w-32 h-32 rounded-full bg-[#1a1a1a] border border-white/5 flex items-center justify-center font-black text-5xl text-white/10 mb-6 drop-">{pilotProfileStats.name ? pilotProfileStats.name.substring(0, 2).toUpperCase() : '??'}</div>
                           )}
                         </div>
-                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black to-transparentpt-16 pb-6 px-6 z-20">
+                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black to-transparent pt-16 pb-6 px-6 z-20">
                           <h3 className="text-2xl font-black italic text-white uppercase tracking-tighter text-center whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-md">{pilotProfileStats.name}</h3>
-                          <div className="w-full h-[1px] bg-white/10my-3.5"></div>
+                          <div className="w-full h-[1px] bg-white/10 my-3.5"></div>
                           <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-1">
                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">PTS</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.totalPoints}</span></div>
                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">WIN</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.victorias}</span></div>
@@ -876,23 +825,31 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                       </div>
                       
                       <div className="flex-1 flex flex-col gap-4">
-                        <div className="bg-white/[0.02]border border-white/5 p-6  flex flex-col sm:flex-row items-center justify-between gap-6">
+                        <div className="bg-white/[0.02] border border-white/5 p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
                           <div className="w-full sm:flex-1">
                             <div className="flex justify-between items-end mb-2">
                               <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider">Desarrollo de Rating</span>
                               <span className="text-xs font-black text-white font-mono">{pilotProfileStats.rating.toFixed(0)} / 99</span>
                             </div>
                             <div className="w-full bg-white/5 h-2 overflow-hidden bg-white/[0.04]">
-                              <div className="bg-[#e10600]h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(99, pilotProfileStats.rating)}%` }}></div>
+                              <div className="bg-[#e10600] h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(99, pilotProfileStats.rating)}%` }}></div>
                             </div>
                           </div>
-                          <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-white/5 pt-4 sm:pt-0 sm:pl-6 shrink-0">
-                            <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider block mb-1">Cláusula de Mercado</span>
-                            <div className="flex items-baseline gap-1 sm:justify-end">
-                              <span className="text-3xl font-black font-mono text-emerald-400">{pilotProfileStats.clause.toFixed(1)}</span>
-                              <span className="text-sm font-bold text-emerald-500 font-mono">M</span>
+                          {!pilotProfileStats.congelado && (
+                            <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-white/5 pt-4 sm:pt-0 sm:pl-6 shrink-0">
+                              <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider block mb-1">Cláusula de Mercado</span>
+                              <div className="flex items-baseline gap-1 sm:justify-end">
+                                <span className="text-3xl font-black font-mono text-emerald-400">{pilotProfileStats.clause.toFixed(1)}</span>
+                                <span className="text-sm font-bold text-emerald-500 font-mono">M</span>
+                              </div>
                             </div>
-                          </div>
+                          )}
+                          {pilotProfileStats.congelado && (
+                            <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-white/5 pt-4 sm:pt-0 sm:pl-6 shrink-0">
+                              <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider block mb-1">Estado</span>
+                              <span className="text-xl font-black text-blue-400">❄ Congelado</span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
@@ -925,7 +882,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                                   <td className={`p-3 text-center font-bold ${h.racePos === 1 ? 'text-amber-400' : h.racePos <= 3 ? 'text-yellow-500' : h.isDnfOwnError ? 'text-red-500' : 'text-white'}`}>
                                     {h.isDofOwnError || h.isDnfOwnError ? "DNF 💥" : `P${h.racePos}`}
                                   </td>
-                                  <td className="p-3 text-center text-white font-bold text-sm bg-white/[0.02]tabular-nums">{h.points} pts</td>
+                                  <td className="p-3 text-center text-white font-bold text-sm bg-white/[0.02] tabular-nums">{h.points} pts</td>
                                   <td className="p-3">
                                     <div className="flex gap-1.5 justify-center items-center">
                                       {h.isClean && <span className="bg-teal-500/10 text-teal-400 px-1.5 py-0.5 rounded text-[8px] font-bold" title="Limpio de incidentes">Limpio</span>}
@@ -978,7 +935,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                 {statsA && statsB ? (
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-white/[0.02]border border-amber-500/20  p-4 flex items-center gap-4">
+                      <div className="bg-white/[0.02] border border-amber-500/20 p-4 flex items-center gap-4">
                         {statsA.fotoUrl ? (
                           <img src={statsA.fotoUrl} alt={statsA.name} className="w-16 h-16 rounded-sm object-cover border border-amber-500/40" />
                         ) : (
