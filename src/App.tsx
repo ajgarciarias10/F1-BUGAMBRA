@@ -17,7 +17,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/F1-BUGAMBRA">
         <Routes>
           <Route path="/" element={<PublicHome />} />
           <Route path="/login" element={<LoginRegister />} />

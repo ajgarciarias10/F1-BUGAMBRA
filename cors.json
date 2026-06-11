@@ -1,6 +1,6 @@
 [
   {
-    "origin": ["https://chipper-llama-1be4fa.netlify.app", "http://localhost:5173", "http://localhost:4173"],
+    "origin": ["https://ajgarciarias10.github.io", "http://localhost:5173", "http://localhost:4173"],
     "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
     "maxAgeSeconds": 3600,
     "responseHeader": [
