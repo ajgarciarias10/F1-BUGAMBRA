@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, updateDoc, deleteDoc, writeBatch, addDoc, serverTimestamp, increment } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment } from "firebase/firestore";
 import { db } from "../services/firebase";
-import { procesarEconomiaCarrera } from "../services/economyService";
-import { Loader2, Trash2, RefreshCw } from "lucide-react";
+import {
+  procesarEconomiaCarrera,
+  calcularMillonesClasificacion, calcularMillonesCarrera, calcularPuntosPosicion,
+  M_PUNTOS_FACTOR, M_POLE, M_VUELTA_RAPIDA, M_SIN_SANCIONADOS,
+  M_SOLO_POR_CARRERA, M_RIVALIDAD_CLASIF, M_RIVALIDAD_CARRERA,
+} from "../services/economyService";
+import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +40,13 @@ interface PilotRow {
   pending_equipoId?: string;
   pending_precio_compra?: number;
   pending_tipo_fichaje?: TipoFichaje;
+  // Rendimiento
+  puntos_piloto: number;
+  rating_piloto: number;
+  victorias: number;
+  podios: number;
+  dnfs: number;
+  carreras_limpias: number;
 }
 
 interface TeamRow {
@@ -46,14 +58,15 @@ interface TeamRow {
   poles: number;
   vueltas_rapidas: number;
   sin_sanc: number;
+  ingresos_rivalidades: number;
+  ingresos_premios: number;
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-/** Convierte cualquier valor Firestore fecha a epoch ms */
 function toMs(fecha: any): number {
   if (!fecha) return 0;
-  if (typeof fecha?.toMillis === "function") return fecha.toMillis(); // Firestore Timestamp
+  if (typeof fecha?.toMillis === "function") return fecha.toMillis();
   if (typeof fecha === "string") return new Date(fecha).getTime() || 0;
   if (fecha instanceof Date) return fecha.getTime();
   return 0;
@@ -72,12 +85,27 @@ function cellBg(val: number | null): string {
   return "text-white/60";
 }
 
+function ratingColor(r: number): string {
+  if (r >= 85) return "text-amber-300 font-black";
+  if (r >= 75) return "text-white font-bold";
+  if (r >= 65) return "text-white/60";
+  return "text-white/30";
+}
+
+const TIPO_LABEL: Record<TipoFichaje, string> = { subasta: "SUB", clausula: "CL", mantener: "MNT" };
+const TIPO_COLORS: Record<TipoFichaje, string> = {
+  subasta: "bg-[#e10600]/20 text-[#e10600]/80",
+  clausula: "bg-orange-500/20 text-orange-300/80",
+  mantener: "bg-blue-500/20 text-blue-300/80",
+};
+
 const LEGACY_PREFIX = "piloto_";
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 export function EconomyAdminPanel({ splits }: { splits: any[] }) {
-  const [selectedSplitId, setSelectedSplitId] = useState(splits[0]?.id ?? "");
+  const activeSplits = splits.filter((s: any) => s.id !== "global" && s.activo === true);
+  const [selectedSplitId, setSelectedSplitId] = useState(activeSplits[0]?.id ?? "");
   const [circuits, setCircuits] = useState<CircuitoCol[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [pilots, setPilots] = useState<PilotRow[]>([]);
@@ -87,172 +115,36 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showLegacy, setShowLegacy] = useState(false);
   const [reprocesando, setReprocesando] = useState<string | null>(null);
-  const [savingTipo, setSavingTipo] = useState<string | null>(null);
   const [editingBudget, setEditingBudget] = useState<Record<string, string>>({});
   const [savingBudget, setSavingBudget] = useState<string | null>(null);
   const [processLog, setProcessLog] = useState<string[]>([]);
-  // Modal de asignación al congelar piloto
-  const [freezeModal, setFreezeModal] = useState<PilotRow | null>(null);
-  const [freezeTeamId, setFreezeTeamId] = useState("");
+  const [viewMode, setViewMode] = useState<"precios" | "rendimiento">("precios");
+
+  // Modal de fichaje
+  const [fichajeModal, setFichajeModal] = useState<PilotRow | null>(null);
+  const [fichajeEquipoId, setFichajeEquipoId] = useState("");
+  const [fichajeTipo, setFichajeTipo] = useState<TipoFichaje>("subasta");
   const [pendingPrecioCompra, setPendingPrecioCompra] = useState("");
-  const [confirmingFreeze, setConfirmingFreeze] = useState(false);
+  const [confirmingFichaje, setConfirmingFichaje] = useState(false);
 
   useEffect(() => {
     if (selectedSplitId) loadData(selectedSplitId);
   }, [selectedSplitId]);
 
-  async function reprocesarEconomia(circuit: CircuitoCol) {
-    setReprocesando(circuit.id);
-    setProcessLog([`Procesando ${circuit.nombre}…`]);
-    try {
-      await updateDoc(doc(db, `splits/${selectedSplitId}/circuitos`, circuit.id), {
-        economia_procesada: false,
-      });
-      const circuitIndex = circuits.findIndex(c => c.id === circuit.id);
-      const previousCircuitIds = circuits.slice(0, circuitIndex).map(c => c.id);
-      await procesarEconomiaCarrera(
-        selectedSplitId,
-        circuit.id,
-        circuit.nombre,
-        (msg) => setProcessLog(prev => [...prev, msg]),
-        previousCircuitIds
-      );
-      await loadData(selectedSplitId);
-    } catch (err: any) {
-      setProcessLog(prev => [...prev, `Error: ${err.message}`]);
-    } finally {
-      setReprocesando(null);
-    }
-  }
-
-  // Parchea historial_precios para pilotos congelados desde congelado_en en adelante
-  async function fixFreezeHistorial(circuit: CircuitoCol) {
-    setReprocesando(circuit.id);
-    setProcessLog([`Corrigiendo freeze en ${circuit.nombre}…`]);
-    try {
-      const circuitIndex = circuits.findIndex(c => c.id === circuit.id);
-      const previousCircuitIds = circuits.slice(0, circuitIndex).map(c => c.id);
-      const equiposSnap = await getDocs(collection(db, `splits/${selectedSplitId}/equipos`));
-      const batch = writeBatch(db);
-      let fixed = 0;
-
-      for (const equipoDoc of equiposSnap.docs) {
-        const pilotosSnap = await getDocs(
-          collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`)
-        );
-        for (const pd of pilotosSnap.docs) {
-          const d = pd.data();
-          const hasPendingTransfer = d.pending_equipoId != null || d.pending_precio_compra != null;
-          if (!d.congelado && !hasPendingTransfer) continue;
-          const isFrozenHere = (() => {
-            if (!d.congelado_en) return true;
-            return previousCircuitIds.includes(d.congelado_en);
-          })();
-          if (!isFrozenHere) continue;
-          const existingEntry = d.historial_precios?.[circuit.id];
-          if (existingEntry && (existingEntry.mantener != null || existingEntry.clausula != null)) {
-            batch.update(pd.ref, {
-              [`historial_precios.${circuit.id}`]: { carrera: circuit.nombre, mantener: null, clausula: null, congelado: true },
-            });
-            fixed++;
-          }
-        }
-      }
-
-      await batch.commit();
-      setProcessLog([`✓ ${fixed} piloto(s) con ❄ en ${circuit.nombre}`]);
-      await loadData(selectedSplitId);
-    } catch (err: any) {
-      setProcessLog(prev => [...prev, `Error: ${err.message}`]);
-    } finally {
-      setReprocesando(null);
-    }
-  }
-
-  async function savePresupuestoInicial(team: TeamRow, rawVal: string) {
-    const val = parseFloat(rawVal);
-    if (isNaN(val)) return;
-    setSavingBudget(team.id);
-    await updateDoc(doc(db, `splits/${selectedSplitId}/equipos`, team.id), {
-      presupuesto_inicial: val,
-      presupuesto: val,
-    });
-    setEditingBudget(prev => { const n = { ...prev }; delete n[team.id]; return n; });
-    await loadData(selectedSplitId);
-    setSavingBudget(null);
-  }
-
-  async function resetEconomia() {
-    if (!confirm(`¿Resetear toda la economía de ${selectedSplitId}? Los precios, historial y congelados quedarán a cero.`)) return;
-    setLoading(true);
-    setProcessLog([]);
-    try {
-      const [circSnap, equiposSnap] = await Promise.all([
-        getDocs(collection(db, `splits/${selectedSplitId}/circuitos`)),
-        getDocs(collection(db, `splits/${selectedSplitId}/equipos`)),
-      ]);
-      const b1 = writeBatch(db);
-      for (const equipoDoc of equiposSnap.docs) {
-        const pilotosSnap = await getDocs(
-          collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`)
-        );
-        pilotosSnap.docs.forEach(d => b1.update(d.ref, {
-          precio_compra: 0, clausula_actual: 0, mantener_actual: 0,
-          clausula_inicial_split: 0, mantener_inicial_split: 0,
-          precio_carrera_anterior: 0, historial_precios: {},
-          congelado: false, congelado_en: null, tipo_fichaje: null,
-          pending_equipoId: null, pending_precio_compra: null, pending_tipo_fichaje: null,
-        }));
-      }
-      equiposSnap.docs.forEach(d => b1.update(d.ref, { presupuesto: 0, presupuesto_inicial: 0 }));
-      await b1.commit();
-      const b2 = writeBatch(db);
-      circSnap.docs.forEach(d => b2.update(d.ref, { economia_procesada: false }));
-      await b2.commit();
-      setProcessLog(["✓ Reset completo — precios de pilotos y presupuestos de equipos a 0"]);
-      await loadData(selectedSplitId);
-    } catch (err: any) {
-      setProcessLog([`Error: ${err.message}`]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function setTipoFichaje(pilot: PilotRow, tipo: TipoFichaje | null) {
-    setSavingTipo(pilot.id);
-    await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
-      tipo_fichaje: tipo ?? null,
-    });
-    await loadData(pilot.splitId);
-    setSavingTipo(null);
-  }
-
-  // Descongelar directamente; congelar abre el modal de asignación
-  function handleClickCongelar(pilot: PilotRow) {
-    if (pilot.congelado) {
-      descongelar(pilot);
-    } else {
-      setFreezeTeamId(pilot.equipoId !== "agente_libre" ? pilot.equipoId : (teams[0]?.id ?? ""));
-      setPendingPrecioCompra(String(pilot.precio_compra || ""));
-      setFreezeModal(pilot);
-    }
-  }
+  // ─── HELPERS DE PRESUPUESTO ──────────────────────────────────────────────────
 
   function getTeamPresupuesto(teamId: string, overridePilotId?: string, overridePrice?: number): number | null {
     const team = teams.find(t => t.id === teamId);
     if (!team || team.presupuesto_inicial == null) return null;
-
     const teamCurrentCost = pilots
       .filter(p => p.equipoId === teamId)
       .reduce((sum, p) => {
         const price = overridePilotId === p.id ? (overridePrice ?? 0) : (p.precio_compra || 0);
         return sum + price;
       }, 0);
-
     const pendingIncomingCost = pilots
       .filter(p => p.pending_equipoId === teamId && p.pending_precio_compra != null && p.pending_equipoId !== p.equipoId)
       .reduce((sum, p) => sum + (p.pending_precio_compra ?? 0), 0);
-
     return Math.round((team.presupuesto_inicial - teamCurrentCost - pendingIncomingCost) * 10) / 10;
   }
 
@@ -262,105 +154,34 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   async function adjustTeamPresupuesto(splitId: string, teamId: string, delta: number) {
     if (!teamId || teamId === "agente_libre" || delta === 0) return;
-    await updateDoc(doc(db, `splits/${splitId}/equipos`, teamId), {
-      presupuesto: increment(delta),
-    });
+    await updateDoc(doc(db, `splits/${splitId}/equipos`, teamId), { presupuesto: increment(delta) });
   }
 
-  async function revertPendingReservation(pilot: PilotRow) {
-    const splitId = pilot.splitId;
-    if (!pilot.pending_equipoId || pilot.pending_precio_compra == null) return;
-    if (pilot.pending_equipoId === pilot.equipoId) return;
-
-    const oldDelta = pendingBudgetDelta(pilot.pending_precio_compra);
-    await adjustTeamPresupuesto(splitId, pilot.pending_equipoId, -oldDelta);
-  }
-
-  async function descongelar(pilot: PilotRow) {
-    await revertPendingReservation(pilot);
-    await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
-      congelado: false,
-      congelado_en: null,
-      pending_equipoId: null,
-      pending_precio_compra: null,
-      pending_tipo_fichaje: null,
-    });
-    await loadData(pilot.splitId);
-  }
-
-  async function confirmFreeze() {
-    if (!freezeModal || !freezeTeamId) return;
-    const pendingPrice = parseFloat(pendingPrecioCompra || "0");
-    if (Number.isNaN(pendingPrice)) return;
-
-    setConfirmingFreeze(true);
-    try {
-      const pilot = freezeModal;
-      const lastDone = [...circuits].filter(c => c.completado).at(-1);
-      const splitId = pilot.splitId;
-      const currentTeamId = pilot.equipoId;
-      const existingPendingTeam = pilot.pending_equipoId;
-      const existingPendingPrice = pilot.pending_precio_compra;
-      const existingDelta = existingPendingPrice != null ? pendingBudgetDelta(existingPendingPrice) : 0;
-      const newDelta = pendingBudgetDelta(pendingPrice);
-
-      if (existingPendingTeam && existingPendingTeam !== currentTeamId) {
-        await adjustTeamPresupuesto(splitId, existingPendingTeam, -existingDelta);
-      }
-
-      if (freezeTeamId && freezeTeamId !== currentTeamId) {
-        const deltaAdjustment = newDelta - ((existingPendingTeam === freezeTeamId && existingPendingTeam !== currentTeamId) ? existingDelta : 0);
-        await adjustTeamPresupuesto(splitId, freezeTeamId, deltaAdjustment);
-      }
-
-      await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
-        congelado: true,
-        congelado_en: lastDone?.id ?? null,
-        pending_equipoId: freezeTeamId,
-        pending_precio_compra: pendingPrice,
-        pending_tipo_fichaje: "subasta",
-      });
-
-      setFreezeModal(null);
-      setPendingPrecioCompra("");
-      await loadData(pilot.splitId);
-    } finally {
-      setConfirmingFreeze(false);
-    }
-  }
+  // ─── CARGA DE DATOS ──────────────────────────────────────────────────────────
 
   async function loadData(splitId: string) {
     setLoading(true);
     try {
-      // ── Circuitos: convertir Timestamp y ordenar cronológicamente ──────────
       const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
       const rawCircs = circSnap.docs.map(d => {
         const data = d.data() as any;
         return {
-          id: d.id,
-          nombre: data.nombre || d.id,
-          ts: toMs(data.fecha),
-          orden: data.numero_carrera ?? 0,
-          completado: !!data.completado,
-          economia_procesada: !!data.economia_procesada,
-          resultados: data.resultados
+          id: d.id, nombre: data.nombre || d.id, ts: toMs(data.fecha),
+          orden: data.numero_carrera ?? 0, completado: !!data.completado,
+          economia_procesada: !!data.economia_procesada, resultados: data.resultados,
         };
       });
-      // Prioridad: numero_carrera → fecha → id alfabético
       const sortedCircs = [...rawCircs].sort((a, b) => {
         if (a.orden && b.orden) return a.orden - b.orden;
-        if (a.orden) return -1;
-        if (b.orden) return 1;
+        if (a.orden) return -1; if (b.orden) return 1;
         if (a.ts !== b.ts) return a.ts - b.ts;
         return a.id.localeCompare(b.id);
       });
       setCircuits(sortedCircs.map(c => ({ id: c.id, nombre: c.nombre, ts: c.ts, completado: c.completado, economia_procesada: !!c.economia_procesada })));
 
-      // ── Equipos ────────────────────────────────────────────────────────────
       const teamsSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
       const newTeams: TeamRow[] = [];
       const teamNameMap: Record<string, string> = {};
-
       for (const teamDoc of teamsSnap.docs) {
         const td = teamDoc.data() as any;
         newTeams.push({
@@ -369,20 +190,18 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           presupuesto_inicial: td.presupuesto_inicial ?? null,
           puntos_constructores: td.puntos_constructores ?? 0,
           poles: 0, vueltas_rapidas: 0, sin_sanc: 0,
+          ingresos_rivalidades: 0, ingresos_premios: 0,
         });
         teamNameMap[teamDoc.id] = td.nombre || teamDoc.id;
       }
 
-      // ── Pilotos anidados + nombres globales ─────────────────────────────────
       const pilotosSnap = await getDocs(collection(db, "pilotos"));
       const pilotGlobalMap: Record<string, any> = {};
       pilotosSnap.docs.forEach(d => { pilotGlobalMap[d.id] = d.data(); });
 
       const allPilots: PilotRow[] = [];
       for (const teamDoc of teamsSnap.docs) {
-        const pilotosSubSnap = await getDocs(
-          collection(db, `splits/${splitId}/equipos/${teamDoc.id}/pilotos`)
-        );
+        const pilotosSubSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${teamDoc.id}/pilotos`));
         for (const rDoc of pilotosSubSnap.docs) {
           const pd = rDoc.data() as any;
           const pg = pilotGlobalMap[rDoc.id] || {};
@@ -407,27 +226,29 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
             tipo_fichaje: pd.tipo_fichaje,
             congelado:    !!pd.congelado,
             congelado_en: pd.congelado_en,
-            pending_equipoId:       pd.pending_equipoId,
-            pending_precio_compra:  pd.pending_precio_compra,
-            pending_tipo_fichaje:   pd.pending_tipo_fichaje,
+            pending_equipoId:      pd.pending_equipoId,
+            pending_precio_compra: pd.pending_precio_compra,
+            pending_tipo_fichaje:  pd.pending_tipo_fichaje,
+            // Rendimiento
+            puntos_piloto:   pd.puntos_piloto   ?? 0,
+            rating_piloto:   pd.rating_piloto   ?? 70,
+            victorias:       pd.victorias       ?? 0,
+            podios:          pd.podios          ?? 0,
+            dnfs:            pd.dnfs            ?? 0,
+            carreras_limpias: pd.carreras_limpias ?? 0,
           });
         }
       }
 
-      // Marcar pilotos legacy: en splits 2+, cualquier piloto con ID piloto_X
-      // que tenga un duplicado por nombre en cualquier equipo del mismo split
       if (splitId !== "split_1") {
         const nombreSet = new Set(
           allPilots.filter(p => !p.id.startsWith(LEGACY_PREFIX)).map(p => p.nombre.toLowerCase().trim())
         );
         allPilots.forEach(p => {
-          if (p.id.startsWith(LEGACY_PREFIX) && nombreSet.has(p.nombre.toLowerCase().trim())) {
-            p.isLegacy = true;
-          }
+          if (p.id.startsWith(LEGACY_PREFIX) && nombreSet.has(p.nombre.toLowerCase().trim())) p.isLegacy = true;
         });
       }
 
-      // ── Agregar stats de circuitos: poles, vuelta rápida, sin sancionados ──
       const pilotTeam: Record<string, string> = {};
       allPilots.forEach(p => { pilotTeam[p.id] = p.equipoId; });
 
@@ -436,26 +257,183 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         const pole = c.resultados.find((r: any) => r.qualyPos === 1);
         const fl   = c.resultados.find((r: any) => r.fastestLap);
         const allClean = c.resultados.every((r: any) => r.isClean);
-
-        if (pole) {
-          const t = newTeams.find(t => t.id === pilotTeam[pole.pilotoId]);
-          if (t) t.poles++;
-        }
-        if (fl) {
-          const t = newTeams.find(t => t.id === pilotTeam[fl.pilotoId]);
-          if (t) t.vueltas_rapidas++;
-        }
+        if (pole) { const t = newTeams.find(t => t.id === pilotTeam[pole.pilotoId]); if (t) t.poles++; }
+        if (fl)   { const t = newTeams.find(t => t.id === pilotTeam[fl.pilotoId]);   if (t) t.vueltas_rapidas++; }
         if (allClean) {
           const teamsInRace = new Set(c.resultados.map((r: any) => pilotTeam[r.pilotoId]).filter(Boolean));
-          teamsInRace.forEach(tid => {
-            const t = newTeams.find(t => t.id === tid);
-            if (t) t.sin_sanc++;
-          });
+          teamsInRace.forEach(tid => { const t = newTeams.find(t => t.id === tid); if (t) t.sin_sanc++; });
+        }
+      }
+
+      // Compute income breakdown directly from processed race results (no transacciones dependency)
+      const splitDoc = await getDoc(doc(db, "splits", splitId));
+      const rivalries = splitDoc.data()?.rivalries;
+      const soloPilotIds = new Set<string>((rivalries?.soloPilots || []).map((p: any) => p.id));
+      const rivalryGroups: any[] = rivalries?.groups || [];
+
+      for (const c of rawCircs) {
+        if (!c.completado || !c.economia_procesada || !Array.isArray(c.resultados)) continue;
+        const resultados: any[] = c.resultados;
+
+        const participatingTeams = new Set<string>();
+        const dirtyTeams = new Set<string>();
+        for (const r of resultados) {
+          const tid = pilotTeam[r.pilotoId];
+          if (!tid) continue;
+          participatingTeams.add(tid);
+          if (!r.isClean) dirtyTeams.add(tid);
+        }
+
+        for (const r of resultados) {
+          const tid = pilotTeam[r.pilotoId];
+          const team = newTeams.find(t => t.id === tid);
+          if (!team) continue;
+
+          const isDNF = r.racePos === 99;
+          team.ingresos_premios += calcularMillonesClasificacion(r.qualyPos);
+          if (!isDNF) team.ingresos_premios += calcularMillonesCarrera(r.racePos);
+
+          const ptsPos  = isDNF ? 0 : calcularPuntosPosicion(r.racePos);
+          const ptsPole = r.qualyPos === 1 ? 2 : 0;
+          const ptsFL   = r.fastestLap ? 2 : 0;
+          const totalPts = ptsPos + ptsPole + ptsFL;
+          if (totalPts > 0) team.ingresos_premios += parseFloat((totalPts * M_PUNTOS_FACTOR).toFixed(2));
+
+          if (r.qualyPos === 1) team.ingresos_premios += M_POLE;
+          if (r.fastestLap)    team.ingresos_premios += M_VUELTA_RAPIDA;
+          if (soloPilotIds.has(r.pilotoId)) team.ingresos_rivalidades += M_SOLO_POR_CARRERA;
+        }
+
+        for (const tid of participatingTeams) {
+          if (!dirtyTeams.has(tid)) {
+            const team = newTeams.find(t => t.id === tid);
+            if (team) team.ingresos_premios += M_SIN_SANCIONADOS;
+          }
+        }
+
+        for (const group of rivalryGroups) {
+          if (group.type === "solo") continue;
+          const members = group.members
+            .map((m: any) => {
+              const r = resultados.find((res: any) => res.pilotoId === m.id);
+              const tid = pilotTeam[m.id];
+              if (!r || !tid) return null;
+              return { qualyPos: r.qualyPos, racePos: r.racePos, teamId: tid };
+            })
+            .filter(Boolean);
+          if (members.length < 2) continue;
+
+          const qualyWinner = members.reduce((best: any, curr: any) => curr.qualyPos < best.qualyPos ? curr : best);
+          const qTeam = newTeams.find(t => t.id === qualyWinner.teamId);
+          if (qTeam) qTeam.ingresos_rivalidades += M_RIVALIDAD_CLASIF;
+
+          const raceWinner = members.reduce((best: any, curr: any) => curr.racePos < best.racePos ? curr : best);
+          const rTeam = newTeams.find(t => t.id === raceWinner.teamId);
+          if (rTeam) rTeam.ingresos_rivalidades += M_RIVALIDAD_CARRERA;
         }
       }
 
       setTeams(newTeams.sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setPilots(allPilots.sort((a, b) => a.equipoNombre.localeCompare(b.equipoNombre) || a.nombre.localeCompare(b.nombre)));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── ACCIONES ────────────────────────────────────────────────────────────────
+
+  async function reprocesarEconomia(circuit: CircuitoCol) {
+    setReprocesando(circuit.id);
+    setProcessLog([`Procesando ${circuit.nombre}…`]);
+    try {
+      await updateDoc(doc(db, `splits/${selectedSplitId}/circuitos`, circuit.id), { economia_procesada: false });
+      const circuitIndex = circuits.findIndex(c => c.id === circuit.id);
+      const previousCircuitIds = circuits.slice(0, circuitIndex).map(c => c.id);
+      await procesarEconomiaCarrera(selectedSplitId, circuit.id, circuit.nombre, (msg) => setProcessLog(prev => [...prev, msg]), previousCircuitIds);
+      await loadData(selectedSplitId);
+    } catch (err: any) {
+      setProcessLog(prev => [...prev, `Error: ${err.message}`]);
+    } finally {
+      setReprocesando(null);
+    }
+  }
+
+  async function fixFichajePricesHistorial(circuit: CircuitoCol) {
+    setReprocesando(circuit.id);
+    setProcessLog([`Corrigiendo precios pactados en ${circuit.nombre}…`]);
+    try {
+      const circuitIndex = circuits.findIndex(c => c.id === circuit.id);
+      const previousCircuitIds = circuits.slice(0, circuitIndex).map(c => c.id);
+      const equiposSnap = await getDocs(collection(db, `splits/${selectedSplitId}/equipos`));
+      const batch = writeBatch(db);
+      let fixed = 0;
+      for (const equipoDoc of equiposSnap.docs) {
+        const pilotosSnap = await getDocs(collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`));
+        for (const pd of pilotosSnap.docs) {
+          const d = pd.data();
+          const hasPendingTransfer = d.pending_equipoId != null || d.pending_precio_compra != null;
+          if (!d.congelado && !hasPendingTransfer) continue;
+          const isFrozenHere = (() => {
+            if (!d.congelado_en) return true;
+            return previousCircuitIds.includes(d.congelado_en);
+          })();
+          if (!isFrozenHere) continue;
+          const existingEntry = d.historial_precios?.[circuit.id];
+          if (existingEntry && (existingEntry.mantener != null || existingEntry.clausula != null)) {
+            batch.update(pd.ref, { [`historial_precios.${circuit.id}`]: { carrera: circuit.nombre, mantener: null, clausula: null, congelado: true } });
+            fixed++;
+          }
+        }
+      }
+      await batch.commit();
+      setProcessLog([`✓ ${fixed} piloto(s) corregidos en ${circuit.nombre}`]);
+      await loadData(selectedSplitId);
+    } catch (err: any) {
+      setProcessLog(prev => [...prev, `Error: ${err.message}`]);
+    } finally {
+      setReprocesando(null);
+    }
+  }
+
+  async function savePresupuestoInicial(team: TeamRow, rawVal: string) {
+    const val = parseFloat(rawVal);
+    if (isNaN(val)) return;
+    setSavingBudget(team.id);
+    await updateDoc(doc(db, `splits/${selectedSplitId}/equipos`, team.id), { presupuesto_inicial: val, presupuesto: val });
+    setEditingBudget(prev => { const n = { ...prev }; delete n[team.id]; return n; });
+    await loadData(selectedSplitId);
+    setSavingBudget(null);
+  }
+
+  async function resetEconomia() {
+    if (!confirm(`¿Resetear toda la economía de ${selectedSplitId}?`)) return;
+    setLoading(true);
+    setProcessLog([]);
+    try {
+      const [circSnap, equiposSnap] = await Promise.all([
+        getDocs(collection(db, `splits/${selectedSplitId}/circuitos`)),
+        getDocs(collection(db, `splits/${selectedSplitId}/equipos`)),
+      ]);
+      const b1 = writeBatch(db);
+      for (const equipoDoc of equiposSnap.docs) {
+        const pilotosSnap = await getDocs(collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`));
+        pilotosSnap.docs.forEach(d => b1.update(d.ref, {
+          precio_compra: 0, clausula_actual: 0, mantener_actual: 0,
+          clausula_inicial_split: 0, mantener_inicial_split: 0,
+          precio_carrera_anterior: 0, historial_precios: {},
+          congelado: false, congelado_en: null, tipo_fichaje: null,
+          pending_equipoId: null, pending_precio_compra: null, pending_tipo_fichaje: null,
+        }));
+      }
+      equiposSnap.docs.forEach(d => b1.update(d.ref, { presupuesto: 0, presupuesto_inicial: 0 }));
+      await b1.commit();
+      const b2 = writeBatch(db);
+      circSnap.docs.forEach(d => b2.update(d.ref, { economia_procesada: false }));
+      await b2.commit();
+      setProcessLog(["✓ Reset completo"]);
+      await loadData(selectedSplitId);
+    } catch (err: any) {
+      setProcessLog([`Error: ${err.message}`]);
     } finally {
       setLoading(false);
     }
@@ -468,39 +446,23 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     setSavingId(pilot.id);
     const precioAbs = Math.abs(newPrecio);
     const isNegativo = newPrecio < 0;
-    const mantenerInicial = isNegativo
-      ? Math.round((precioAbs / 3) * 10) / 10
-      : Math.round(newPrecio * 3 * 10) / 10;
-    const clausulaInicial = isNegativo
-      ? Math.round((precioAbs / 2) * 10) / 10
-      : Math.round(newPrecio * 2 * 10) / 10;
+    const mantenerInicial = isNegativo ? Math.round((precioAbs / 3) * 10) / 10 : Math.round(newPrecio * 3 * 10) / 10;
+    const clausulaInicial = isNegativo ? Math.round((precioAbs / 2) * 10) / 10 : Math.round(newPrecio * 2 * 10) / 10;
     await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
-      precio_compra: newPrecio,
-      mantener_actual: mantenerInicial,
-      clausula_actual: clausulaInicial,
-      mantener_inicial_split: mantenerInicial,
-      clausula_inicial_split: clausulaInicial,
-      precio_carrera_anterior: mantenerInicial,
-      historial_precios: {},
+      precio_compra: newPrecio, mantener_actual: mantenerInicial, clausula_actual: clausulaInicial,
+      mantener_inicial_split: mantenerInicial, clausula_inicial_split: clausulaInicial,
+      precio_carrera_anterior: mantenerInicial, historial_precios: {},
     });
-
-    // Recalcular presupuesto del equipo usando el nuevo precio (el estado local aún es el viejo)
     const newPresupuesto = getTeamPresupuesto(pilot.equipoId, pilot.id, newPrecio);
     if (newPresupuesto != null) {
-      await updateDoc(doc(db, `splits/${pilot.splitId}/equipos`, pilot.equipoId), {
-        presupuesto: newPresupuesto,
-      });
+      await updateDoc(doc(db, `splits/${pilot.splitId}/equipos`, pilot.equipoId), { presupuesto: newPresupuesto });
     } else {
-      // Sin presupuesto_inicial: ajustar por diferencia respecto al precio anterior
       const team = teams.find(t => t.id === pilot.equipoId);
       if (team) {
         const delta = newPrecio - pilot.precio_compra;
-        await updateDoc(doc(db, `splits/${pilot.splitId}/equipos`, pilot.equipoId), {
-          presupuesto: Math.round((team.presupuesto - delta) * 10) / 10,
-        });
+        await updateDoc(doc(db, `splits/${pilot.splitId}/equipos`, pilot.equipoId), { presupuesto: Math.round((team.presupuesto - delta) * 10) / 10 });
       }
     }
-
     setEditing(prev => { const n = { ...prev }; delete n[pilot.id]; return n; });
     await loadData(pilot.splitId);
     setSavingId(null);
@@ -513,13 +475,225 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     setDeletingId(null);
   }
 
+  // ─── PROPAGACIÓN AL SIGUIENTE SPLIT ─────────────────────────────────────────
+
+  function getNextSplitId(currentSplitId: string): string | null {
+    const sorted = splits
+      .filter((s: any) => s.id !== "global")
+      .sort((a: any, b: any) => a.id.localeCompare(b.id));
+    const idx = sorted.findIndex((s: any) => s.id === currentSplitId);
+    if (idx < 0 || idx >= sorted.length - 1) return null;
+    return sorted[idx + 1].id;
+  }
+
+  async function propagateToNextSplit(
+    pilot: PilotRow,
+    targetEquipoId: string,
+    pendingPrice: number,
+    tipo: TipoFichaje
+  ) {
+    const nextSplitId = getNextSplitId(pilot.splitId);
+    if (!nextSplitId) return;
+
+    const isFreeze = pendingPrice === -110;
+    // Mantener: el precio de renovación se descuenta del valor actual del jugador
+    const nextPrecioCompra = isFreeze
+      ? pilot.precio_compra
+      : tipo === "mantener"
+        ? Math.round((pilot.precio_compra - pendingPrice) * 10) / 10
+        : pendingPrice;
+    const nextAbs = Math.abs(nextPrecioCompra);
+    const nextMantener = isFreeze
+      ? pilot.mantener_actual
+      : nextPrecioCompra < 0
+        ? Math.round(nextAbs / 3 * 10) / 10
+        : Math.round(nextAbs * 3 * 10) / 10;
+    const nextClausula = isFreeze
+      ? pilot.clausula_actual
+      : nextPrecioCompra < 0
+        ? Math.round(nextAbs / 2 * 10) / 10
+        : Math.round(nextAbs * 2 * 10) / 10;
+
+    // Si el piloto estaba en otro equipo en el siguiente split, borrarlo de allí
+    const nextEquiposSnap = await getDocs(collection(db, `splits/${nextSplitId}/equipos`));
+    for (const eqDoc of nextEquiposSnap.docs) {
+      if (eqDoc.id === targetEquipoId) continue;
+      const pRef = doc(db, `splits/${nextSplitId}/equipos/${eqDoc.id}/pilotos`, pilot.id);
+      const pSnap = await getDoc(pRef);
+      if (pSnap.exists()) { await deleteDoc(pRef); break; }
+    }
+
+    // Escribir el piloto en el equipo destino del siguiente split
+    const nextRef = doc(db, `splits/${nextSplitId}/equipos/${targetEquipoId}/pilotos`, pilot.id);
+    const existingSnap = await getDoc(nextRef);
+    const base = existingSnap.exists()
+      ? existingSnap.data()
+      : {
+          pilotoId: pilot.id,
+          rating_piloto: pilot.rating_piloto,
+          rating_base: pilot.rating_piloto,
+          puntos_piloto: 0, victorias: 0, podios: 0,
+          poles: 0, dnfs: 0, carreras_limpias: 0,
+        };
+
+    await setDoc(nextRef, {
+      ...base,
+      equipoId:                targetEquipoId,
+      tipo_fichaje:            tipo,
+      precio_compra:           nextPrecioCompra,
+      mantener_actual:         nextMantener,
+      clausula_actual:         nextClausula,
+      mantener_inicial_split:  nextMantener,
+      clausula_inicial_split:  nextClausula,
+      precio_carrera_anterior: nextMantener,
+      historial_precios:       {},
+      congelado:               isFreeze,
+      congelado_en:            null,
+      pending_equipoId:        null,
+      pending_precio_compra:   null,
+      pending_tipo_fichaje:    null,
+    });
+  }
+
+  async function revertFromNextSplit(pilot: PilotRow, prevPendingEquipoId: string) {
+    const nextSplitId = getNextSplitId(pilot.splitId);
+    if (!nextSplitId) return;
+
+    const fichajedRef = doc(db, `splits/${nextSplitId}/equipos/${prevPendingEquipoId}/pilotos`, pilot.id);
+    const fichajedSnap = await getDoc(fichajedRef);
+    if (!fichajedSnap.exists()) return;
+
+    if (prevPendingEquipoId !== pilot.equipoId) {
+      // Fichaje cross-team: eliminar del nuevo equipo y restaurar en el original
+      await deleteDoc(fichajedRef);
+      await setDoc(doc(db, `splits/${nextSplitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
+        pilotoId:                pilot.id,
+        equipoId:                pilot.equipoId,
+        rating_piloto:           pilot.rating_piloto,
+        rating_base:             pilot.rating_piloto,
+        tipo_fichaje:            pilot.tipo_fichaje ?? null,
+        puntos_piloto: 0, victorias: 0, podios: 0,
+        poles: 0, dnfs: 0, carreras_limpias: 0,
+        precio_compra:           pilot.precio_compra,
+        mantener_actual:         pilot.mantener_actual,
+        clausula_actual:         pilot.clausula_actual,
+        mantener_inicial_split:  pilot.mantener_actual,
+        clausula_inicial_split:  pilot.clausula_actual,
+        precio_carrera_anterior: pilot.mantener_actual,
+        historial_precios:       {},
+        congelado:               false,
+        congelado_en:            null,
+        pending_equipoId:        null,
+        pending_precio_compra:   null,
+        pending_tipo_fichaje:    null,
+      });
+    } else {
+      // Renovación same-team: revertir precios a los del split actual
+      await updateDoc(fichajedRef, {
+        precio_compra:           pilot.precio_compra,
+        mantener_actual:         pilot.mantener_actual,
+        clausula_actual:         pilot.clausula_actual,
+        mantener_inicial_split:  pilot.mantener_actual,
+        clausula_inicial_split:  pilot.clausula_actual,
+        precio_carrera_anterior: pilot.mantener_actual,
+        historial_precios:       {},
+        congelado:               false,
+        pending_equipoId:        null,
+        pending_precio_compra:   null,
+        pending_tipo_fichaje:    null,
+      });
+    }
+  }
+
+  // ─── SISTEMA DE FICHAJES ─────────────────────────────────────────────────────
+
+  function handleFichar(pilot: PilotRow) {
+    if (pilot.congelado) {
+      deshacerFichaje(pilot);
+    } else {
+      setFichajeEquipoId(pilot.equipoId !== "agente_libre" ? pilot.equipoId : (teams[0]?.id ?? ""));
+      setFichajeTipo("subasta");
+      // Por defecto, el precio de referencia es mantener_actual (mínimo para pujar)
+      setPendingPrecioCompra(String(pilot.mantener_actual || pilot.precio_compra || ""));
+      setFichajeModal(pilot);
+    }
+  }
+
+  function handleFichajeTipoChange(tipo: TipoFichaje) {
+    setFichajeTipo(tipo);
+    if (!fichajeModal) return;
+    // Autocompletar el precio de referencia según el tipo de operación
+    if (tipo === "clausula") {
+      setPendingPrecioCompra(String(fichajeModal.clausula_actual));
+    } else if (tipo === "mantener") {
+      setPendingPrecioCompra(String(fichajeModal.mantener_actual));
+    }
+    // Para subasta, se deja libre (precio de mercado)
+  }
+
+  async function deshacerFichaje(pilot: PilotRow) {
+    if (pilot.pending_equipoId && pilot.pending_precio_compra != null) {
+      await adjustTeamPresupuesto(pilot.splitId, pilot.pending_equipoId, -pendingBudgetDelta(pilot.pending_precio_compra));
+      await revertFromNextSplit(pilot, pilot.pending_equipoId);
+    }
+    await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
+      congelado: false, congelado_en: null,
+      pending_equipoId: null, pending_precio_compra: null, pending_tipo_fichaje: null,
+    });
+    await loadData(pilot.splitId);
+  }
+
+  async function confirmFichaje() {
+    if (!fichajeModal || !fichajeEquipoId) return;
+    const pendingPrice = parseFloat(pendingPrecioCompra || "0");
+    if (Number.isNaN(pendingPrice)) return;
+
+    setConfirmingFichaje(true);
+    try {
+      const pilot = fichajeModal;
+      const lastDone = [...circuits].filter(c => c.completado).at(-1);
+      const splitId = pilot.splitId;
+      const existingPendingTeam = pilot.pending_equipoId;
+      const existingPendingPrice = pilot.pending_precio_compra;
+      const existingDelta = existingPendingPrice != null ? pendingBudgetDelta(existingPendingPrice) : 0;
+      const newDelta = pendingBudgetDelta(pendingPrice);
+
+      // Revert existing pending reservation (any team, including same-team renovation)
+      if (existingPendingTeam && existingPendingPrice != null) {
+        await adjustTeamPresupuesto(splitId, existingPendingTeam, -existingDelta);
+      }
+      // Apply new pending reservation (any team, including same-team renovation)
+      const deltaAdjustment = newDelta - (existingPendingTeam === fichajeEquipoId ? existingDelta : 0);
+      await adjustTeamPresupuesto(splitId, fichajeEquipoId, deltaAdjustment);
+
+      await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
+        congelado: true,
+        congelado_en: lastDone?.id ?? null,
+        pending_equipoId: fichajeEquipoId,
+        pending_precio_compra: pendingPrice,
+        pending_tipo_fichaje: fichajeTipo,
+      });
+
+      await propagateToNextSplit(pilot, fichajeEquipoId, pendingPrice, fichajeTipo);
+
+      setFichajeModal(null);
+      setPendingPrecioCompra("");
+    } finally {
+      setConfirmingFichaje(false);
+    }
+    await loadData(fichajeModal!.splitId);
+  }
+
+  // ─── DERIVED STATE ───────────────────────────────────────────────────────────
+
   const visiblePilots = showLegacy ? pilots : pilots.filter(p => !p.isLegacy);
   const legacyCount = pilots.filter(p => p.isLegacy).length;
-
   const grouped = visiblePilots.reduce<Record<string, PilotRow[]>>((acc, p) => {
     (acc[p.equipoNombre] = acc[p.equipoNombre] || []).push(p);
     return acc;
   }, {});
+
+  // ─── RENDER ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-10">
@@ -529,45 +703,37 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 shrink-0">Split</span>
           <div className="flex gap-0.5">
-            {splits.filter((s: any) => s.id !== "global").map((s: any) => (
+            {activeSplits.map((s: any) => (
               <button key={s.id} onClick={() => setSelectedSplitId(s.id)}
                 className={`px-5 py-2 text-[10px] font-black tracking-[0.2em] uppercase transition-all ${
                   selectedSplitId === s.id ? "bg-[#e10600] text-white" : "bg-white/[0.04] text-white/35 hover:bg-white/[0.08] hover:text-white/70"
-                }`}
-              >
+                }`}>
                 {s.nombre}
               </button>
             ))}
           </div>
           {loading && <Loader2 className="w-4 h-4 animate-spin text-white/30" />}
         </div>
-
         <div className="flex items-center gap-4 ml-auto">
           {legacyCount > 0 && (
             <button onClick={() => setShowLegacy(!showLegacy)}
-              className={`text-[9px] font-mono uppercase tracking-[0.3em] transition-colors ${
-                showLegacy ? "text-[#e10600]" : "text-white/25 hover:text-white/50"
-              }`}
-            >
+              className={`text-[9px] font-mono uppercase tracking-[0.3em] transition-colors ${showLegacy ? "text-[#e10600]" : "text-white/25 hover:text-white/50"}`}>
               {showLegacy ? `Ocultar ${legacyCount} legacy` : `Mostrar ${legacyCount} legacy`}
             </button>
           )}
-          <button
-            onClick={resetEconomia}
-            disabled={loading}
-            className="text-[9px] font-mono uppercase tracking-[0.3em] text-[#e10600]/50 hover:text-[#e10600] transition-colors disabled:opacity-30"
-          >
+          <button onClick={resetEconomia} disabled={loading}
+            className="text-[9px] font-mono uppercase tracking-[0.3em] text-[#e10600]/50 hover:text-[#e10600] transition-colors disabled:opacity-30">
             Reset economía
           </button>
         </div>
       </div>
 
+      {/* ── LOG ── */}
       {processLog.length > 0 && (
         <div className="border border-white/[0.06] bg-white/[0.015]">
           <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.04]">
             <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/25">Log economía</span>
-            <button onClick={() => setProcessLog([])}
-              className="text-[9px] font-mono text-white/20 hover:text-white/50 transition-colors">✕ cerrar</button>
+            <button onClick={() => setProcessLog([])} className="text-[9px] font-mono text-white/20 hover:text-white/50">✕ cerrar</button>
           </div>
           <div className="px-4 py-3 space-y-0.5 max-h-64 overflow-y-auto">
             {processLog.map((line, i) => {
@@ -582,17 +748,17 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 );
               }
               if (line.startsWith("piloto:")) {
-                const [, nombre, mantAntes, mantDespues, clauDespues, congelado] = line.split(":");
+                const [, nombre, mantAntes, mantDespues, clauDespues, fichado] = line.split(":");
                 const decay = parseFloat(mantAntes) - parseFloat(mantDespues);
-                const isCongelado = congelado === "true";
+                const isFichado = fichado === "true";
                 return (
                   <div key={i} className="flex items-baseline gap-2 text-[10px] font-mono pl-3">
-                    <span className="text-white/20 w-3 shrink-0">{isCongelado ? "❄" : "·"}</span>
+                    <span className="text-white/20 w-3 shrink-0">{isFichado ? "✦" : "·"}</span>
                     <span className="text-white/60 min-w-[100px]">{nombre}</span>
                     <span className="text-white/30 text-[9px]">mant.</span>
                     <span className="text-white/40 tabular-nums">{mantAntes}→</span>
                     <span className={`tabular-nums font-bold ${parseFloat(mantDespues) < parseFloat(mantAntes) ? "text-[#e10600]/80" : "text-white/70"}`}>{mantDespues}M</span>
-                    {!isCongelado && decay > 0 && <span className="text-white/20 text-[9px]">(-{r1(decay)})</span>}
+                    {!isFichado && decay > 0 && <span className="text-white/20 text-[9px]">(-{r1(decay)})</span>}
                     <span className="text-white/20 text-[9px] ml-1">claus.</span>
                     <span className="text-white/35 tabular-nums text-[9px]">{clauDespues}M</span>
                   </div>
@@ -622,31 +788,27 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
               <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[0.25em] text-white/25 font-normal">
                 <th className="py-3 px-4 text-left font-normal">Escudería</th>
                 <th className="py-3 px-4 text-right font-normal">Inicial</th>
-                <th className="py-3 px-4 text-right font-normal">Actual</th>
-                <th className="py-3 px-4 text-right font-normal">Dif</th>
+                <th className="py-3 px-4 text-right font-normal">Fichajes</th>
+                <th className="py-3 px-4 text-right font-normal text-emerald-500/50">+ Rival.</th>
+                <th className="py-3 px-4 text-right font-normal text-emerald-500/50">+ Premios</th>
+                <th className="py-3 px-4 text-right font-normal">Total disp.</th>
                 <th className="py-3 px-4 text-right font-normal">Pts</th>
-                <th className="py-3 px-4 text-right font-normal">Poles</th>
-                <th className="py-3 px-4 text-right font-normal">V.R.</th>
-                <th className="py-3 px-4 text-right font-normal">Sin S.</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04]">
               {teams.map(t => {
                 const ini = t.presupuesto_inicial;
                 const act = t.presupuesto;
-                const dif = ini != null ? act - ini : null;
+                const fichajes = act - t.ingresos_rivalidades - t.ingresos_premios;
                 const editVal = editingBudget[t.id];
                 const isSavingB = savingBudget === t.id;
                 return (
                   <tr key={t.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="py-3 px-4 font-black text-sm text-white tracking-tight">{t.nombre}</td>
-
-                    {/* Inicial — editable */}
                     <td className="py-3 px-4 text-right">
                       {editVal !== undefined ? (
                         <div className="flex items-center justify-end gap-1">
-                          <input
-                            type="number" step="0.1" value={editVal}
+                          <input type="number" step="0.1" value={editVal}
                             onChange={e => setEditingBudget(prev => ({ ...prev, [t.id]: e.target.value }))}
                             className="w-16 bg-black border border-white/20 px-1.5 py-0.5 text-right text-white outline-none focus:border-[#e10600] transition-colors text-[10px] font-mono"
                           />
@@ -659,40 +821,31 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                             className="text-white/25 hover:text-white/60 px-0.5">✕</button>
                         </div>
                       ) : (
-                        <span
-                          className="cursor-pointer font-mono font-black text-white/40 hover:text-white transition-colors group"
-                          onClick={() => setEditingBudget(prev => ({ ...prev, [t.id]: String(ini ?? act) }))}
-                        >
+                        <span className="cursor-pointer font-mono font-black text-white/40 hover:text-white transition-colors group"
+                          onClick={() => setEditingBudget(prev => ({ ...prev, [t.id]: String(ini ?? act) }))}>
                           {ini != null ? `${r1(ini)}M` : <span className="text-white/15 text-[9px]">— set</span>}
                           <span className="ml-1 text-white/15 group-hover:text-white/40 text-[9px]">✎</span>
                         </span>
                       )}
                     </td>
-
-                    {/* Actual */}
-                    <td className={`py-3 px-4 text-right font-black font-mono text-sm ${act < 0 ? "text-[#e10600]" : "text-white"}`}>
+                    <td className={`py-3 px-4 text-right font-black font-mono text-sm tabular-nums ${fichajes < 0 ? "text-[#e10600]" : "text-white/70"}`}>
+                      {r1(fichajes)}M
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-emerald-400/70 text-xs tabular-nums">
+                      {t.ingresos_rivalidades > 0 ? `+${r1(t.ingresos_rivalidades)}M` : <span className="text-white/15">—</span>}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-emerald-400/70 text-xs tabular-nums">
+                      {t.ingresos_premios > 0 ? `+${r1(t.ingresos_premios)}M` : <span className="text-white/15">—</span>}
+                    </td>
+                    <td className={`py-3 px-4 text-right font-black font-mono text-sm tabular-nums ${act < 0 ? "text-[#e10600]" : "text-white"}`}>
                       {r1(act)}M
                     </td>
-
-                    {/* Diferencia */}
-                    <td className="py-3 px-4 text-right font-mono text-xs tabular-nums">
-                      {dif == null
-                        ? <span className="text-white/15">—</span>
-                        : <span className={dif >= 0 ? "text-emerald-400" : "text-amber-400"}>
-                            {dif >= 0 ? "+" : ""}{r1(dif)}M
-                          </span>
-                      }
-                    </td>
-
                     <td className="py-3 px-4 text-right font-mono text-white/50 text-xs">{t.puntos_constructores}</td>
-                    <td className="py-3 px-4 text-right font-mono text-white/50 text-xs">{t.poles}</td>
-                    <td className="py-3 px-4 text-right font-mono text-white/50 text-xs">{t.vueltas_rapidas}</td>
-                    <td className="py-3 px-4 text-right font-mono text-white/50 text-xs">{t.sin_sanc}</td>
                   </tr>
                 );
               })}
               {teams.length === 0 && !loading && (
-                <tr><td colSpan={8} className="py-8 text-center text-[10px] font-mono text-white/15 uppercase tracking-widest">Sin escuderías</td></tr>
+                <tr><td colSpan={7} className="py-8 text-center text-[10px] font-mono text-white/15 uppercase tracking-widest">Sin escuderías</td></tr>
               )}
             </tbody>
           </table>
@@ -701,48 +854,77 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
       {/* ── TABLA PILOTOS ── */}
       <div>
-        <div className="flex items-center gap-4 mb-4">
-          <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20">Evolución de Precios</p>
-          <span className="text-[9px] font-mono text-white/15">· clic en precio para editar</span>
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div className="flex items-center gap-4">
+            <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20">Pilotos y Mercado</p>
+            <span className="text-[9px] font-mono text-white/15">· clic en precio para editar</span>
+          </div>
+          {/* Toggle PRECIOS / RENDIMIENTO */}
+          <div className="flex gap-0.5">
+            {(["precios", "rendimiento"] as const).map(m => (
+              <button key={m} onClick={() => setViewMode(m)}
+                className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
+                  viewMode === m ? "bg-white/10 text-white" : "text-white/25 hover:text-white/50"
+                }`}>
+                {m === "precios" ? "Precios" : "Rendimiento"}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="overflow-x-auto border border-white/[0.06]">
           <table className="text-[10px] border-collapse font-mono min-w-full">
             <thead>
               <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[0.2em] text-white/25 font-normal">
-                <th className="py-3 px-3 text-left font-normal sticky left-0 bg-[#0a0a0a] z-10 min-w-[130px]">Piloto</th>
+                <th className="py-3 px-3 text-left font-normal sticky left-0 bg-[#0a0a0a] z-10 min-w-[160px]">Piloto</th>
                 <th className="py-3 px-3 text-right font-normal min-w-[80px]">Precio</th>
-                <th className="py-3 px-3 text-right font-normal min-w-[80px]">Próximo split</th>
-                <th className="py-3 px-2 text-center font-normal min-w-[48px]">Tipo</th>
-                {circuits.map(c => (
-                  <th key={c.id} className="py-3 px-3 text-right font-normal min-w-[80px] whitespace-nowrap">
-                    <span className={c.economia_procesada ? "text-white/70" : c.completado ? "text-white/40" : "text-white/20"}>
-                      {c.nombre}
-                    </span>
-                    <span className="block text-[7px] text-white/15 tracking-normal normal-case font-normal mt-0.5">
-                      mant. / claus.
-                    </span>
-                    {c.completado
-                      ? <button
-                          onClick={() => c.economia_procesada ? fixFreezeHistorial(c) : reprocesarEconomia(c)}
-                          disabled={reprocesando === c.id}
-                          className={`flex items-center gap-0.5 text-[7px] tracking-normal normal-case font-normal transition-colors mt-0.5 ${
-                            c.economia_procesada
-                              ? "text-emerald-500/50 hover:text-amber-300"
-                              : "text-amber-400/70 hover:text-amber-300"
-                          }`}
-                        >
-                          {reprocesando === c.id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
-                          {reprocesando === c.id ? "..." : c.economia_procesada ? "eco. ok" : "procesar"}
-                        </button>
-                      : null
-                    }
-                  </th>
-                ))}
-                <th className="py-3 px-3 text-right font-normal min-w-[64px]">
-                  <span className="block text-white/50">Mant.</span>
-                  <span className="block text-white/25 text-[8px] font-normal normal-case tracking-normal">Claus.</span>
-                </th>
+
+                {viewMode === "precios" && (
+                  <>
+                    <th className="py-3 px-3 text-right font-normal min-w-[80px]">Próx. split</th>
+                    {circuits.map(c => (
+                      <th key={c.id} className="py-3 px-3 text-right font-normal min-w-[80px] whitespace-nowrap">
+                        <span className={c.economia_procesada ? "text-white/70" : c.completado ? "text-white/40" : "text-white/20"}>
+                          {c.nombre}
+                        </span>
+                        <span className="block text-[7px] text-white/15 tracking-normal normal-case font-normal mt-0.5">
+                          mant. / claus.
+                        </span>
+                        {c.completado && (
+                          <button
+                            onClick={() => c.economia_procesada ? fixFichajePricesHistorial(c) : reprocesarEconomia(c)}
+                            disabled={reprocesando === c.id}
+                            className={`flex items-center gap-0.5 text-[7px] tracking-normal normal-case font-normal transition-colors mt-0.5 ${
+                              c.economia_procesada ? "text-emerald-500/50 hover:text-amber-300" : "text-amber-400/70 hover:text-amber-300"
+                            }`}>
+                            {reprocesando === c.id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+                            {reprocesando === c.id ? "..." : c.economia_procesada ? "eco. ok" : "procesar"}
+                          </button>
+                        )}
+                      </th>
+                    ))}
+                    <th className="py-3 px-3 text-right font-normal min-w-[64px]">
+                      <span className="block text-white/50">Mant.</span>
+                      <span className="block text-white/25 text-[8px] font-normal normal-case tracking-normal">Claus.</span>
+                    </th>
+                  </>
+                )}
+
+                {viewMode === "rendimiento" && (
+                  <>
+                    <th className="py-3 px-3 text-right font-normal min-w-[56px]">Rating</th>
+                    <th className="py-3 px-3 text-right font-normal min-w-[48px]">Pts</th>
+                    <th className="py-3 px-3 text-center font-normal min-w-[36px]">V</th>
+                    <th className="py-3 px-3 text-center font-normal min-w-[36px]">Pod</th>
+                    <th className="py-3 px-3 text-center font-normal min-w-[36px]">DNF</th>
+                    <th className="py-3 px-3 text-center font-normal min-w-[52px]">Limpias</th>
+                    <th className="py-3 px-3 text-right font-normal min-w-[64px]">
+                      <span className="block text-white/50">Mant.</span>
+                      <span className="block text-white/25 text-[8px] font-normal normal-case tracking-normal">Claus.</span>
+                    </th>
+                  </>
+                )}
+
                 {showLegacy && <th className="py-3 px-2 font-normal min-w-[36px]" />}
               </tr>
             </thead>
@@ -750,7 +932,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
               {Object.entries(grouped).map(([equipo, pilotList]) => (
                 <>
                   <tr key={`hdr-${equipo}`}>
-                    <td colSpan={4 + circuits.length + (showLegacy ? 1 : 0)}
+                    <td colSpan={99}
                       className="py-2 px-3 text-[9px] uppercase tracking-[0.3em] text-[#e10600] font-black border-y border-white/[0.04] bg-white/[0.015]">
                       {equipo}
                     </td>
@@ -760,29 +942,71 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                     const editVal = editing[pilot.id];
                     const isSaving = savingId === pilot.id;
                     const isDeleting = deletingId === pilot.id;
+                    const isFichado = pilot.congelado;
+                    const destTeamId = pilot.pending_equipoId;
+                    const destTeam = destTeamId ? teams.find(t => t.id === destTeamId) : null;
+                    const isRenovacion = destTeamId === pilot.equipoId;
+                    const tipoActivo = pilot.pending_tipo_fichaje ?? pilot.tipo_fichaje;
+
                     return (
                       <tr key={pilot.id}
-                        className={`border-b border-white/[0.04] hover:bg-white/[0.015] transition-colors ${pilot.isLegacy ? "opacity-35" : ""}`}>
+                        className={`border-b border-white/[0.04] hover:bg-white/[0.015] transition-colors ${
+                          pilot.isLegacy ? "opacity-35" : ""
+                        } ${isFichado ? "bg-amber-500/[0.025]" : ""}`}>
 
-                        {/* Nombre + congelado */}
-                        <td className="py-3 px-3 sticky left-0 bg-[#0a0a0a] max-w-[130px]">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-white/90 truncate text-[11px]">{pilot.nombre}</span>
-                            <button
-                              onClick={() => handleClickCongelar(pilot)}
-                              title={pilot.congelado ? "Congelado — clic para descongelar" : "Clic para congelar y asignar equipo"}
-                              className={`shrink-0 text-[11px] leading-none transition-colors ${pilot.congelado ? "text-blue-400" : "text-white/15 hover:text-white/40"}`}
-                            >❄</button>
+                        {/* ── Nombre + badge de fichaje ── */}
+                        <td className="py-2.5 px-3 sticky left-0 bg-inherit max-w-[160px]">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="font-bold text-white/90 truncate text-[11px] block">{pilot.nombre}</span>
+                              {pilot.isLegacy && <span className="text-[8px] text-[#e10600]/40">legacy</span>}
+                              {isFichado && (
+                                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                  {isRenovacion ? (
+                                    <span className="text-[8px] text-sky-300/70 font-mono">↺ Renovado</span>
+                                  ) : (
+                                    <>
+                                      <span className="text-[8px] text-amber-300/60 font-mono">→</span>
+                                      <span className="text-[8px] text-amber-200/80 font-bold truncate max-w-[70px]">
+                                        {destTeam?.nombre ?? destTeamId}
+                                      </span>
+                                    </>
+                                  )}
+                                  {tipoActivo && (
+                                    <span className={`text-[7px] px-1 py-px font-bold uppercase tracking-wide ${TIPO_COLORS[tipoActivo]}`}>
+                                      {TIPO_LABEL[tipoActivo]}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Botón Fichar / Deshacer */}
+                            {isFichado ? (
+                              <button
+                                onClick={() => handleFichar(pilot)}
+                                title="Deshacer fichaje"
+                                className="shrink-0 text-white/15 hover:text-[#e10600]/70 transition-colors text-[11px] leading-none mt-0.5">
+                                ✕
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleFichar(pilot)}
+                                title="Fichar piloto"
+                                className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 border border-white/[0.08] text-white/20 hover:text-amber-300 hover:border-amber-300/30 transition-colors text-[7px] uppercase tracking-wide font-bold">
+                                <ArrowRightLeft className="w-2.5 h-2.5" />
+                                Fichar
+                              </button>
+                            )}
                           </div>
-                          {pilot.isLegacy && <span className="text-[8px] text-[#e10600]/40">legacy</span>}
                         </td>
 
                         {/* Precio editable */}
-                        <td className="py-3 px-3 text-right">
-                          {(pilot.congelado || pilot.pending_equipoId) ? (
-                            <div className="space-y-1">
-                              <span className="text-white/40">{r1(pilot.precio_compra)}M</span>
-                              <span className="text-blue-400 text-[9px] font-mono">vigente</span>
+                        <td className="py-2.5 px-3 text-right">
+                          {isFichado ? (
+                            <div className="space-y-0.5">
+                              <span className="text-white/40 block">{r1(pilot.precio_compra)}M</span>
+                              <span className="text-amber-300/50 text-[8px] font-mono block">pactado</span>
                             </div>
                           ) : editVal !== undefined ? (
                             <div className="flex items-center justify-end gap-1">
@@ -799,106 +1023,131 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                             </div>
                           ) : (
                             <span className="cursor-pointer text-white/40 hover:text-white transition-colors group"
-                              onClick={() => setEditing(prev => ({ ...prev, [pilot.id]: String(pilot.precio_compra) }))}
-                            >
+                              onClick={() => setEditing(prev => ({ ...prev, [pilot.id]: String(pilot.precio_compra) }))}>
                               {r1(pilot.precio_compra)}M
                               <span className="ml-1 text-white/20 group-hover:text-white/50 text-[9px]">✎</span>
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-3 text-right">
-                          {pilot.pending_precio_compra != null ? (() => {
-                            const pp = pilot.pending_precio_compra;
-                            const ppAbs = Math.abs(pp);
-                            const nextM  = pp < 0 ? Math.round(ppAbs / 3 * 10) / 10 : Math.round(pp * 3 * 10) / 10;
-                            const nextCl = pp < 0 ? Math.round(ppAbs / 2 * 10) / 10 : Math.round(pp * 2 * 10) / 10;
-                            return (
-                              <div className="space-y-0.5">
-                                <span className={`block tabular-nums font-bold text-[10px] ${cellBg(nextM)}`}>{r1(nextM)}</span>
-                                <span className={`block tabular-nums text-[9px] ${cellBg(nextCl)}`}>{r1(nextCl)}</span>
-                                <span className="block text-blue-400/60 text-[8px] font-mono">({r1(pp)}M)</span>
-                              </div>
-                            );
-                          })() : (
-                            <span className="text-white/30">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-2 text-center">
-                          {savingTipo === pilot.id
-                            ? <Loader2 className="w-3 h-3 animate-spin text-white/30 mx-auto" />
-                            : pilot.congelado
-                              ? (() => {
-                                  const t = pilot.pending_tipo_fichaje ?? pilot.tipo_fichaje;
-                                  return (
-                                    <span className={`text-[8px] uppercase tracking-[0.1em] font-bold ${
-                                      t === "clausula" ? "text-orange-400"
-                                      : t === "subasta" ? "text-[#e10600]"
-                                      : t === "mantener" ? "text-blue-400"
-                                      : "text-white/20"
-                                    }`}>
-                                      {t === "subasta" ? "SUB" : t === "clausula" ? "CL" : t === "mantener" ? "MNT" : "—"}
-                                    </span>
-                                  );
-                                })()
-                              : (
-                                <div className="flex flex-col gap-0.5 items-center">
-                                  {(["subasta", "clausula", "mantener"] as TipoFichaje[]).map(t => (
-                                    <button key={t}
-                                      onClick={() => setTipoFichaje(pilot, pilot.tipo_fichaje === t ? null : t)}
-                                      className={`text-[7px] uppercase tracking-[0.1em] px-1.5 py-0.5 w-full transition-colors leading-none ${
-                                        pilot.tipo_fichaje === t
-                                          ? t === "clausula" ? "bg-orange-500/80 text-white"
-                                          : t === "subasta" ? "bg-[#e10600]/80 text-white"
-                                          : "bg-blue-500/50 text-white"
-                                          : "text-white/15 hover:text-white/40"
-                                      }`}
-                                    >
-                                      {t === "subasta" ? "SUB" : t === "clausula" ? "CL" : "MNT"}
-                                    </button>
-                                  ))}
-                                </div>
-                              )
-                          }
-                        </td>
 
-                        {/* Historial por carrera — mantener + cláusula apilados */}
-                        {circuits.map(c => {
-                          const h = pilot.historial[c.id];
-                          const m = h?.mantener ?? null;
-                          const cl = h?.clausula ?? null;
-                          const isCongeladoEnCircuito = h?.congelado ?? false;
-                          return (
-                            <td key={c.id} className="py-3 px-3 text-right">
-                              {isCongeladoEnCircuito ? (
-                                <span className="text-blue-400/60 text-[11px]">❄</span>
+                        {/* ── Vista PRECIOS ── */}
+                        {viewMode === "precios" && (
+                          <>
+                            {/* Próx. split */}
+                            <td className="py-2.5 px-3 text-right">
+                              {pilot.pending_precio_compra != null ? (() => {
+                                const pp = pilot.pending_precio_compra;
+                                const ppAbs = Math.abs(pp);
+                                const nextM  = pp < 0 ? Math.round(ppAbs / 3 * 10) / 10 : Math.round(pp * 3 * 10) / 10;
+                                const nextCl = pp < 0 ? Math.round(ppAbs / 2 * 10) / 10 : Math.round(pp * 2 * 10) / 10;
+                                return (
+                                  <div className="space-y-0.5">
+                                    <span className={`block tabular-nums font-bold text-[10px] ${cellBg(nextM)}`}>{r1(nextM)}</span>
+                                    <span className={`block tabular-nums text-[9px] ${cellBg(nextCl)}`}>{r1(nextCl)}</span>
+                                    <span className="block text-amber-300/50 text-[8px] font-mono">({r1(pp)}M)</span>
+                                  </div>
+                                );
+                              })() : <span className="text-white/30">—</span>}
+                            </td>
+
+                            {/* Historial por circuito */}
+                            {circuits.map(c => {
+                              const h = pilot.historial[c.id];
+                              const m = h?.mantener ?? null;
+                              const cl = h?.clausula ?? null;
+                              const isPactado = h?.congelado ?? false;
+                              return (
+                                <td key={c.id} className="py-2.5 px-3 text-right">
+                                  {isPactado ? (
+                                    <div className="opacity-60">
+                                      <span className={`block tabular-nums font-bold text-[10px] ${cellBg(pilot.mantener_actual)}`}>
+                                        {r1(pilot.mantener_actual)}
+                                      </span>
+                                      <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(pilot.clausula_actual)}`}>
+                                        {r1(pilot.clausula_actual)}
+                                      </span>
+                                      <span className="text-[7px] text-amber-400/50 font-mono tracking-wide">ptdo</span>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <span className={`block tabular-nums font-bold ${cellBg(m)}`}>{r1(m)}</span>
+                                      <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(cl)}`}>{r1(cl)}</span>
+                                    </>
+                                  )}
+                                </td>
+                              );
+                            })}
+
+                            {/* Mant./Claus. actual */}
+                            <td className="py-2.5 px-3 text-right border-l border-white/[0.04]">
+                              {isFichado ? (
+                                <div>
+                                  <span className={`block tabular-nums font-black text-[11px] ${cellBg(pilot.mantener_actual)}`}>
+                                    {r1(pilot.mantener_actual)}
+                                  </span>
+                                  <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(pilot.clausula_actual)}`}>
+                                    {r1(pilot.clausula_actual)}
+                                  </span>
+                                  <span className="text-[7px] text-amber-400/50 font-mono">ptdo</span>
+                                </div>
                               ) : (
                                 <>
-                                  <span className={`block tabular-nums font-bold ${cellBg(m)}`}>{r1(m)}</span>
-                                  <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(cl)}`}>{r1(cl)}</span>
+                                  <span className={`block tabular-nums font-black text-[11px] ${cellBg(pilot.mantener_actual)}`}>
+                                    {r1(pilot.mantener_actual)}
+                                  </span>
+                                  <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(pilot.clausula_actual)}`}>
+                                    {r1(pilot.clausula_actual)}
+                                  </span>
                                 </>
                               )}
                             </td>
-                          );
-                        })}
+                          </>
+                        )}
 
-                        {/* Mantener actual + Cláusula actual — ocultos si congelado */}
-                        <td className="py-3 px-3 text-right border-l border-white/[0.04]">
-                          {pilot.congelado ? (
-                            <span className="text-blue-400 text-[11px]">❄</span>
-                          ) : (
-                            <>
+                        {/* ── Vista RENDIMIENTO ── */}
+                        {viewMode === "rendimiento" && (
+                          <>
+                            <td className="py-2.5 px-3 text-right">
+                              <span className={`text-[11px] tabular-nums ${ratingColor(pilot.rating_piloto)}`}>
+                                {pilot.rating_piloto.toFixed(0)}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <span className="text-white/70 font-bold tabular-nums">{pilot.puntos_piloto}</span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={pilot.victorias > 0 ? "text-amber-300 font-black" : "text-white/20"}>
+                                {pilot.victorias}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={pilot.podios > 0 ? "text-white/80 font-bold" : "text-white/20"}>
+                                {pilot.podios}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={pilot.dnfs > 0 ? "text-[#e10600]/80 font-bold" : "text-white/20"}>
+                                {pilot.dnfs}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={pilot.carreras_limpias > 0 ? "text-emerald-400/80" : "text-white/20"}>
+                                {pilot.carreras_limpias}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right border-l border-white/[0.04]">
                               <span className={`block tabular-nums font-black text-[11px] ${cellBg(pilot.mantener_actual)}`}>
                                 {r1(pilot.mantener_actual)}
                               </span>
                               <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(pilot.clausula_actual)}`}>
                                 {r1(pilot.clausula_actual)}
                               </span>
-                            </>
-                          )}
-                        </td>
+                            </td>
+                          </>
+                        )}
 
                         {showLegacy && pilot.isLegacy && (
-                          <td className="py-3 px-2">
+                          <td className="py-2.5 px-2">
                             <button disabled={isDeleting} onClick={() => deleteLegacy(pilot)}
                               className="text-[#e10600]/40 hover:text-[#e10600] disabled:opacity-40 transition-colors">
                               {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
@@ -922,97 +1171,158 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         )}
       </div>
 
-      {/* ── Modal: congelar + asignar equipo ────────────────────────────────── */}
-      {freezeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-[#0d0d0d] border border-white/10 rounded-sm w-full max-w-sm mx-4 shadow-2xl">
+      {/* ── MODAL DE FICHAJE ── */}
+      {fichajeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm">
+          <div className="bg-[#0d0d0d] border border-white/10 w-full max-w-sm mx-4 shadow-2xl">
+
             {/* Header */}
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-white/[0.06]">
-              <span className="text-blue-400 text-base">❄</span>
-              <h3 className="text-xs font-black uppercase tracking-widest text-white">Congelar piloto</h3>
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06]">
+              <ArrowRightLeft className="w-4 h-4 text-amber-300/70" />
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-widest text-white">Fichaje</h3>
+                <p className="text-[9px] font-mono text-white/30 mt-0.5">
+                  El piloto genera para su equipo actual hasta fin de split
+                </p>
+              </div>
             </div>
 
             <div className="px-5 py-4 space-y-4">
-              {/* Piloto info */}
+              {/* Piloto */}
               <div className="flex items-baseline justify-between">
-                <span className="text-sm font-bold text-white">{freezeModal.nombre}</span>
+                <span className="text-sm font-black text-white">{fichajeModal.nombre}</span>
                 <span className="text-[10px] font-mono text-white/40">
-                  precio: <span className="text-white/70">{freezeModal.precio_compra}M</span>
+                  {fichajeModal.equipoNombre}
                 </span>
               </div>
 
-              <div className="space-y-1.5">
-                <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">
-                  El piloto queda congelado en este split. En el siguiente split se transferirá al equipo elegido.
-                </p>
-                <p className="text-[9px] font-mono text-white/20">
-                  Precio actual: {freezeModal.precio_compra}M · Mantener: {freezeModal.mantener_actual}M · Cláusula: {freezeModal.clausula_actual}M
-                </p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-white/[0.03] border border-white/[0.06] py-2 px-1">
+                  <span className="block text-[8px] text-white/30 font-mono uppercase tracking-wide mb-0.5">Precio</span>
+                  <span className="text-white/70 font-black text-xs">{fichajeModal.precio_compra}M</span>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.06] py-2 px-1">
+                  <span className="block text-[8px] text-white/30 font-mono uppercase tracking-wide mb-0.5">Mant.</span>
+                  <span className="text-white/70 font-black text-xs">{fichajeModal.mantener_actual}M</span>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.06] py-2 px-1">
+                  <span className="block text-[8px] text-white/30 font-mono uppercase tracking-wide mb-0.5">Cláus.</span>
+                  <span className="text-white/70 font-black text-xs">{fichajeModal.clausula_actual}M</span>
+                </div>
               </div>
 
+              {/* Tipo de fichaje */}
               <div className="space-y-1.5">
                 <label className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30 block">
-                  Precio de fichaje para el próximo split
+                  Tipo de operación
+                </label>
+                <div className="flex gap-1">
+                  {(["subasta", "clausula", "mantener"] as TipoFichaje[]).map(t => (
+                    <button key={t} onClick={() => handleFichajeTipoChange(t)}
+                      className={`flex-1 py-2 text-[8px] font-black uppercase tracking-wide transition-colors ${
+                        fichajeTipo === t
+                          ? t === "clausula" ? "bg-orange-500 text-white"
+                          : t === "subasta" ? "bg-[#e10600] text-white"
+                          : "bg-blue-500 text-white"
+                          : "bg-white/[0.04] text-white/30 hover:bg-white/10 hover:text-white/60"
+                      }`}>
+                      {t === "subasta" ? "Subasta" : t === "clausula" ? "Cláusula" : "Mantener"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Referencia de precio según tipo */}
+              <div className="flex items-center gap-2 text-[9px] font-mono text-white/30 bg-white/[0.02] border border-white/[0.05] px-3 py-2">
+                {fichajeTipo === "clausula" && (
+                  <>
+                    <span>Cláusula mínima:</span>
+                    <span className="text-orange-300/80 font-black">{fichajeModal.clausula_actual}M</span>
+                    <span className="ml-auto text-white/15">el dinero NO va al otro jeque</span>
+                  </>
+                )}
+                {fichajeTipo === "mantener" && (
+                  <>
+                    <span>Precio mantener:</span>
+                    <span className="text-sky-300/80 font-black">{fichajeModal.mantener_actual}M</span>
+                  </>
+                )}
+                {fichajeTipo === "subasta" && (
+                  <>
+                    <span>Piloto en subasta — precio libre</span>
+                    <span className="ml-auto text-white/15">ref. mant. {fichajeModal.mantener_actual}M</span>
+                  </>
+                )}
+              </div>
+
+              {/* Precio acordado */}
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30 block">
+                  Precio acordado (próximo split)
                 </label>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={pendingPrecioCompra}
+                  <input type="number" step="0.1" value={pendingPrecioCompra}
                     onChange={e => setPendingPrecioCompra(e.target.value)}
                     className="flex-1 bg-[#0a0a0a] border border-white/10 text-white text-sm font-black px-3 py-2 outline-none focus:border-[#e10600] transition-colors font-mono text-right"
                     placeholder="0.0"
                   />
                   <span className="text-white/40 font-mono text-sm font-bold shrink-0">M</span>
                 </div>
+                {/* Preview mantener/clausula del próximo split */}
+                {pendingPrecioCompra && !isNaN(parseFloat(pendingPrecioCompra)) && (() => {
+                  const pp = parseFloat(pendingPrecioCompra);
+                  const ppAbs = Math.abs(pp);
+                  const nextM  = pp < 0 ? Math.round(ppAbs / 3 * 10) / 10 : Math.round(ppAbs * 3 * 10) / 10;
+                  const nextCl = pp < 0 ? Math.round(ppAbs / 2 * 10) / 10 : Math.round(ppAbs * 2 * 10) / 10;
+                  return (
+                    <div className="flex gap-3 text-[9px] font-mono text-white/40 mt-1">
+                      <span>Mant. próx. split: <span className="text-white/70 font-bold">{nextM}M</span></span>
+                      <span>Claus.: <span className="text-white/70 font-bold">{nextCl}M</span></span>
+                    </div>
+                  );
+                })()}
               </div>
 
-              {/* Selector de equipo */}
+              {/* Equipo destino */}
               <div className="space-y-1.5">
                 <label className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30 block">
-                  Asignar al equipo
+                  Equipo destino
                 </label>
-                <select
-                  value={freezeTeamId}
-                  onChange={e => setFreezeTeamId(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-white/10 text-white text-[11px] px-3 py-2 outline-none focus:border-[#e10600] transition-colors font-mono"
-                >
+                <select value={fichajeEquipoId} onChange={e => setFichajeEquipoId(e.target.value)}
+                  className="w-full bg-[#0a0a0a] border border-white/10 text-white text-[11px] px-3 py-2 outline-none focus:border-[#e10600] transition-colors font-mono">
                   {teams.map(t => (
                     <option key={t.id} value={t.id}>
-                      {t.nombre} — presupuesto: {t.presupuesto}M
+                      {t.nombre}{t.id === fichajeModal.equipoId ? " (actual)" : ""} — presup. {t.presupuesto}M
                     </option>
                   ))}
                 </select>
+                {fichajeEquipoId !== fichajeModal.equipoId && (() => {
+                  const pp = parseFloat(pendingPrecioCompra || "0");
+                  const destTeam = teams.find(t => t.id === fichajeEquipoId);
+                  if (!destTeam || isNaN(pp) || pp === 0) return null;
+                  const newBudget = destTeam.presupuesto + (pp < 0 ? Math.abs(pp) : -pp);
+                  return (
+                    <p className="text-[9px] font-mono text-white/30 mt-1">
+                      Presupuesto de <span className="text-white/50">{destTeam.nombre}</span> después del fichaje:{" "}
+                      <span className={newBudget < 0 ? "text-[#e10600]" : "text-white/70"}>{newBudget.toFixed(1)}M</span>
+                    </p>
+                  );
+                })()}
               </div>
-
-              {/* Aviso de congelación */}
-              {(() => {
-                const team = teams.find(t => t.id === freezeTeamId);
-                if (!team) return null;
-                return (
-                  <p className="text-[9px] font-mono text-white/30">
-                    El piloto permanecerá en el equipo actual durante este split y se transferirá a <span className="text-white/50">{team.nombre}</span> en el siguiente split.
-                  </p>
-                );
-              })()}
             </div>
 
             {/* Acciones */}
             <div className="flex gap-2 px-5 py-4 border-t border-white/[0.06]">
-              <button
-                onClick={() => { setFreezeModal(null); setPendingPrecioCompra(""); }}
-                disabled={confirmingFreeze}
-                className="flex-1 py-2 text-[10px] font-mono uppercase tracking-widest text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 transition-colors disabled:opacity-40"
-              >
+              <button onClick={() => { setFichajeModal(null); setPendingPrecioCompra(""); }}
+                disabled={confirmingFichaje}
+                className="flex-1 py-2 text-[10px] font-mono uppercase tracking-widest text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 transition-colors disabled:opacity-40">
                 Cancelar
               </button>
-              <button
-                onClick={confirmFreeze}
-                disabled={confirmingFreeze || !freezeTeamId || Number.isNaN(parseFloat(pendingPrecioCompra || ""))}
-                className="flex-1 py-2 text-[10px] font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
-              >
-                {confirmingFreeze ? <Loader2 className="w-3 h-3 animate-spin" /> : "❄"}
-                {confirmingFreeze ? "Procesando…" : "Confirmar"}
+              <button onClick={confirmFichaje}
+                disabled={confirmingFichaje || !fichajeEquipoId || Number.isNaN(parseFloat(pendingPrecioCompra || ""))}
+                className="flex-1 py-2 text-[10px] font-black uppercase tracking-widest bg-amber-500 hover:bg-amber-400 text-black transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5">
+                {confirmingFichaje ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRightLeft className="w-3 h-3" />}
+                {confirmingFichaje ? "Procesando…" : "Confirmar fichaje"}
               </button>
             </div>
           </div>

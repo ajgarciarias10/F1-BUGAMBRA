@@ -181,9 +181,19 @@ export function AdminDashboard() {
   const handleSavePilotPhoto = async (pilotoId: string, photoUrl: string) => {
     setSavingPhoto(pilotoId);
     try {
+      const trimmed = photoUrl.trim() || null;
       const usuario = (usuarios || []).find((u: any) => u.uid === pilotoId || u.piloto_id === pilotoId);
-      const docId = usuario?.uid || pilotoId;
-      await updateDoc(doc(db, "usuarios", docId), { foto_url: photoUrl.trim() || null });
+      if (usuario) {
+        await updateDoc(doc(db, "usuarios", usuario.uid), { foto_url: trimmed });
+      } else {
+        // Piloto sin cuenta: guardar en colección global pilotos
+        await setDoc(doc(db, "pilotos", pilotoId), { foto_url: trimmed }, { merge: true });
+        // También en plantilla para que la foto se transfiera al registrarse
+        const inPlantilla = plantilla.find((p: any) => p.id === pilotoId);
+        if (inPlantilla) {
+          await updateDoc(doc(db, "plantilla", pilotoId), { foto_url: trimmed });
+        }
+      }
       setPhotoEdits(prev => { const n = { ...prev }; delete n[pilotoId]; return n; });
       setMsg("Foto de piloto actualizada.");
       setTimeout(() => setMsg(""), 2500);
@@ -590,8 +600,15 @@ export function AdminDashboard() {
               const inheritedRating = r.rating_piloto ?? 70;
               const precioCompra = r.precio_compra ?? 10;
               const nextEquipoId = r.pending_equipoId ?? r.equipoId;
-              const nextPrecioCompra = r.pending_precio_compra ?? precioCompra;
-              const isFreezeSentinel = nextPrecioCompra === -110;
+              const pendingPrecio = r.pending_precio_compra;
+              const isMantener = r.pending_tipo_fichaje === "mantener";
+              // Mantener: descuenta la cuota de renovación del valor del jugador
+              const nextPrecioCompra = pendingPrecio == null
+                ? precioCompra
+                : isMantener
+                  ? Math.round((precioCompra - pendingPrecio) * 10) / 10
+                  : pendingPrecio;
+              const isFreezeSentinel = pendingPrecio === -110;
               const nextPrecioAbs = Math.abs(nextPrecioCompra);
               const nextMantener = isFreezeSentinel
                 ? Math.round((r.mantener_actual ?? precioCompra * 3) * 10) / 10
@@ -1428,7 +1445,7 @@ export function AdminDashboard() {
               .sort((a: any, b: any) => (a.nombre || "").localeCompare(b.nombre || ""))
               .map((p: any) => {
                 const usuario = (usuarios || []).find((u: any) => u.uid === p.pilotoId || u.piloto_id === p.pilotoId);
-                const currentPhoto = usuario?.foto_url || "";
+                const currentPhoto = usuario?.foto_url || p.foto_url || "";
                 const editVal = photoEdits[p.pilotoId] ?? currentPhoto;
                 const isSaving = savingPhoto === p.pilotoId;
                 return (
