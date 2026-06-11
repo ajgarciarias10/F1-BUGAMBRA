@@ -8,7 +8,7 @@ const formatMillions = (value: number) => `${value.toFixed(1)}M`;
 const getPilotValue = (pilot: any): number => {
   if (pilot.precio_compra != null) return pilot.precio_compra;
   if (pilot.clausula_actual != null) return pilot.clausula_actual;
-  return (pilot.rating_piloto || 70) * 0.5;
+  return (pilot.rating_piloto ?? 0) * 0.5;
 };
 
 const getStatusLabel = (rank: number) => `Piloto ${rank}`;
@@ -53,6 +53,15 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
 
   const rivals = pilotGroup.members
     .filter((member: any) => member.id !== pilot.pilotoId)
+    .map((member: any) => {
+      const live = split?.roster?.find((p: any) => p.pilotoId === member.id);
+      return {
+        ...member,
+        rating:       live?.rating_piloto ?? member.rating ?? 0,
+        puntos_piloto: live?.puntos_piloto ?? member.puntos_piloto ?? 0,
+        price:        getPilotValue(live ?? member),
+      };
+    })
     .sort((a: any, b: any) => (b.puntos_piloto || 0) - (a.puntos_piloto || 0));
 
   const myLogo = getTeamLogo(pilot.equipoId);

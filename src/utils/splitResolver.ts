@@ -41,7 +41,7 @@ function buildStatusRankedPilots(roster: PilotInRoster[], equipos: Equipo[]): Ri
     const sorted = [...pilots].sort((a, b) => {
       const pa = a.precio_compra ?? 0;
       const pb = b.precio_compra ?? 0;
-      return pb !== pa ? pb - pa : (b.rating_piloto ?? 70) - (a.rating_piloto ?? 70);
+      return pb !== pa ? pb - pa : (b.rating_piloto ?? 0) - (a.rating_piloto ?? 0);
     });
     sorted.forEach((p, idx) => {
       result.push({
@@ -49,7 +49,7 @@ function buildStatusRankedPilots(roster: PilotInRoster[], equipos: Equipo[]): Ri
         nombre:      p.nombre,
         equipoId:    teamId,
         equipoNombre: equipoNombreMap[teamId] ?? teamId,
-        rating:      p.rating_piloto ?? 70,
+        rating:      p.rating_piloto ?? 0,
         puntos_piloto: p.puntos_piloto ?? 0,
         statusRank:  idx + 1,
         price:       p.precio_compra ?? 10,
@@ -117,7 +117,7 @@ export function buildRivalryTable(split: SplitView): SplitRivalries {
       nombre:      p.nombre,
       equipoId:    p.equipoId,
       equipoNombre: equipoNombreMap[p.equipoId] ?? p.equipoId,
-      rating:      p.rating_piloto ?? 70,
+      rating:      p.rating_piloto ?? 0,
       puntos_piloto: p.puntos_piloto ?? 0,
     }));
 
@@ -173,18 +173,8 @@ export function getRivalryGroupMember(split: SplitView, pilotoId: string): Rival
 }
 
 // ─── OVR DINÁMICO (para paneles de rivalidad) ─────────────────────────────────
+// rating_piloto ya acumula deltas de rendimiento carrera a carrera desde 0.
 
 export function computePilotDynamicOVR(pilot: PilotInRoster): number {
-  const base    = pilot.rating_piloto ?? 70;
-  const points  = pilot.puntos_piloto ?? 0;
-  const wins    = pilot.victorias     ?? 0;
-  const podiums = pilot.podios        ?? 0;
-  const dnfs    = pilot.dnfs          ?? 0;
-
-  if (points === 0 && wins === 0 && podiums === 0 && dnfs === 0) return base;
-
-  let perf = Math.min(95, 60 + points * 0.5 + wins * 3 + podiums * 1.5);
-  const blend = Math.min(0.75, points / 150);
-  let ovr = base * (1 - blend) + perf * blend - dnfs * 1.5;
-  return Math.round(Math.max(50, Math.min(99, ovr)));
+  return pilot.rating_piloto ?? 0;
 }

@@ -52,7 +52,13 @@ export function PublicHome() {
 
   const getPilotPhoto = (pilotoId: string) => {
     const u = (usuarios || []).find((u: any) => u.uid === pilotoId || u.piloto_id === pilotoId);
-    return (u as any)?.foto_url || "";
+    if (u?.foto_url) return u.foto_url;
+    // Fallback: foto en roster para pilotos sin cuenta de usuario
+    for (const s of splits || []) {
+      const p = (s.roster || []).find((r: any) => r.pilotoId === pilotoId);
+      if (p?.foto_url) return p.foto_url;
+    }
+    return "";
   };
 
   const dashboardLink = userData
@@ -338,7 +344,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
 
                   <div className="hidden md:block text-right">
                     <span className="text-sm font-black font-mono text-[#0a0a0a]/30 dark:text-white/30">
-                      {p.rating_piloto || 70}
+                      {p.rating_piloto ?? 0}
                     </span>
                   </div>
                 </div>
@@ -571,7 +577,7 @@ export function AlbumView({ validSplits, currentSplitId, onSelectSplit, currentS
                 </div>
                 <div>
                   <p className="text-[8px] font-mono tracking-[0.3em] uppercase text-[#0a0a0a]/25 dark:text-white/25">Rating</p>
-                  <p className="text-2xl font-black text-[#0a0a0a] dark:text-white tabular-nums">{pilotoDestacado.rating_piloto || 70}</p>
+                  <p className="text-2xl font-black text-[#0a0a0a] dark:text-white tabular-nums">{pilotoDestacado.rating_piloto ?? 0}</p>
                 </div>
               </div>
             </div>

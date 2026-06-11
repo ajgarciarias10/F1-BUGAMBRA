@@ -7,6 +7,42 @@ import type { RaceResult, RosterEntry } from "../types";
 
 const POINTS_SCALE = POINTS_BY_POSITION;
 
+// ─── DELTA DE RATING POR CARRERA ─────────────────────────────────────────────
+// Fórmula completa: posición carrera + posición qualy + bonificaciones especiales.
+// Rango típico por carrera: -8 (DNF propio + mala qualy) a +21 (P1 todo + MVP).
+
+const RACE_POS_DELTA: Record<number, number> = {
+  1: 10, 2: 7, 3: 5, 4: 3, 5: 2, 6: 1, 7: 0, 8: 0, 9: -1, 10: -1, 11: -2, 12: -2,
+};
+
+function calcRatingDelta(res: RaceResult): number {
+  let rd = 0;
+
+  // Posición en carrera
+  if (res.isDnfOwnError) {
+    rd -= 6;
+  } else {
+    rd += RACE_POS_DELTA[res.racePos] ?? -2; // P13+: -2
+  }
+
+  // Posición en qualy
+  if (res.qualyPos === 1)      rd += 4;
+  else if (res.qualyPos === 2) rd += 2;
+  else if (res.qualyPos === 3) rd += 1;
+  else if (res.qualyPos <= 6)  rd += 0;
+  else if (res.qualyPos <= 9)  rd -= 1;
+  else                         rd -= 2; // P10+ o qualy fallido
+
+  // Bonificaciones
+  if (res.isClean)        rd += 2;
+  if (res.fastestLap)     rd += 2;
+  if (res.isMvp)          rd += 3;
+  if (res.isDotd)         rd += 1;
+  if (res.overtakesBoost) rd += 1;
+
+  return rd;
+}
+
 // ─── PROCESAR CARRERA ─────────────────────────────────────────────────────────
 
 export type { RaceResult };
@@ -78,11 +114,6 @@ export async function processRace(
           const pts =
             (res.racePos >= 1 && res.racePos <= 12 ? POINTS_SCALE[res.racePos - 1] : 0) +
             (res.qualyPos === 1 ? 2 : 0);
-          let rd = 0;
-          if (res.qualyPos === 1) rd += 5;
-          if (res.racePos === 1)  rd += 5;
-          if (res.isDnfOwnError)  rd -= 3;
-          if (res.isClean)        rd += 2;
           oldDelta[res.pilotoId] = {
             pts,
             victorias: res.racePos === 1 ? 1 : 0,
@@ -90,7 +121,7 @@ export async function processRace(
             poles:     res.qualyPos === 1 ? 1 : 0,
             dnfs:      res.racePos > 12 || res.isDnfOwnError ? 1 : 0,
             limpias:   res.isClean ? 1 : 0,
-            rd,
+            rd:        calcRatingDelta(res),
           };
         }
       }
@@ -127,12 +158,8 @@ export async function processRace(
           carreras_limpias: Math.max(0, (prev.carreras_limpias ?? 0) - old.limpias   + (res.isClean ? 1 : 0)),
         };
 
-        let rd = 0;
-        if (res.qualyPos === 1)    rd += 5;
-        if (res.racePos === 1)     rd += 5;
-        if (res.isDnfOwnError)     rd -= 3;
-        if (res.isClean)           rd += 2;
-        const currentRating = rosterData[res.pilotoId]?.rating_piloto ?? 70;
+        const rd = calcRatingDelta(res);
+        const currentRating = rosterData[res.pilotoId]?.rating_piloto ?? 0;
         const baseRating = Math.max(0, Math.min(99, currentRating - old.rd));
         newRatings[res.pilotoId] = Math.max(0, Math.min(99, baseRating + rd));
 
@@ -189,7 +216,7 @@ export async function processRace(
 
 // ─── RECALCULAR PUNTOS DE UN SPLIT ───────────────────────────────────────────
 // Sobreescribe stats y rating leyendo los resultados guardados desde cero.
-// Usa rating_base del doc anidado como punto de partida limpio.
+// Rating arranca en 0; cada carrera acumula deltas (pole +5, victoria +5, limpia +2, DNF propio -3).
 
 export async function recalcSplitPoints(
   splitId: string
@@ -228,8 +255,7 @@ export async function recalcSplitPoints(
         pilotAccum[pd.id] = {
           puntos_piloto: 0, victorias: 0, podios: 0,
           poles: 0, dnfs: 0, carreras_limpias: 0,
-          // rating_base guardado en el doc anidado al inicializar el split
-          rating: pd.data().rating_base ?? 70,
+          rating: 0,
         };
       }
     }
@@ -258,12 +284,7 @@ export async function recalcSplitPoints(
         if (res.racePos > 12 || res.isDnfOwnError) acc.dnfs++;
         if (res.isClean) acc.carreras_limpias++;
 
-        let rd = 0;
-        if (res.qualyPos === 1) rd += 5;
-        if (res.racePos === 1)  rd += 5;
-        if (res.isDnfOwnError)  rd -= 3;
-        if (res.isClean)        rd += 2;
-        acc.rating = Math.max(0, Math.min(99, acc.rating + rd));
+        acc.rating = Math.max(0, Math.min(99, acc.rating + calcRatingDelta(res)));
       }
     }
 

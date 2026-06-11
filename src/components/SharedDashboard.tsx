@@ -118,7 +118,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     if (!equipo) return null;
 
     const pilotosDelEquipo = currentSplit.roster.filter((p: any) => p.equipoId === teamId);
-    const pilotsVal = pilotosDelEquipo.reduce((sum: number, p: any) => sum + (p.clausula_actual || (p.rating_piloto || 70) * 0.5), 0);
+    const pilotsVal = pilotosDelEquipo.reduce((sum: number, p: any) => sum + (p.clausula_actual || (p.rating_piloto ?? 0) * 0.5), 0);
 
     return {
       ...equipo,
@@ -317,7 +317,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         if (!seen.has(p.pilotoId)) {
           seen.add(p.pilotoId);
           const teamName = currentSplit.equipos.find((e: any) => e.id === p.equipoId)?.nombre ?? p.equipoId;
-          list.push({ id: p.pilotoId, name: p.nombre, rtg: p.rating_piloto || 70, team: teamName });
+          list.push({ id: p.pilotoId, name: p.nombre, rtg: p.rating_piloto ?? 0, team: teamName });
         }
       });
     } else {
@@ -326,7 +326,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           if (!seen.has(p.pilotoId)) {
             seen.add(p.pilotoId);
             const teamName = s.equipos.find((e: any) => e.id === p.equipoId)?.nombre ?? p.equipoId;
-            list.push({ id: p.pilotoId, name: p.nombre, rtg: p.rating_piloto || 70, team: teamName });
+            list.push({ id: p.pilotoId, name: p.nombre, rtg: p.rating_piloto ?? 0, team: teamName });
           }
         });
       });

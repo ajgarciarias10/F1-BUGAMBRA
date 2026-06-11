@@ -20,7 +20,7 @@ export function PilotCardF1({
   footer,
 }: PilotCardF1Props) {
   const photo = getPilotPhoto(pilot.pilotoId ?? pilot.id ?? "");
-  const rating = pilot.rating_piloto || 70;
+  const rating = pilot.rating_piloto ?? 0;
   const mantener = pilot.mantener_actual || 0;
   const nameParts = (pilot.nombre || "").trim().split(" ");
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : nameParts[0] || "";
