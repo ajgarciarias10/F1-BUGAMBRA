@@ -8,11 +8,10 @@ import type { RaceResult, RosterEntry } from "../types";
 const POINTS_SCALE = POINTS_BY_POSITION;
 
 // ─── DELTA DE RATING POR CARRERA ─────────────────────────────────────────────
-// Fórmula completa: posición carrera + posición qualy + bonificaciones especiales.
-// Rango típico por carrera: -8 (DNF propio + mala qualy) a +21 (P1 todo + MVP).
+// Carrera + qualy con peso similar + bonos. Rango: -5 (DNF + mala qualy) a +19 (perfecto).
 
 const RACE_POS_DELTA: Record<number, number> = {
-  1: 10, 2: 7, 3: 5, 4: 3, 5: 2, 6: 1, 7: 0, 8: 0, 9: -1, 10: -1, 11: -2, 12: -2,
+  1: 6, 2: 5, 3: 4, 4: 3, 5: 2, 6: 1, 7: 1, 8: 0, 9: 0, 10: -1, 11: -1, 12: -2,
 };
 
 function calcRatingDelta(res: RaceResult): number {
@@ -20,18 +19,18 @@ function calcRatingDelta(res: RaceResult): number {
 
   // Posición en carrera
   if (res.isDnfOwnError) {
-    rd -= 6;
+    rd -= 4;
   } else {
     rd += RACE_POS_DELTA[res.racePos] ?? -2; // P13+: -2
   }
 
-  // Posición en qualy
+  // Posición en qualy (peso similar a carrera para valorar clasificaciones)
   if (res.qualyPos === 1)      rd += 4;
-  else if (res.qualyPos === 2) rd += 2;
-  else if (res.qualyPos === 3) rd += 1;
-  else if (res.qualyPos <= 6)  rd += 0;
-  else if (res.qualyPos <= 9)  rd -= 1;
-  else                         rd -= 2; // P10+ o qualy fallido
+  else if (res.qualyPos === 2) rd += 3;
+  else if (res.qualyPos === 3) rd += 2;
+  else if (res.qualyPos <= 6)  rd += 1;
+  else if (res.qualyPos <= 9)  rd += 0;
+  else                         rd -= 1; // P10+ o qualy fallido
 
   // Bonificaciones
   if (res.isClean)        rd += 2;
@@ -159,9 +158,9 @@ export async function processRace(
         };
 
         const rd = calcRatingDelta(res);
-        const currentRating = rosterData[res.pilotoId]?.rating_piloto ?? 0;
-        const baseRating = Math.max(0, Math.min(99, currentRating - old.rd));
-        newRatings[res.pilotoId] = Math.max(0, Math.min(99, baseRating + rd));
+        const currentRating = rosterData[res.pilotoId]?.rating_piloto ?? 50;
+        const baseRating = Math.max(50, Math.min(99, currentRating - old.rd));
+        newRatings[res.pilotoId] = Math.max(50, Math.min(99, baseRating + rd));
 
         teamStats[equipoId].pts += pts;
         if (res.qualyPos === 1) teamStats[equipoId].poles++;
@@ -231,11 +230,7 @@ export async function recalcSplitPoints(
         return a.id.localeCompare(b.id);
       });
 
-    if (completed.length === 0) {
-      return { ok: 0, notFound: [], message: `Sin circuitos completados en ${splitId}.` };
-    }
-
-    // Construir índice de pilotos desde docs anidados
+    // Construir índice de pilotos desde docs anidados (siempre, incluso sin circuitos)
     const equiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
 
     const pilotDocRefs: Record<string, any> = {};
@@ -255,13 +250,28 @@ export async function recalcSplitPoints(
         pilotAccum[pd.id] = {
           puntos_piloto: 0, victorias: 0, podios: 0,
           poles: 0, dnfs: 0, carreras_limpias: 0,
-          rating: 0,
+          rating: 50,
         };
       }
     }
 
     const equipoRefMap: Record<string, any> = {};
     equiposSnap.docs.forEach(d => { equipoRefMap[d.id] = d.ref; });
+
+    if (completed.length === 0) {
+      // Sin carreras completadas: escribir rating inicial 50 a todos los pilotos del roster
+      const batch = writeBatch(db);
+      let ok = 0;
+      for (const [pid, acc] of Object.entries(pilotAccum)) {
+        if (pilotDocRefs[pid]) {
+          batch.update(pilotDocRefs[pid], { rating_piloto: acc.rating });
+          batch.update(doc(db, "pilotos", pid), { rating_piloto: acc.rating });
+          ok++;
+        }
+      }
+      await batch.commit();
+      return { ok, notFound: [], message: `Sin circuitos completados en ${splitId}. Ratings inicializados a 50.` };
+    }
 
     const notFound: string[] = [];
 
@@ -284,7 +294,7 @@ export async function recalcSplitPoints(
         if (res.racePos > 12 || res.isDnfOwnError) acc.dnfs++;
         if (res.isClean) acc.carreras_limpias++;
 
-        acc.rating = Math.max(0, Math.min(99, acc.rating + calcRatingDelta(res)));
+        acc.rating = Math.max(50, Math.min(99, acc.rating + calcRatingDelta(res)));
       }
     }
 

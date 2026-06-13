@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
-import { SharedDashboardView } from "./SharedDashboard";
+import { SharedDashboardView, TotalStandings } from "./SharedDashboard";
 import { ProfileView } from "./ProfileView";
 import { auth } from "../services/firebase";
 import { SuggestionsView } from "./SuggestionsView";
@@ -68,16 +68,21 @@ export function JequeDashboard() {
 
   const tabs = [
     { id: "championship", label: "Campeonato" },
-    { id: "album", label: "Álbum de Pilotos" },
-    { id: "profile", label: "Mi Perfil" },
-    { id: "suggestions", label: "Buzón de Mejoras" },
+    { id: "album",        label: "Álbum de Pilotos" },
+    { id: "profile",      label: "Mi Perfil" },
+    { id: "suggestions",  label: "Buzón de Mejoras" },
   ];
 
   const title = tabs.find(t => t.id === activeTab)?.label || "Jeque";
 
   const getPilotPhoto = (pilotoId: string) => {
     const u = (usuarios || []).find((u: any) => u.uid === pilotoId || u.piloto_id === pilotoId);
-    return (u as any)?.foto_url || "";
+    if ((u as any)?.foto_url) return (u as any).foto_url;
+    for (const s of splits || []) {
+      const p = (s.roster || []).find((r: any) => r.pilotoId === pilotoId);
+      if (p?.foto_url) return p.foto_url;
+    }
+    return "";
   };
 
   const allSplits = (splits || []).filter((s: any) => s.id !== "global");
@@ -117,16 +122,21 @@ export function PilotoDashboard() {
 
   const tabs = [
     { id: "championship", label: "Campeonato" },
-    { id: "album", label: "Álbum de Pilotos" },
-    { id: "profile", label: "Mi Perfil" },
-    { id: "suggestions", label: "Buzón de Mejoras" },
+    { id: "album",        label: "Álbum de Pilotos" },
+    { id: "profile",      label: "Mi Perfil" },
+    { id: "suggestions",  label: "Buzón de Mejoras" },
   ];
 
   const title = tabs.find(t => t.id === activeTab)?.label || "Piloto";
 
   const getPilotPhoto = (pilotoId: string) => {
     const u = (usuarios || []).find((u: any) => u.uid === pilotoId || u.piloto_id === pilotoId);
-    return (u as any)?.foto_url || "";
+    if ((u as any)?.foto_url) return (u as any).foto_url;
+    for (const s of splits || []) {
+      const p = (s.roster || []).find((r: any) => r.pilotoId === pilotoId);
+      if (p?.foto_url) return p.foto_url;
+    }
+    return "";
   };
 
   const allSplits = (splits || []).filter((s: any) => s.id !== "global");

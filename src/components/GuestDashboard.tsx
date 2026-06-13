@@ -2,11 +2,22 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MonitorPlay, Users, ChevronLeft, Award } from "lucide-react";
+import { TotalStandings } from "./SharedDashboard";
 
 export function GuestDashboard() {
   const { splits, loading } = useSplits();
   const { usuarios } = useUsuarios();
-  const [activeTab, setActiveTab] = useState<"tv" | "album">("tv");
+  const [activeTab, setActiveTab] = useState<"tv" | "album" | "acumulado">("tv");
+
+  const getPilotPhoto = (pilotId: string) => {
+    const u = (usuarios || []).find((u: any) => u.uid === pilotId || u.piloto_id === pilotId);
+    if (u?.foto_url) return u.foto_url;
+    for (const s of splits || []) {
+      const p = (s.roster || []).find((r: any) => r.pilotoId === pilotId);
+      if (p?.foto_url) return p.foto_url;
+    }
+    return "";
+  };
   
   return (
     <div className="min-h-screen bg-[#0E0E10] text-gray-100 p-8 font-sans">
@@ -44,42 +55,42 @@ export function GuestDashboard() {
 
         {/* Navigation Tabs */}
         <div className="flex flex-wrap border-b border-white/10 mb-8 gap-2">
-          <button
-            onClick={() => setActiveTab("tv")}
-            className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
-              activeTab === "tv"
-                ? "text-white bg-white/5"
-                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
-            }`}
-          >
-            📺 TV en Directo
-            {activeTab === "tv" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab("album")}
-            className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
-              activeTab === "album"
-                ? "text-white bg-white/5"
-                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
-            }`}
-          >
-            🎴 Álbum de Cromos
-            {activeTab === "album" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
-            )}
-          </button>
+          {([
+            { id: "tv",        label: "📺 TV en Directo" },
+            { id: "album",     label: "🎴 Álbum de Cromos" },
+            { id: "acumulado", label: "🏆 Ranking Total" },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-3 font-mono font-bold text-xs uppercase tracking-wider transition-all relative cursor-pointer ${
+                activeTab === tab.id
+                  ? "text-white bg-white/5"
+                  : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
+              }`}
+            >
+              {tab.label}
+              {activeTab === tab.id && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
+              )}
+            </button>
+          ))}
         </div>
 
-        {activeTab === "tv" ? (
-          <LiveTV />
-        ) : (
-          <StickerAlbum
-            splits={splits || []}
-            usuarios={usuarios || []}
-            loading={loading}
-          />
+        {activeTab === "tv" && <LiveTV />}
+        {activeTab === "album" && (
+          <StickerAlbum splits={splits || []} usuarios={usuarios || []} loading={loading} />
+        )}
+        {activeTab === "acumulado" && (
+          loading ? (
+            <div className="text-white/50 font-mono flex items-center justify-center p-12 bg-black/40 rounded-xl border border-white/5">
+              Cargando datos...
+            </div>
+          ) : (
+            <div className="bg-zinc-950/80 border border-white/10 rounded-2xl p-6 shadow-2xl">
+              <TotalStandings splits={splits || []} getPilotPhoto={getPilotPhoto} />
+            </div>
+          )
         )}
       </div>
     </div>

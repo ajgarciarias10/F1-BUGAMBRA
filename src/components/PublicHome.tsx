@@ -4,6 +4,7 @@ import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { MonitorPlay, Sun, Moon } from "lucide-react";
 import { PilotCardF1 } from "./PilotCardF1";
+import { TotalStandings } from "./SharedDashboard";
 
 type Tab = "clasificacion" | "album" | "tv";
 
@@ -242,28 +243,45 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                 {s.nombre}
               </button>
             ))}
+            <button
+              onClick={() => onSelectSplit("general")}
+              className={`px-4 py-2 text-[10px] font-black tracking-[0.2em] uppercase transition-all ${
+                currentSplitId === "general"
+                  ? "bg-[#e10600] text-white"
+                  : "bg-[#0a0a0a]/[0.04] dark:bg-white/[0.04] text-[#0a0a0a]/35 dark:text-white/35 hover:bg-[#0a0a0a]/[0.08] dark:hover:bg-white/[0.08] hover:text-[#0a0a0a]/70 dark:hover:text-white/70"
+              }`}
+            >
+              Mundial
+            </button>
           </div>
         </div>
 
-        <div className="flex border border-[#0a0a0a]/[0.08] dark:border-white/[0.08] self-start sm:self-auto">
-          {(["pilotos", "constructores"] as const).map(v => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-4 py-2 text-[10px] font-bold tracking-[0.2em] uppercase transition-all ${
-                view === v
-                  ? "bg-[#0a0a0a] text-white dark:bg-white dark:text-black"
-                  : "text-[#0a0a0a]/30 dark:text-white/30 hover:text-[#0a0a0a]/60 dark:hover:text-white/60"
-              }`}
-            >
-              {v === "pilotos" ? "Pilotos" : "Constructores"}
-            </button>
-          ))}
-        </div>
+        {currentSplitId !== "general" && (
+          <div className="flex border border-[#0a0a0a]/[0.08] dark:border-white/[0.08] self-start sm:self-auto">
+            {(["pilotos", "constructores"] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-4 py-2 text-[10px] font-bold tracking-[0.2em] uppercase transition-all ${
+                  view === v
+                    ? "bg-[#0a0a0a] text-white dark:bg-white dark:text-black"
+                    : "text-[#0a0a0a]/30 dark:text-white/30 hover:text-[#0a0a0a]/60 dark:hover:text-white/60"
+                }`}
+              >
+                {v === "pilotos" ? "Pilotos" : "Constructores"}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
+      {/* Clasificación general acumulada */}
+      {currentSplitId === "general" && (
+        <TotalStandings splits={validSplits} getPilotPhoto={getPilotPhoto} />
+      )}
+
       {/* Tabla pilotos */}
-      {view === "pilotos" && (
+      {currentSplitId !== "general" && view === "pilotos" && (
         <div>
           <div className="grid grid-cols-[2.5rem_1fr_auto_auto] md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 px-3 pb-3 border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">#</span>
@@ -363,7 +381,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
       )}
 
       {/* Tabla constructores */}
-      {view === "constructores" && (
+      {currentSplitId !== "general" && view === "constructores" && (
         <div>
           <div className="grid grid-cols-[2.5rem_1fr_6rem] gap-x-4 px-3 pb-3 border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">#</span>
