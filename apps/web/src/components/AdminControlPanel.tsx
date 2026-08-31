@@ -8,32 +8,32 @@ export function AdminControlPanel() {
   const [migrateMsg, setMigrateMsg] = useState("");
 
   const runMigration = async () => {
-    if (!confirm("¿Ejecutar migración de splits? Esto actualizará:\n- split_1: puntos finales (Roses 185 pts constructores)\n- split_2: puntos finales incluyendo Bélgica\n- split_3: activar con nuevos fichajes (Moles/Pabliyo→Zenith, Jota/Aparicio→Roses, Pinilla→Alfa)\n\n¿Continuar?")) return;
+    if (!confirm("¿Ejecutar migración de splits? Esto actualizará:\n- split_1: puntos finales del Excel (Zenith 104, Alfa 72, Roses 108)\n- split_2: puntos finales incluyendo Bélgica (Zenith 156, Alfa 76, Roses 84)\n- split_3: activar con nuevos fichajes del Excel\n\n¿Continuar?")) return;
 
     setMigrating(true);
     setMigrateMsg("Preparando migración...");
 
     try {
-      // Data extracted from Excel 2026 sheet
+      // Data extracted from Excel 2026 sheet (columnas correctas: D=S1 team, L=S2 team, U=S3 team)
       const driversData = [
-        { name: "Jose", s1: 155, s1Team: "zenith", s2: 87, s2Team: "zenith", s3Team: "" },
-        { name: "Mimic", s1: 145, s1Team: "alfa_romero", s2: 81, s2Team: "zenith", s3Team: "" },
-        { name: "Jota", s1: 132, s1Team: "roses", s2: 70, s2Team: "alfa_romero", s3Team: "roses" },
-        { name: "Carlos", s1: 54, s1Team: "zenith", s2: 54, s2Team: "zenith", s3Team: "" },
-        { name: "Moles", s1: 95, s1Team: "zenith", s2: 52, s2Team: "alfa_romero", s3Team: "zenith" },
-        { name: "Pabliyo", s1: 75, s1Team: "roses", s2: 49, s2Team: "roses", s3Team: "zenith" },
-        { name: "Fabi", s1: 110, s1Team: "roses", s2: 43, s2Team: "roses", s3Team: "" },
-        { name: "Toni", s1: 49, s1Team: "alfa_romero", s2: 16, s2Team: "roses", s3Team: "" },
-        { name: "Pinilla", s1: 31, s1Team: "alfa_romero", s2: 13, s2Team: "alfa_romero", s3Team: "alfa_romero" },
-        { name: "Samu", s1: 32, s1Team: "roses", s2: 10, s2Team: "roses", s3Team: "" },
-        { name: "Aparicio", s1: 3, s1Team: "zenith", s2: 3, s2Team: "alfa_romero", s3Team: "roses" },
-        { name: "Mesa", s1: 3, s1Team: "zenith", s2: 3, s2Team: "zenith", s3Team: "" },
+        { name: "Jose", s1: 58, s1Team: "zenith", s2: 45, s2Team: "zenith", s3Team: "" },
+        { name: "Mimic", s1: 57, s1Team: "alfa_romero", s2: 44, s2Team: "zenith", s3Team: "" },
+        { name: "Jota", s1: 39, s1Team: "roses", s2: 50, s2Team: "alfa_romero", s3Team: "roses" },
+        { name: "Carlos", s1: 0, s1Team: "zenith", s2: 32, s2Team: "", s3Team: "" },
+        { name: "Moles", s1: 28, s1Team: "zenith", s2: 37, s2Team: "alfa_romero", s3Team: "zenith" },
+        { name: "Pabliyo", s1: 21, s1Team: "roses", s2: 25, s2Team: "", s3Team: "zenith" },
+        { name: "Fabi", s1: 49, s1Team: "roses", s2: 18, s2Team: "roses", s3Team: "" },
+        { name: "Toni", s1: 20, s1Team: "alfa_romero", s2: 6, s2Team: "roses", s3Team: "" },
+        { name: "Pinilla", s1: 14, s1Team: "alfa_romero", s2: 4, s2Team: "alfa_romero", s3Team: "alfa_romero" },
+        { name: "Samu", s1: 14, s1Team: "roses", s2: 8, s2Team: "roses", s3Team: "" },
+        { name: "Aparicio", s1: 0, s1Team: "zenith", s2: 0, s2Team: "", s3Team: "roses" },
+        { name: "Mesa", s1: 0, s1Team: "zenith", s2: 3, s2Team: "", s3Team: "" },
       ];
 
       const teamsData = [
-        { name: "zenith", s1: 130, s2: 189 },
-        { name: "alfa_romero", s1: 132, s2: 130 },
-        { name: "roses", s1: 185, s2: 118 },
+        { name: "zenith", s1: 104, s2: 156 },
+        { name: "alfa_romero", s1: 72, s2: 76 },
+        { name: "roses", s1: 108, s2: 84 },
       ];
 
       const split1Races = ["Australia", "China", "Japón", "Arabia Saudí", "Miami", "Barein"];
@@ -58,6 +58,7 @@ export function AdminControlPanel() {
 
       setMigrateMsg("Actualizando split_2...");
       for (const d of driversData) {
+        if (!d.s2Team) continue;
         const ref = doc(db, `splits/split_2/equipos/${d.s2Team}/pilotos`, `piloto_${d.name.toLowerCase()}`);
         const snap = await getDoc(ref);
         if (snap.exists()) {

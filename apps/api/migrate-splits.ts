@@ -47,29 +47,33 @@ for (const row of driverRows) {
 
   const s1Team = String(cellVal(row, "D") || "").trim();
   const s1Points: Record<string, number> = {};
+  let s1Total = 0;
   ["E", "F", "G", "H", "I", "J"].forEach((col, i) => {
     const v = cellVal(row, col);
-    s1Points[split1Races[i]] = typeof v === "number" ? v : 0;
+    const pts = typeof v === "number" ? v : 0;
+    s1Points[split1Races[i]] = pts;
+    s1Total += pts;
   });
-  const s1Total = cellVal(row, "K");
   
-  const s2Team = String(cellVal(row, "M") || "").trim();
+  const s2Team = String(cellVal(row, "L") || "").trim();
   const s2Points: Record<string, number> = {};
+  let s2Total = 0;
   ["N", "O", "P", "Q", "R", "S"].forEach((col, i) => {
     const v = cellVal(row, col);
-    s2Points[split2Races[i]] = typeof v === "number" ? v : 0;
+    const pts = typeof v === "number" ? v : 0;
+    s2Points[split2Races[i]] = pts;
+    s2Total += pts;
   });
-  const s2Total = cellVal(row, "T");
   
-  const s3Team = String(cellVal(row, "W") || "").trim();
+  const s3Team = String(cellVal(row, "U") || "").trim();
 
   driversData.push({
     name,
     split1: s1Points,
-    split1Total: typeof s1Total === "number" ? s1Total : 0,
+    split1Total: s1Total,
     split1Team: s1Team,
     split2: s2Points,
-    split2Total: typeof s2Total === "number" ? s2Total : 0,
+    split2Total: s2Total,
     split2Team: s2Team,
     split3Team: s3Team,
   });
@@ -97,30 +101,57 @@ for (const row of teamRows) {
   if (!name || name === "Escudería" || name === "RIVALIDADES") continue;
 
   const s1Points: Record<string, number> = {};
-  ["D", "E", "F", "G", "H", "I"].forEach((col, i) => {
+  let s1Total = 0;
+  // Split 1 races: E=Australia, F=China, G=Japón, H=Arabia Saudí, I=Miami, J=Barein (not shown, use total)
+  ["E", "F", "G", "H", "I"].forEach((col, i) => {
     const v = cellVal(row, col);
-    s1Points[split1Races[i]] = typeof v === "number" ? v : 0;
+    const pts = typeof v === "number" ? v : 0;
+    s1Points[split1Races[i]] = pts;
+    s1Total += pts;
   });
-  const s1Total = cellVal(row, "J");
+  // Split 1 total is in column K
+  const s1TotalFromExcel = cellVal(row, "K");
+  s1Total = typeof s1TotalFromExcel === "number" ? s1TotalFromExcel : s1Total;
 
   const s2Points: Record<string, number> = {};
-  ["K", "L", "M", "N", "O", "P"].forEach((col, i) => {
+  let s2Total = 0;
+  // Split 2 races: N=Canadá, O=Mónaco, P=Barcelona, Q=Austria, R=Gran Bretaña, S=Bélgica (not shown, use total)
+  ["N", "O", "P", "Q", "R"].forEach((col, i) => {
     const v = cellVal(row, col);
-    s2Points[split2Races[i]] = typeof v === "number" ? v : 0;
+    const pts = typeof v === "number" ? v : 0;
+    s2Points[split2Races[i]] = pts;
+    s2Total += pts;
   });
-  const s2Total = cellVal(row, "Q");
+  // Split 2 total is in column S
+  const s2TotalFromExcel = cellVal(row, "S");
+  s2Total = typeof s2TotalFromExcel === "number" ? s2TotalFromExcel : s2Total;
 
   teamsData.push({
     name,
     split1Points: s1Points,
-    split1Total: typeof s1Total === "number" ? s1Total : 0,
+    split1Total: s1Total,
     split2Points: s2Points,
-    split2Total: typeof s2Total === "number" ? s2Total : 0,
+    split2Total: s2Total,
   });
 }
 
 console.log("\n=== TEAMS EXCEL DATA ===");
-teamsData.forEach(t => {
+const teamTotals: Record<string, { split1: number; split2: number }> = {};
+
+for (const t of teamsData) {
+  const baseName = mapTeamName(t.name);
+  if (!teamTotals[baseName]) teamTotals[baseName] = { split1: 0, split2: 0 };
+  teamTotals[baseName].split1 += t.split1Total;
+  teamTotals[baseName].split2 += t.split2Total;
+}
+
+const teamsDataAggregated = Object.entries(teamTotals).map(([name, totals]) => ({
+  name,
+  split1Total: totals.split1,
+  split2Total: totals.split2,
+}));
+
+teamsDataAggregated.forEach(t => {
   console.log(`${t.name}: S1=${t.split1Total} | S2=${t.split2Total}`);
 });
 
@@ -152,6 +183,77 @@ function mapDriverName(excelName: string): string {
 
 const batch = writeBatch(db);
 
+function computeRacePositions(pointsByDriver: Record<string, number>): Record<string, number> {
+  const entries = Object.entries(pointsByDriver)
+    .filter(([, pts]) => pts > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const positions: Record<string, number> = {};
+  let pos = 1;
+  for (const [driverId, pts] of entries) {
+    positions[driverId] = pos;
+    pos++;
+  }
+  return positions;
+}
+
+async function updateCircuitResults(splitId: string, raceName: string, driversPoints: DriverExcelData[], splitKey: "split1" | "split2", raceIndex: number) {
+  const raceId = raceName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const circuitRef = doc(db, `splits/${splitId}/circuitos`, raceId);
+  const circuitSnap = await getDoc(circuitRef);
+  
+  const pointsByDriver: Record<string, number> = {};
+  const teamByDriver: Record<string, string> = {};
+  const driverNames: Record<string, string> = {};
+  
+  for (const d of driversPoints) {
+    const driverId = mapDriverName(d.name);
+    const pts = d[splitKey][raceName];
+    if (pts && pts > 0) {
+      pointsByDriver[driverId] = pts;
+      teamByDriver[driverId] = mapTeamName(d[splitKey + "Team"]);
+      driverNames[driverId] = d.name;
+    }
+  }
+  
+  const positions = computeRacePositions(pointsByDriver);
+  
+  const resultados = Object.entries(pointsByDriver).map(([driverId, pts]) => ({
+    pilotoId: driverId,
+    pilotoNombre: driverNames[driverId],
+    equipoId: teamByDriver[driverId],
+    racePos: positions[driverId],
+    qualyPos: 99,
+    isDnfOwnError: false,
+    isClean: true,
+    overtakesBoost: false,
+    isDotd: false,
+    isMvp: false,
+    fastestLap: false,
+    points: pts,
+  })).sort((a, b) => a.racePos - b.racePos);
+  
+  const baseRaceNum = splitId === "split_1" ? 0 : 6;
+  
+  if (circuitSnap.exists()) {
+    batch.update(circuitRef, { 
+      completado: true, 
+      acta_cerrada: true, 
+      economia_procesada: true,
+      resultados 
+    });
+  } else {
+    batch.set(circuitRef, {
+      nombre: raceName,
+      completado: true,
+      acta_cerrada: true,
+      economia_procesada: true,
+      resultados,
+      numero_carrera: baseRaceNum + raceIndex + 1,
+    });
+  }
+  console.log(`  Circuito ${raceName}: ${resultados.length} resultados`);
+}
+
 console.log("\n=== UPDATING SPLIT 1 ===");
 for (const d of driversData) {
   const driverId = mapDriverName(d.name);
@@ -159,7 +261,6 @@ for (const d of driversData) {
   const ref = doc(db, `splits/split_1/equipos/${teamId}/pilotos`, driverId);
   const snap = await getDoc(ref);
   if (snap.exists()) {
-    const existing = snap.data();
     batch.update(ref, {
       puntos_piloto: d.split1Total,
       victorias: Object.values(d.split1).filter(v => v === 25).length,
@@ -170,11 +271,15 @@ for (const d of driversData) {
   }
 }
 
-for (const t of teamsData) {
-  const teamId = mapTeamName(t.name);
+for (const t of teamsDataAggregated) {
+  const teamId = t.name;
   const ref = doc(db, `splits/split_1/equipos`, teamId);
   batch.update(ref, { puntos_constructores: t.split1Total });
   console.log(`  Team ${t.name}: ${t.split1Total} pts`);
+}
+
+for (let i = 0; i < split1Races.length; i++) {
+  await updateCircuitResults("split_1", split1Races[i], driversData, "split1", i);
 }
 
 const split1Ref = doc(db, "splits/split_1");
@@ -182,6 +287,7 @@ batch.update(split1Ref, { activo: false, completado: true, fichajes_abiertos: fa
 
 console.log("\n=== UPDATING SPLIT 2 ===");
 for (const d of driversData) {
+  if (!d.split2Team) continue; // Skip drivers without team in split 2
   const driverId = mapDriverName(d.name);
   const teamId = mapTeamName(d.split2Team);
   const ref = doc(db, `splits/split_2/equipos/${teamId}/pilotos`, driverId);
@@ -197,21 +303,22 @@ for (const d of driversData) {
   }
 }
 
-for (const t of teamsData) {
-  const teamId = mapTeamName(t.name);
+for (const t of teamsDataAggregated) {
+  const teamId = t.name;
   const ref = doc(db, `splits/split_2/equipos`, teamId);
   batch.update(ref, { puntos_constructores: t.split2Total });
   console.log(`  Team ${t.name}: ${t.split2Total} pts`);
+}
+
+for (let i = 0; i < split2Races.length; i++) {
+  await updateCircuitResults("split_2", split2Races[i], driversData.filter(d => d.split2Team), "split2", i);
 }
 
 const split2Ref = doc(db, "splits/split_2");
 batch.update(split2Ref, { 
   activo: false, 
   completado: true, 
-  fichajes_abiertos: false,
-  circuitos: {
-    Belgica: { completado: true, acta_cerrada: true, economia_procesada: true }
-  }
+  fichajes_abiertos: false 
 });
 
 console.log("\n=== SETTING UP SPLIT 3 ===");

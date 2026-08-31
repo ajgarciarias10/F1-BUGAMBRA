@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useMemo } from "react";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
-import { processRace, recalcSplitPoints, RaceResult } from "../services/raceProcessor";
+import { processRace, RaceResult } from "../services/raceProcessor";
 import { procesarEconomiaCarrera } from "../services/economyService";
 import { db } from "../services/firebase";
 import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch, increment } from "firebase/firestore";
@@ -73,8 +73,6 @@ export function AdminDashboard() {
   const [savingLogo, setSavingLogo] = useState<string | null>(null);
   const [photoEdits, setPhotoEdits] = useState<Record<string, string>>({});
   const [savingPhoto, setSavingPhoto] = useState<string | null>(null);
-  const [recalcLoading, setRecalcLoading] = useState(false);
-  const [recalcAllLoading, setRecalcAllLoading] = useState(false);
   const [resetPointsLoading, setResetPointsLoading] = useState(false);
   const [savingRivalries, setSavingRivalries] = useState(false);
   const [rivalriesMsg, setRivalriesMsg] = useState("");
@@ -1074,45 +1072,6 @@ export function AdminDashboard() {
           {/* Acciones sobre puntos del split */}
           <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.04] pt-3 mt-2">
             <span className="text-[9px] font-mono text-white/20 uppercase tracking-widest mr-1">Split:</span>
-            <button
-              onClick={async () => {
-                if (!selectedSplitId) return;
-                setRecalcLoading(true);
-                const result = await recalcSplitPoints(selectedSplitId);
-                setMsg(result.message);
-                setTimeout(() => setMsg(""), 5000);
-                setRecalcLoading(false);
-              }}
-              disabled={recalcLoading || recalcAllLoading || !selectedSplitId}
-              className="px-3 py-1 bg-white/[0.04] hover:bg-white/10 border border-white/10 text-[9px] uppercase font-bold tracking-wider text-white/50 hover:text-white transition-colors disabled:opacity-40 flex items-center gap-1"
-            >
-              {recalcLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
-              Recalcular puntos
-            </button>
-            <span className="text-[9px] font-mono text-white/10 uppercase tracking-widest">|</span>
-            <span className="text-[9px] font-mono text-white/20 uppercase tracking-widest">Todos:</span>
-            <button
-              onClick={async () => {
-                if (!confirm("¿Recalcular el rating de TODOS los splits desde 0? Esta acción actualiza puntos y ratings de todos los splits completados.")) return;
-                setRecalcAllLoading(true);
-                const splitIds = splits
-                  .filter(s => s.id !== "global" && s.circuitos?.some((c: any) => c.completado))
-                  .map(s => s.id);
-                const messages: string[] = [];
-                for (const sid of splitIds) {
-                  const result = await recalcSplitPoints(sid);
-                  messages.push(result.message);
-                }
-                setMsg(messages.length > 0 ? messages.join(" | ") : "No hay splits con carreras completadas.");
-                setTimeout(() => setMsg(""), 8000);
-                setRecalcAllLoading(false);
-              }}
-              disabled={recalcLoading || recalcAllLoading}
-              className="px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-[9px] uppercase font-bold tracking-wider text-amber-400/70 hover:text-amber-300 transition-colors disabled:opacity-40 flex items-center gap-1"
-            >
-              {recalcAllLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
-              Recalcular todos los splits
-            </button>
             <button
               onClick={async () => {
                 if (!selectedSplitId) return;
