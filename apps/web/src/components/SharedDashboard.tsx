@@ -1102,7 +1102,7 @@ export function TotalStandings({
   getPilotPhoto?: (id: string) => string;
 }) {
   const activeSplits = useMemo(
-    () => splits.filter(s => s.id !== "global" && (s.roster?.length > 0 || s.equipos?.length > 0)),
+    () => splits.filter(s => s.id !== "global" && (s.roster?.length > 0 || s.equipos?.length > 0) && s.completado),
     [splits]
   );
 
