@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+/* Class-based dark mode: applies when ancestor has .dark class */
+@custom-variant dark (&:where(.dark, .dark *));
+
+html {
+  background: #050505;
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: #0a0a0a;
+  color: #f1f5f9;
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  touch-action: manipulation;
+}
+
+::selection {
+  background: #f4f4f5;
+  color: #09090b;
+}
+
+.broadcast-shell {
+  --broadcast-surface: rgba(255, 255, 255, 0.045);
+  --broadcast-border: rgba(255, 255, 255, 0.1);
+  background-image:
+    radial-gradient(circle at 82% 6%, rgba(225, 6, 0, 0.15), transparent 22rem),
+    linear-gradient(180deg, #101012 0, #080809 34rem, #050505 100%);
+}
+
+.broadcast-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 3rem 3rem;
+  mask-image: linear-gradient(to bottom, black, transparent 90%);
+}
+
+.sport-panel {
+  background: var(--broadcast-surface, rgba(0, 0, 0, 0.035));
+  border: 1px solid var(--broadcast-border, rgba(0, 0, 0, 0.1));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+}
+
+.rail-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: white;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+
+.rail-title::before {
+  width: 0.25rem;
+  height: 1.35rem;
+  background: #e10600;
+  content: "";
+}
+
+.dark .sport-panel {
+  --broadcast-surface: rgba(255, 255, 255, 0.045);
+  --broadcast-border: rgba(255, 255, 255, 0.1);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+@supports (padding: max(0px)) {
+  .safe-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .safe-top {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+}

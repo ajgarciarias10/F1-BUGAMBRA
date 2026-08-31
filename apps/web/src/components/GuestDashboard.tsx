@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
-import { MonitorPlay, Users, ChevronLeft, Award } from "lucide-react";
+import { Users, ChevronLeft, Award } from "lucide-react";
 import { TotalStandings } from "./SharedDashboard";
+import { FomLive } from "./FomLive";
+import { MobileBottomTabs } from "./MobileBottomTabs";
 
 export function GuestDashboard() {
   const { splits, loading } = useSplits();
@@ -20,9 +22,9 @@ export function GuestDashboard() {
   };
   
   return (
-    <div className="min-h-screen bg-[#0E0E10] text-gray-100 p-8 font-sans">
+    <div className="min-h-screen bg-[#0E0E10] text-gray-100 px-4 pt-4 pb-28 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto">
-        <header className="h-16 border-b border-white/10 bg-black/40 flex items-center justify-between px-6 shrink-0 -mx-8 -mt-8 mb-8">
+        <header className="h-16 border border-white/10 bg-black/55 backdrop-blur-xl flex items-center justify-between px-4 md:px-6 shrink-0 md:-mx-8 md:-mt-8 mb-6 md:mb-8 rounded-3xl md:rounded-none shadow-2xl shadow-black/30">
           <div className="flex items-center gap-4">
             <Link
               to="/login"
@@ -54,9 +56,9 @@ export function GuestDashboard() {
         </header>
 
         {/* Navigation Tabs */}
-        <div className="flex flex-wrap border-b border-white/10 mb-8 gap-2">
+        <div className="hidden md:flex flex-wrap border-b border-white/10 mb-8 gap-2">
           {([
-            { id: "tv",        label: "📺 TV en Directo" },
+            { id: "tv",        label: "FOM" },
             { id: "album",     label: "🎴 Álbum de Cromos" },
             { id: "acumulado", label: "🏆 Ranking Total" },
           ] as const).map(tab => (
@@ -76,8 +78,17 @@ export function GuestDashboard() {
             </button>
           ))}
         </div>
+        <MobileBottomTabs
+          tabs={[
+            { id: "tv", label: "FOM" },
+            { id: "album", label: "Álbum" },
+            { id: "acumulado", label: "Ranking" },
+          ]}
+          activeTab={activeTab}
+          onTab={(id) => setActiveTab(id as "tv" | "album" | "acumulado")}
+        />
 
-        {activeTab === "tv" && <LiveTV />}
+        {activeTab === "tv" && <FomLive />}
         {activeTab === "album" && (
           <StickerAlbum splits={splits || []} usuarios={usuarios || []} loading={loading} />
         )}
@@ -92,101 +103,6 @@ export function GuestDashboard() {
             </div>
           )
         )}
-      </div>
-    </div>
-  );
-}
-
-function LiveTV() {
-  const currentDomain = window.location.hostname;
-
-  const channels = [
-    { id: "tonicotitular", name: "Piloto Toni", platform: "Twitch" },
-    { id: "fabiml_204", name: "Piloto Fabi", platform: "Twitch" },
-  ];
-
-  return (
-    <div className="bg-zinc-950/80 border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-[#e10600]/10 rounded-full blur-[80px] pointer-events-none" />
-
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="bg-[#e10600]/20 p-2 rounded-lg border border-[#e10600]/30">
-            <MonitorPlay className="w-6 h-6 text-[#e10600] animate-pulse" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black italic tracking-tighter uppercase text-white">
-              Transmisión en Directo
-            </h2>
-            <p className="text-[10px] font-mono uppercase tracking-widest text-white/50">
-              Cámaras On-Board de Pilotos
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid de Directos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10 mb-8">
-        {channels.map((ch) => (
-          <div
-            key={ch.id}
-            className="bg-black/50 border border-white/10 rounded-xl overflow-hidden flex flex-col group shadow-lg"
-          >
-            <div className="bg-zinc-900 border-b border-white/5 px-4 py-2.5 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="font-bold text-xs text-white uppercase tracking-tight">
-                  {ch.name}
-                </span>
-              </div>
-              <span className="text-[9px] font-mono text-white/40 uppercase bg-black/40 px-2 py-0.5 rounded">
-                @{ch.id}
-              </span>
-            </div>
-            <div className="aspect-video w-full bg-black relative">
-              <iframe
-                src={`https://player.twitch.tv/?channel=${ch.id}&parent=${
-                  currentDomain === "localhost" ? "localhost" : currentDomain
-                }`}
-                height="100%"
-                width="100%"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full border-0"
-              ></iframe>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Historial de VODs Grid */}
-      <div className="border-t border-white/10 pt-6 relative z-10">
-        <h3 className="text-sm font-bold uppercase text-white tracking-widest mb-4 flex items-center gap-2">
-          <MonitorPlay className="w-4 h-4 text-purple-400" />
-          Acceso a Repeticiones y VODs
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {channels.map((ch) => (
-            <a
-              key={`vod-${ch.id}`}
-              href={`https://www.twitch.tv/${ch.id}/videos`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex justify-between items-center bg-black/40 hover:bg-zinc-800 border border-white/5 hover:border-purple-500/50 p-4 rounded-xl transition-all group"
-            >
-              <div>
-                <span className="text-white font-bold text-sm uppercase tracking-tight block group-hover:text-purple-400 transition-colors">
-                  Historial de {ch.name}
-                </span>
-                <span className="text-white/40 text-[10px] font-mono uppercase tracking-widest">
-                  Twitch Videos
-                </span>
-              </div>
-              <div className="px-4 py-2 bg-purple-500/20 text-purple-300 text-[10px] font-black uppercase tracking-widest rounded-lg group-hover:bg-purple-500 group-hover:text-white transition-colors">
-                Ver Videos
-              </div>
-            </a>
-          ))}
-        </div>
       </div>
     </div>
   );

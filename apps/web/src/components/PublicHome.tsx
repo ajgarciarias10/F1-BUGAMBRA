@@ -2,9 +2,11 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { MonitorPlay, Sun, Moon } from "lucide-react";
+import { Sun, Moon, Play, Radio, ChevronRight } from "lucide-react";
 import { PilotCardF1 } from "./PilotCardF1";
 import { TotalStandings } from "./SharedDashboard";
+import { FomLive } from "./FomLive";
+import { MobileBottomTabs } from "./MobileBottomTabs";
 
 type Tab = "clasificacion" | "album" | "tv";
 
@@ -36,6 +38,12 @@ export function PublicHome() {
 
   const currentSplitId = activeSplitId || validSplits[validSplits.length - 1]?.id || "";
   const currentSplit = validSplits.find(s => s.id === currentSplitId);
+
+  const nextRace = useMemo(() => {
+    return [...(currentSplit?.circuitos || [])]
+      .sort((a, b) => (a.numero_carrera ?? 999) - (b.numero_carrera ?? 999))
+      .find(c => !c.completado);
+  }, [currentSplit]);
 
   const pilotStandings = useMemo(() => {
     if (!currentSplit) return [];
@@ -69,17 +77,18 @@ export function PublicHome() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "clasificacion", label: "Clasificación" },
     { id: "album", label: "Álbum" },
-    { id: "tv", label: "TV en Directo" },
+    { id: "tv", label: "FOM" },
   ];
 
   return (
-    <div className={`${dark ? "dark" : ""} min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] text-[#0a0a0a] dark:text-white font-sans overflow-x-hidden`}>
+    <div className={`${dark ? "dark broadcast-shell" : ""} min-h-screen bg-[#ededed] text-[#0a0a0a] dark:text-white font-sans overflow-x-hidden relative`}>
+      {dark && <div className="broadcast-grid absolute inset-x-0 top-0 h-[44rem] pointer-events-none" />}
 
       {/* ── NAV ── */}
-      <header className="fixed top-0 inset-x-0 z-50 h-14 border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06] bg-[#f5f5f5]/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md flex items-center justify-between px-4 md:px-10 gap-4">
+      <header className="fixed top-0 inset-x-0 z-50 min-h-16 md:min-h-16 border-b border-black/10 dark:border-white/10 bg-[#ededed]/95 dark:bg-[#09090b]/95 backdrop-blur-xl flex items-center justify-between px-4 md:px-10 gap-4 safe-top">
         <div className="flex items-center gap-3 shrink-0">
-          <span className="w-0.5 h-5 bg-[#e10600]" />
-          <span className="font-black tracking-[0.15em] uppercase text-sm">F1 Bugambra</span>
+          <span className="grid place-items-center w-9 h-9 bg-[#e10600] text-white font-black italic text-sm">F1</span>
+          <span className="font-black tracking-[-0.03em] uppercase text-base">Bugambra</span>
         </div>
 
         <nav className="hidden md:flex items-center gap-6">
@@ -87,9 +96,9 @@ export function PublicHome() {
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`text-[11px] font-mono tracking-[0.25em] uppercase transition-colors ${
+              className={`relative py-5 text-[11px] font-black tracking-[0.12em] uppercase transition-colors ${
                 activeTab === t.id
-                  ? "text-[#0a0a0a] dark:text-white"
+                  ? "text-[#0a0a0a] dark:text-white after:absolute after:bottom-0 after:inset-x-0 after:h-1 after:bg-[#e10600]"
                   : "text-[#0a0a0a]/35 dark:text-white/35 hover:text-[#0a0a0a]/70 dark:hover:text-white/70"
               }`}
             >
@@ -108,7 +117,7 @@ export function PublicHome() {
           </button>
           <Link
             to={dashboardLink}
-            className="text-[10px] font-bold tracking-[0.3em] uppercase text-[#0a0a0a]/70 dark:text-white/70 hover:text-[#0a0a0a] dark:hover:text-white border border-[#0a0a0a]/15 dark:border-white/15 hover:border-[#0a0a0a]/40 dark:hover:border-white/40 px-4 py-2.5 transition-all whitespace-nowrap"
+            className="text-[10px] font-black tracking-[0.14em] uppercase bg-[#0a0a0a] dark:bg-white text-white dark:text-black px-4 py-3 transition-all hover:bg-[#e10600] dark:hover:bg-[#e10600] dark:hover:text-white whitespace-nowrap"
           >
             {user ? "Mi Panel" : "Acceder"}
           </Link>
@@ -116,35 +125,52 @@ export function PublicHome() {
       </header>
 
       {/* ── HERO ── */}
-      <section className="pt-24 pb-12 px-4 md:px-10 max-w-7xl mx-auto">
-        <p className="text-[10px] font-mono tracking-[0.4em] text-[#0a0a0a]/25 dark:text-white/25 uppercase mb-4">
-          Liga Virtual · {validSplits.length} Temporadas
-        </p>
-        <h1 className="text-4xl sm:text-5xl md:text-7xl font-black uppercase leading-none tracking-tight">
-          Campeonato<br />
-          <span className="text-[#e10600]">F1 Bugambra</span>
-        </h1>
+      <section className="relative pt-24 md:pt-28 px-4 md:px-10 max-w-[90rem] mx-auto">
+        <div className="relative min-h-[28rem] md:min-h-[34rem] overflow-hidden bg-[#151518] border border-white/10 text-white flex items-end">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_30%,rgba(225,6,0,0.38),transparent_28%),linear-gradient(115deg,#111114_25%,rgba(17,17,20,0.72)_58%,#2a0909)]" />
+          <div className="absolute right-[-7%] top-[4%] text-[16rem] md:text-[25rem] font-black italic leading-none text-white/[0.035] select-none">F1</div>
+          <div className="absolute top-5 left-5 md:top-8 md:left-8 flex items-center gap-2 bg-[#e10600] px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em]">
+            <Radio className="w-3.5 h-3.5" /> Temporada en curso
+          </div>
+
+          <div className="relative z-10 w-full p-5 sm:p-8 md:p-12 grid md:grid-cols-[1fr_auto] items-end gap-8">
+            <div className="max-w-3xl">
+              <p className="text-[10px] font-black tracking-[0.24em] text-white/55 uppercase mb-4">
+                En portada · {currentSplit?.nombre || "F1 Bugambra"}
+              </p>
+              <h1 className="text-[3rem] sm:text-6xl md:text-[5.5rem] font-black uppercase leading-[0.84] tracking-[-0.065em]">
+                La competición<br /><span className="text-[#e10600]">empieza aquí</span>
+              </h1>
+              <p className="mt-6 max-w-xl text-sm md:text-base text-white/60 leading-relaxed">
+                Clasificación, equipos y señal oficial de la liga en una experiencia creada para seguir cada carrera.
+              </p>
+              <div className="flex flex-wrap gap-3 mt-7">
+                <button onClick={() => setActiveTab("tv")} className="min-h-12 bg-white text-black hover:bg-[#e10600] hover:text-white px-5 flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.12em] transition-colors">
+                  <Play className="w-4 h-4 fill-current" /> Ver FOM
+                </button>
+                <button onClick={() => setActiveTab("clasificacion")} className="min-h-12 bg-white/10 hover:bg-white/20 border border-white/15 px-5 flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.12em] transition-colors">
+                  Clasificación <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="w-full md:w-72 border-t-2 border-[#e10600] bg-black/45 backdrop-blur-sm p-5">
+              <p className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase">Próximo evento</p>
+              <p className="mt-3 text-xl font-black uppercase tracking-tight">{nextRace?.nombre || "Por anunciar"}</p>
+              <div className="flex justify-between items-end mt-5 pt-4 border-t border-white/10">
+                <span className="text-[10px] uppercase text-white/45">{currentSplit?.nombre || `${validSplits.length} temporadas`}</span>
+                <span className="text-3xl font-black italic text-white/15">{String(nextRace?.numero_carrera ?? "--").padStart(2, "0")}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* ── MOBILE TABS ── */}
-      <div className="md:hidden flex border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06] px-4 overflow-x-auto">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`shrink-0 pb-3 mr-6 text-[10px] font-bold tracking-[0.25em] uppercase transition-all border-b-2 -mb-px whitespace-nowrap ${
-              activeTab === t.id
-                ? "border-[#e10600] text-[#0a0a0a] dark:text-white"
-                : "border-transparent text-[#0a0a0a]/30 dark:text-white/30"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <MobileBottomTabs tabs={tabs} activeTab={activeTab} onTab={(id) => setActiveTab(id as Tab)} />
 
       {/* ── CONTENT ── */}
-      <main className="max-w-7xl mx-auto px-4 md:px-10 py-10">
+      <main className="relative max-w-[90rem] mx-auto px-4 md:px-10 pt-10 md:py-14 pb-28 md:pb-14">
+        <div className="rail-title mb-6">{tabs.find(tab => tab.id === activeTab)?.label}</div>
         {loading ? (
           <div className="text-[#0a0a0a]/20 dark:text-white/20 text-xs font-mono tracking-[0.3em] uppercase py-24 text-center">
             Cargando temporada...
@@ -171,7 +197,7 @@ export function PublicHome() {
                 getPilotPhoto={getPilotPhoto}
               />
             )}
-            {activeTab === "tv" && <TvView />}
+            {activeTab === "tv" && <FomLive />}
           </>
         )}
       </main>
@@ -282,8 +308,8 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
 
       {/* Tabla pilotos */}
       {currentSplitId !== "general" && view === "pilotos" && (
-        <div>
-          <div className="grid grid-cols-[2.5rem_1fr_auto_auto] md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 px-3 pb-3 border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
+        <div className="sport-panel overflow-hidden">
+          <div className="grid grid-cols-[2.5rem_1fr_auto_auto] md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 px-4 py-3 bg-black/[0.035] dark:bg-white/[0.035] border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">#</span>
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">Piloto</span>
             <span className="hidden md:block text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">Escudería</span>
@@ -382,8 +408,8 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
 
       {/* Tabla constructores */}
       {currentSplitId !== "general" && view === "constructores" && (
-        <div>
-          <div className="grid grid-cols-[2.5rem_1fr_6rem] gap-x-4 px-3 pb-3 border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
+        <div className="sport-panel overflow-hidden">
+          <div className="grid grid-cols-[2.5rem_1fr_6rem] gap-x-4 px-4 py-3 bg-black/[0.035] dark:bg-white/[0.035] border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">#</span>
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">Escudería</span>
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase text-right">Pts</span>
@@ -541,7 +567,7 @@ export function AlbumView({ validSplits, currentSplitId, onSelectSplit, currentS
 
       {/* Piloto de la Semana */}
       {pilotoDestacado && (
-        <div className="border border-[#0a0a0a]/[0.08] dark:border-white/[0.06] overflow-hidden">
+        <div className="sport-panel overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-3 border-b border-[#0a0a0a]/[0.06] dark:border-white/[0.06]">
             <span className="w-0.5 h-5 bg-[#e10600]" />
             <div>
@@ -656,61 +682,6 @@ export function AlbumView({ validSplits, currentSplitId, onSelectSplit, currentS
           Sin datos de temporada
         </p>
       )}
-    </div>
-  );
-}
-
-// ── TV EN DIRECTO ──────────────────────────────────────────────────────────────
-
-function TvView() {
-  const domain = window.location.hostname;
-  const channels = [
-    { id: "tonicotitular", name: "Piloto Toni" },
-    { id: "fabiml_204", name: "Piloto Fabi" },
-  ];
-
-  return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {channels.map(ch => (
-          <div key={ch.id} className="border border-[#0a0a0a]/[0.08] dark:border-white/[0.08]">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#0a0a0a]/[0.06] dark:border-white/[0.06]">
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#e10600] animate-pulse" />
-                <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#0a0a0a] dark:text-white">{ch.name}</span>
-              </div>
-              <span className="text-[9px] font-mono text-[#0a0a0a]/25 dark:text-white/25">@{ch.id}</span>
-            </div>
-            <div className="aspect-video bg-black">
-              <iframe
-                src={`https://player.twitch.tv/?channel=${ch.id}&parent=${domain === "localhost" ? "localhost" : domain}`}
-                height="100%" width="100%" allowFullScreen
-                className="w-full h-full border-0"
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="border-t border-[#0a0a0a]/[0.06] dark:border-white/[0.06] pt-8">
-        <p className="text-[10px] font-mono tracking-[0.35em] text-[#0a0a0a]/30 dark:text-white/30 uppercase mb-4">Repeticiones y VODs</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {channels.map(ch => (
-            <a
-              key={ch.id}
-              href={`https://www.twitch.tv/${ch.id}/videos`}
-              target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-between px-5 py-4 border border-[#0a0a0a]/[0.08] dark:border-white/[0.08] hover:border-[#0a0a0a]/20 dark:hover:border-white/20 transition-all group"
-            >
-              <div className="flex items-center gap-3">
-                <MonitorPlay className="w-4 h-4 text-[#0a0a0a]/25 dark:text-white/25 group-hover:text-[#0a0a0a]/60 dark:group-hover:text-white/60 transition-colors" />
-                <span className="text-xs font-bold uppercase tracking-tight text-[#0a0a0a] dark:text-white">{ch.name}</span>
-              </div>
-              <span className="text-[9px] font-mono text-[#0a0a0a]/30 dark:text-white/30 uppercase tracking-widest group-hover:text-[#e10600] transition-colors">Ver →</span>
-            </a>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

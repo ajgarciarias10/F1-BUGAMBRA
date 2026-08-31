@@ -150,3 +150,13 @@ Estas garantías deben comprobarse mediante pruebas del backend y restricciones 
 11. Solo entonces considerar compatible la nueva versión.
 
 El endpoint devuelve siempre `manualReviewRequired: true`. Nunca se importan cambios deportivos o económicos automáticamente desde un Excel nuevo.
+
+## Revisión 2026-08-31
+
+- Firestore tiene puntos deportivos desalineados respecto al Excel en `split_1` y `split_2`, pero no debe corregirse como fuente de verdad durante la migración.
+- La corrección definitiva debe hacerse en PostgreSQL creando o corrigiendo revisiones de carrera; `driver_standing` y `team_standing` se reconstruyen desde `race_result`.
+- El Excel solo contiene puntos por carrera, no el acta completa necesaria para generar una `race_revision` autoritativa con posiciones, qualy, DNF y bonos.
+- La hoja contiene fórmulas de puntos de escudería incorrectas para los bloques 3 y 4: arrancan en `Y` y `AH`, pero siguen apuntando a la plantilla de pilotos del bloque 2 (`N`) en vez de `W` y `AF`.
+- El lector del Excel ahora valida estas referencias para que una caché de fórmula no oculte errores cuando se modifiquen datos.
+- La prioridad es corregir nuestras fórmulas/cálculos para que reproduzcan el Excel vigente; el Excel compartido no se modifica desde el backend.
+- Fórmulas legacy ajustadas en la SPA: la vuelta rápida no suma puntos deportivos, las rivalidades reparten premios por ranking completo y los precios positivos solo reducen cláusula una vez por bloque manteniendo fijo el coste de mantener.

@@ -15,6 +15,7 @@ async function createWorkbook(options: {
   omitMoneyPerPoint?: boolean;
   duplicateTeamMismatch?: boolean;
   futureZero?: boolean;
+  badFutureTeamFormula?: boolean;
 } = {}): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const rules = workbook.addWorksheet("Reglamento");
@@ -96,6 +97,14 @@ async function createWorkbook(options: {
     season.getCell("Y2").value = 0;
     season.getCell("Y20").value = "Hungría";
     for (let row = 21; row <= 24; row += 1) season.getCell(row, 25).value = 0;
+  }
+  if (options.badFutureTeamFormula) {
+    season.getCell("W20").value = "Pilotos";
+    season.getCell("Y20").value = "Hungría";
+    season.getCell("Y21").value = {
+      formula: "IFERROR(XLOOKUP($N21,$C$2:$C$11,Y$2:Y$11),0)",
+      result: 0,
+    };
   }
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
@@ -241,4 +250,11 @@ test("ignora ceros de carreras futuras todavía no cerradas", async () => {
 
   assert.equal(report.matches, true);
   assert.ok(!report.unmatched.some((item) => item.name === "Hungría"));
+});
+
+test("detecta fórmulas de escudería que apuntan a otro bloque", async () => {
+  const excel = await readControlWorkbook(await createWorkbook({ badFutureTeamFormula: true }));
+
+  assert.ok(excel.validationErrors.some((error) =>
+    error.includes("fórmula de Hungría") && error.includes("bloque W")));
 });

@@ -1,8 +1,8 @@
 # F1 Bugambra
 
-Aplicación de Formula 1 con perfiles de usuarios, datos de carreras, sistema de economía y rivalidades. El frontend actual está construido con React, TypeScript, Vite y Firebase.
+Aplicación de Formula 1 con perfiles de usuarios, datos de carreras, sistema de economía y rivalidades. El frontend está en `apps/web` y está construido con React, TypeScript, Vite y Firebase.
 
-La migración al nuevo backend autoritativo Node.js + PostgreSQL está en `apps/api`. Durante la transición, la SPA actual sigue funcionando sin cambios mientras se sustituyen gradualmente las operaciones directas sobre Firestore.
+La migración al nuevo backend autoritativo Node.js + PostgreSQL está en `apps/api`. Durante la transición, la SPA sigue funcionando sin cambios mientras se sustituyen gradualmente las operaciones directas sobre Firestore.
 
 ## Stack tecnológico
 
@@ -29,7 +29,7 @@ La app estará disponible en la URL pública que Replit asigna al proyecto.
 
 ## Desarrollo local
 
-**Requisitos:** Node.js 18+
+**Requisitos:** Node.js 22+ y npm 10+
 
 ```bash
 npm install
@@ -49,10 +49,13 @@ La app estará en `http://localhost:3000`.
 
 | Comando | Descripción |
 |---|---|
-| `npm run dev` / `npm start` | Servidor de desarrollo en puerto 3000 |
-| `npm run build` | Genera los archivos de producción en `dist/` |
+| `npm run dev` / `npm start` | Servidor web de desarrollo en puerto 3000 |
+| `npm run dev:web` | Servidor web de desarrollo en puerto 3000 |
+| `npm run dev:api` | Servidor API de desarrollo |
+| `npm run build` | Genera los archivos web de producción en `apps/web/dist/` |
 | `npm run preview` | Sirve el build de producción en puerto 3000 |
-| `npm run lint` | Comprueba tipos con TypeScript |
+| `npm run typecheck` / `npm run lint` | Comprueba tipos en los workspaces |
+| `npm test` | Ejecuta los tests del backend |
 
 Los comandos y requisitos del backend nuevo están documentados en [apps/api/README.md](apps/api/README.md). La arquitectura y el comportamiento de las correcciones están en [docs/architecture.md](docs/architecture.md).
 

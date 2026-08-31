@@ -13,6 +13,17 @@ import { AdminRivalryControlPanel } from "./RivalryPanels";
 import { EconomyAdminPanel } from "./EconomyAdminPanel";
 import { StorageImageUpload } from "./StorageImageUpload";
 import { DatabaseExplorer } from "./DatabaseExplorer";
+import { AdminControlPanel } from "./AdminControlPanel";
+
+type AdminTab = "championship" | "control" | "suggestions" | "economy" | "db";
+
+const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
+  { id: "championship", label: "Carreras y mercado" },
+  { id: "control", label: "Excel/Postgres" },
+  { id: "suggestions", label: "Buzón de mejoras", pulse: true },
+  { id: "economy", label: "Economía" },
+  { id: "db", label: "Base de datos" },
+];
 
 const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
   if (!circuitos || circuitos.length === 0) return null;
@@ -55,7 +66,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [plantilla, setPlantilla] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState<"championship" | "suggestions" | "economy" | "db">("championship");
+  const [adminTab, setAdminTab] = useState<AdminTab>("championship");
   const [videoIntroUrl, setVideoIntroUrl] = useState("");
   const [savingVideoIntro, setSavingVideoIntro] = useState(false);
   const [logoEdits, setLogoEdits] = useState<Record<string, string>>({});
@@ -786,68 +797,31 @@ export function AdminDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-slate-100 p-4 pb-10">
+    <div className="min-h-screen bg-[#0a0a0a] text-slate-100 px-3 md:px-4 pt-3 md:pt-4 pb-10">
       <div className="max-w-7xl mx-auto">
         <UserHeader title="Panel de Administración" />
 
         {/* Navigation Tabs */}
-        <div className="flex flex-wrap border-b border-white/10 mb-4 gap-0.5">
-          <button
-            onClick={() => setAdminTab("championship")}
-            className={`px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
-              adminTab === "championship"
-                ? "text-white bg-white/5"
-                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
-            }`}
-          >
-            🏁 Carreras y mercado
-            {adminTab === "championship" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
-            )}
-          </button>
-          <button
-            onClick={() => setAdminTab("suggestions")}
-            className={`px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
-              adminTab === "suggestions"
-                ? "text-white bg-white/5 animate-pulse"
-                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
-            }`}
-          >
-            💡 Buzón de mejoras
-            {adminTab === "suggestions" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
-            )}
-          </button>
-          <button
-            onClick={() => setAdminTab("economy")}
-            className={`px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
-              adminTab === "economy"
-                ? "text-white bg-white/5"
-                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
-            }`}
-          >
-            💰 Economía
-            {adminTab === "economy" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
-            )}
-          </button>
-          <button
-            onClick={() => setAdminTab("db")}
-            className={`px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
-              adminTab === "db"
-                ? "text-white bg-white/5"
-                : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
-            }`}
-          >
-            🗄️ Base de datos
-            {adminTab === "db" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e10600]" />
-            )}
-          </button>
+        <div className="sticky top-2 z-40 flex overflow-x-auto border border-white/10 bg-zinc-950/85 backdrop-blur-xl rounded-3xl mb-4 gap-1 p-1 shadow-2xl shadow-black/30">
+          {ADMIN_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setAdminTab(tab.id)}
+              className={`shrink-0 min-h-11 rounded-2xl px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
+                adminTab === tab.id
+                  ? `text-white bg-[#e10600] shadow-lg shadow-red-950/30 ${tab.pulse ? "animate-pulse" : ""}`
+                  : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
+        ) : adminTab === "control" ? (
+          <AdminControlPanel />
         ) : adminTab === "economy" ? (
           <EconomyAdminPanel splits={splits} />
         ) : adminTab === "db" ? (

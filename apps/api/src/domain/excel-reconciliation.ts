@@ -135,6 +135,7 @@ export async function readControlWorkbook(buffer: Buffer, sheetName?: string): P
   const teams = readPointsSection(
     worksheet, teamHeaderRow, teamHeaderRow + 1, nextSectionRow - 1, true, warnings, validationErrors,
   );
+  validateTeamPointFormulaReferences(worksheet, teamHeaderRow, teamHeaderRow + 1, nextSectionRow - 1, validationErrors);
   const budgetHeaderRow = findRow(worksheet, (row) => text(row.getCell(5)) === "Presupuesto");
   const budgets = budgetHeaderRow ? readBudgets(worksheet, budgetHeaderRow + 1) : [];
   if (!budgetHeaderRow) warnings.push("No se encontró la tabla de presupuestos.");
@@ -352,6 +353,50 @@ function readBudgets(worksheet: ExcelJS.Worksheet, firstRow: number): ExcelBudge
     budgets.push({ teamName: stripTeamSlot(teamName), budget });
   }
   return budgets;
+}
+
+function validateTeamPointFormulaReferences(
+  worksheet: ExcelJS.Worksheet,
+  headerRowNumber: number,
+  firstRow: number,
+  lastRow: number,
+  validationErrors: string[],
+): void {
+  const header = worksheet.getRow(headerRowNumber);
+  for (const totalColumn of TOTAL_COLUMNS) {
+    const firstRaceColumn = totalColumn - 6;
+    const expectedRosterColumn = columnName(firstRaceColumn - 2);
+    for (let rowNumber = firstRow; rowNumber <= lastRow; rowNumber += 1) {
+      const teamName = text(worksheet.getCell(rowNumber, 3));
+      if (!teamName) continue;
+      const raceName = text(header.getCell(firstRaceColumn));
+      const formula = formulaText(worksheet.getCell(rowNumber, firstRaceColumn));
+      if (!formula || !formula.includes("XLOOKUP")) continue;
+      if (!formula.includes(`$${expectedRosterColumn}`)) {
+        validationErrors.push(
+          `${teamName}: la fórmula de ${raceName || columnName(firstRaceColumn)} `
+          + `usa una plantilla de pilotos que no corresponde al bloque ${expectedRosterColumn}.`,
+        );
+      }
+    }
+  }
+}
+
+function formulaText(cell: ExcelJS.Cell): string | null {
+  const value = cell.value;
+  if (typeof value === "object" && value !== null && "formula" in value) return value.formula ?? null;
+  return null;
+}
+
+function columnName(columnNumber: number): string {
+  let value = columnNumber;
+  let name = "";
+  while (value > 0) {
+    value -= 1;
+    name = String.fromCharCode(65 + (value % 26)) + name;
+    value = Math.floor(value / 26);
+  }
+  return name;
 }
 
 function readWorkbookRules(worksheet: ExcelJS.Worksheet | undefined): ExcelControlData["rules"] {

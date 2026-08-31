@@ -9,8 +9,10 @@ import type { TipoTransaccion } from "../types";
 
 export const POINTS_BY_POSITION = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
-const MCLASIF  = [1, 0.5];
-const MCARRERA = [2, 1];
+const MCLASIF  = [1, 0.5, 0];
+const MCARRERA = [2, 1, 0];
+const MCLASIF_DUO = [1, 0];
+const MCARRERA_DUO = [2, 0];
 
 export const M_POLE             = 2;
 export const M_VUELTA_RAPIDA    = 1;
@@ -28,6 +30,14 @@ export function calcularMillonesClasificacion(pos: number): number {
 
 export function calcularMillonesCarrera(pos: number): number {
   return MCARRERA[pos - 1] ?? 0;
+}
+
+function calcularMillonesRivalidadClasificacion(pos: number, total: number): number {
+  return (total === 2 ? MCLASIF_DUO : MCLASIF)[pos - 1] ?? 0;
+}
+
+function calcularMillonesRivalidadCarrera(pos: number, total: number): number {
+  return (total === 2 ? MCARRERA_DUO : MCARRERA)[pos - 1] ?? 0;
 }
 
 export function calcularPuntosPosicion(pos: number): number {
@@ -255,8 +265,7 @@ export async function procesarEconomiaCarrera(
 
       const ptsPos  = isDNF ? 0 : calcularPuntosPosicion(r.racePos);
       const ptsPole = r.qualyPos === 1 ? 2 : 0;
-      const ptsFL   = r.fastestLap ? 2 : 0;
-      const totalPts = ptsPos + ptsPole + ptsFL;
+      const totalPts = ptsPos + ptsPole;
       if (totalPts > 0) {
         const mPts = parseFloat((totalPts * M_PUNTOS_FACTOR).toFixed(2));
         add(tid, mPts, "ingreso_puntos", nombre, `${totalPts} pts × ${M_PUNTOS_FACTOR}M = +${mPts}M`);
@@ -284,11 +293,17 @@ export async function procesarEconomiaCarrera(
 
       if (members.length < 2) continue;
 
-      const qualyWinner = members.reduce((best: any, curr: any) => curr.qualyPos < best.qualyPos ? curr : best);
-      add(qualyWinner.teamId, M_RIVALIDAD_CLASIF, "rivalidad", qualyWinner.nombre, `Rivalidad clasificación H2H: +${M_RIVALIDAD_CLASIF}M`);
+      const rankedQualy = [...members].sort((a: any, b: any) => a.qualyPos - b.qualyPos);
+      rankedQualy.forEach((member: any, index) => {
+        const prize = calcularMillonesRivalidadClasificacion(index + 1, rankedQualy.length);
+        if (prize > 0) add(member.teamId, prize, "rivalidad", member.nombre, `Rivalidad clasificación P${index + 1}: +${prize}M`);
+      });
 
-      const raceWinner = members.reduce((best: any, curr: any) => curr.racePos < best.racePos ? curr : best);
-      add(raceWinner.teamId, M_RIVALIDAD_CARRERA, "rivalidad", raceWinner.nombre, `Rivalidad carrera H2H: +${M_RIVALIDAD_CARRERA}M`);
+      const rankedRace = [...members].sort((a: any, b: any) => a.racePos - b.racePos);
+      rankedRace.forEach((member: any, index) => {
+        const prize = calcularMillonesRivalidadCarrera(index + 1, rankedRace.length);
+        if (prize > 0) add(member.teamId, prize, "rivalidad", member.nombre, `Rivalidad carrera P${index + 1}: +${prize}M`);
+      });
     }
 
     for (const teamId of participatingTeams) {
@@ -327,6 +342,7 @@ export async function procesarEconomiaCarrera(
       const mantenerEstaCarrera = d.mantener_actual ?? 0;
       const nombre = pilotNombre[pilotoId] || pilotoId;
       const hasPendingTransfer = d.pending_equipoId != null || d.pending_precio_compra != null;
+      const previousPriceUpdates = previousCircuitIds?.length ?? Object.keys(d.historial_precios ?? {}).length;
 
       const isFrozenHere = (() => {
         if (!d.congelado && !hasPendingTransfer) return false;
@@ -363,9 +379,9 @@ export async function procesarEconomiaCarrera(
           [`historial_precios.${circuitoId}`]: { carrera: circuitName, mantener: mantenerEstaCarrera, clausula: clausulaActual },
         });
       } else {
-        const stepC       = r1(Math.abs(precioCompra) * 0.2);
-        const newClausula = r1(clausulaActual - stepC);
-        const newMantener = r1(newClausula * 1.5);
+        const stepC = r1(Math.abs(precioCompra) * 0.2);
+        const newClausula = previousPriceUpdates > 0 ? clausulaActual : r1(clausulaActual - stepC);
+        const newMantener = mantenerEstaCarrera;
 
         decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: newMantener, clausulaDespues: newClausula, congelado: false });
         batch.update(ref, {

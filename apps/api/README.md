@@ -12,13 +12,14 @@ Backend autoritativo de F1 Bugambra. Firebase autentica a los usuarios, pero los
 ## Desarrollo local
 
 ```bash
+corepack npm@10.9.4 ci
+cp apps/api/.env.example apps/api/.env
 cd apps/api
-npm ci
-cp .env.example .env
 docker compose up -d
-npm run db:migrate
-npm test
-npm run dev
+cd ../..
+corepack npm@10.9.4 --workspace @f1-bugambra/api run db:migrate
+corepack npm@10.9.4 --workspace @f1-bugambra/api test
+corepack npm@10.9.4 --workspace @f1-bugambra/api run dev
 ```
 
 La API escucha por defecto en `http://localhost:4000`. PostgreSQL solo se publica en `127.0.0.1`, por lo que no acepta conexiones desde la red.
@@ -77,7 +78,7 @@ Cada Excel nuevo debe seguir el protocolo de [auditoría del Excel](../../docs/e
 Los cambios de esquema viven en `database/migrations` y se ejecutan en orden:
 
 ```bash
-npm run db:migrate
+corepack npm@10.9.4 --workspace @f1-bugambra/api run db:migrate
 ```
 
 El ejecutor usa un bloqueo de PostgreSQL y registra cada fichero en `schema_migration`. No se deben editar migraciones que ya hayan llegado a un servidor; se añade una migración nueva.
@@ -88,11 +89,11 @@ El flujo previsto para el servidor es:
 
 ```bash
 ssh usuario@servidor
-cd /opt/f1-bugambra/apps/api
-npm ci
-npm run typecheck
-npm test
-npm run db:migrate
+cd /opt/f1-bugambra
+corepack npm@10.9.4 ci
+corepack npm@10.9.4 --workspace @f1-bugambra/api run typecheck
+corepack npm@10.9.4 --workspace @f1-bugambra/api test
+corepack npm@10.9.4 --workspace @f1-bugambra/api run db:migrate
 sudo systemctl restart f1-bugambra-api
 ```
 

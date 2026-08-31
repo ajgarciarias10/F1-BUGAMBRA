@@ -10,6 +10,7 @@ import { POINTS_BY_POSITION } from "../services/economyService";
 import { PilotRivalryPanel } from "./RivalryPanels";
 import { NextRaceWidget } from "./NextRaceWidget";
 import { PilotCardF1 } from "./PilotCardF1";
+import { FomLive } from "./FomLive";
 
 export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBudget: boolean, escuderiaId?: string }) {
   const { userData } = useAuth();
@@ -407,7 +408,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             className="px-4 py-2 border border-[#e10600]/50 hover:border-[#e10600] text-red-100 hover:text-white rounded-sm font-black text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
           >
             <MonitorPlay className="w-3.5 h-3.5" />
-            F1 TV EN DIRECTO 🔴
+            FOM EN DIRECTO
           </button>
         </div>
       </div>
@@ -1075,30 +1076,15 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#e10600]/10 rounded-full pointer-events-none" />
             <div className="flex justify-between items-center border-b border-[#e10600]/20 pb-4 mb-6 relative z-10">
               <div className="flex items-center gap-4">
-                <div className="bg-[#e10600] text-white font-black italic tracking-tighter text-3xl px-3 py-1 rounded-sm">F1 TV</div>
+                <div className="bg-[#e10600] text-white font-black italic tracking-tighter text-3xl px-3 py-1 rounded-sm">FOM</div>
                 <div>
-                  <span className="text-[10px] font-black tracking-[0.2em] text-[#e10600] uppercase font-mono block animate-pulse">🔴 EN DIRECTO</span>
-                  <h2 className="text-xl font-bold uppercase tracking-tight text-white mt-0.5">On-Boards & Transmisiones</h2>
+                  <span className="text-[10px] font-black tracking-[0.2em] text-[#e10600] uppercase font-mono block animate-pulse">EN DIRECTO</span>
+                  <h2 className="text-xl font-bold uppercase tracking-tight text-white mt-0.5">Señal oficial Tonicotitular</h2>
                 </div>
               </div>
               <button onClick={() => setIsF1TVOpen(false)} className="p-2 bg-white/5 hover:bg-white/10 text-white rounded-sm transition-all border border-white/10"><X className="w-6 h-6" /></button>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10">
-              <div className="bg-white/[0.02]border border-white/10  overflow-hidden flex flex-col group ">
-                <div className="bg-[#111] border-b border-white/5 px-4 py-3 flex justify-between items-center">
-                  <div className="flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /><span className="font-bold text-white uppercase tracking-tight">Cámara: Piloto Toni</span></div>
-                  <span className="text-[10px] font-mono text-white/40 uppercase bg-white/[0.02]px-2 py-1 rounded">@tonicotitular</span>
-                </div>
-                <div className="aspect-video w-full bg-black relative"><iframe src={`https://player.twitch.tv/?channel=tonicotitular&parent=${window.location.hostname || 'localhost'}`} height="100%" width="100%" allowFullScreen className="absolute inset-0" /></div>
-              </div>
-              <div className="bg-white/[0.02]border border-white/10  overflow-hidden flex flex-col group ">
-                <div className="bg-[#111] border-b border-white/5 px-4 py-3 flex justify-between items-center">
-                  <div className="flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /><span className="font-bold text-white uppercase tracking-tight">Cámara: Piloto Fabi</span></div>
-                  <span className="text-[10px] font-mono text-white/40 uppercase bg-white/[0.02]px-2 py-1 rounded">@fabiml_204</span>
-                </div>
-                <div className="aspect-video w-full bg-black relative"><iframe src={`https://player.twitch.tv/?channel=fabiml_204&parent=${window.location.hostname || 'localhost'}`} height="100%" width="100%" allowFullScreen className="absolute inset-0" /></div>
-              </div>
-            </div>
+            <FomLive compact />
           </div>
         </div>
       )}

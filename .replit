@@ -3,12 +3,12 @@ modules = ["nodejs-20"]
 [nix]
 channel = "stable-24_05"
 
-run = "npm run dev"
+run = "corepack npm@10.9.4 run dev:web"
 
 [[ports]]
 localPort = 3000
 externalPort = 80
 
 [deployment]
-run = ["sh", "-c", "npm run build && npm run preview"]
+run = ["sh", "-c", "corepack npm@10.9.4 run build && corepack npm@10.9.4 run preview"]
 deploymentTarget = "cloudrun"
