@@ -5,11 +5,17 @@ import pg from "pg";
 // Enlaza las cuentas existentes de Firebase Auth con la tabla app_user.
 //
 //   firebase auth:export users.json --format=json --project <id>
-//   tsx scripts/seed-users.ts users.json --admin=tu@correo --driver=a@x,b@y
+//   tsx scripts/seed-users.ts users.json --admin=tu@correo --driver=Jota:a@x,Moles:b@y
+//
+// Cada correo admite el prefijo "Nombre:" porque las cuentas de Firebase no
+// traen displayName; sin él, el nombre sale de la parte local del correo.
 //
 // Nadie sube de rol por accidente: sin indicar un correo explícitamente, el
 // usuario entra como viewer. Volver a ejecutarlo actualiza correo, nombre y rol
 // sin duplicar filas, porque firebase_uid es la clave primaria.
+//
+// El rol es autorización, no situación deportiva: un expiloto sigue siendo
+// driver, y su salida de la liga se expresa en season_driver.ends_at_sequence.
 
 type Role = "admin" | "team_manager" | "driver" | "viewer";
 
@@ -35,19 +41,24 @@ const roleByFlag: Record<string, Role> = {
 };
 
 const requestedRoles = new Map<string, Role>();
+const requestedNames = new Map<string, string>();
 for (const flag of flags) {
   const separator = flag.indexOf("=");
-  const name = separator === -1 ? flag : flag.slice(0, separator);
-  const role = roleByFlag[name];
-  if (!role) throw new Error(`Opción desconocida: ${name}`);
-  for (const email of flag.slice(separator + 1).split(",")) {
-    const normalized = email.trim().toLowerCase();
+  const flagName = separator === -1 ? flag : flag.slice(0, separator);
+  const role = roleByFlag[flagName];
+  if (!role) throw new Error(`Opción desconocida: ${flagName}`);
+  for (const entry of flag.slice(separator + 1).split(",")) {
+    // "Nombre:correo" o simplemente "correo".
+    const colon = entry.lastIndexOf(":");
+    const displayName = colon === -1 ? "" : entry.slice(0, colon).trim();
+    const normalized = (colon === -1 ? entry : entry.slice(colon + 1)).trim().toLowerCase();
     if (!normalized) continue;
     const previous = requestedRoles.get(normalized);
     if (previous && previous !== role) {
       throw new Error(`${normalized} aparece con dos roles distintos: ${previous} y ${role}.`);
     }
     requestedRoles.set(normalized, role);
+    if (displayName) requestedNames.set(normalized, displayName);
   }
 }
 
@@ -62,7 +73,7 @@ const rows = users.map((user) => {
   return {
     uid: user.localId,
     email,
-    displayName: user.displayName?.trim() || email.split("@")[0],
+    displayName: requestedNames.get(email) || user.displayName?.trim() || email.split("@")[0],
     role: requestedRoles.get(email) ?? ("viewer" as Role),
     disabled: user.disabled === true,
   };
@@ -99,7 +110,14 @@ try {
 }
 
 for (const row of rows) {
-  console.log(`${row.role.padEnd(12)} ${row.email}${row.disabled ? " (deshabilitado)" : ""}`);
+  console.log(
+    `${row.role.padEnd(12)} ${row.displayName.padEnd(10)} ${row.email}`
+    + `${row.disabled ? " (deshabilitado)" : ""}`,
+  );
+}
+const withoutRole = rows.filter((row) => !requestedRoles.has(row.email));
+if (withoutRole.length > 0) {
+  console.log(`\nSin rol asignado, quedan como viewer: ${withoutRole.map((r) => r.email).join(", ")}`);
 }
 console.log(`\n${rows.length} usuarios enlazados con app_user.`);
 
