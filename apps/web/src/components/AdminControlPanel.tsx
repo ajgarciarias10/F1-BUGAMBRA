@@ -44,6 +44,7 @@ export function AdminControlPanel() {
 
       setMigrateMsg("Actualizando split_1...");
       for (const d of driversData) {
+        if (!d.s1Team) continue;
         const ref = doc(db, `splits/split_1/equipos/${d.s1Team}/pilotos`, `piloto_${d.name.toLowerCase()}`);
         const snap = await getDoc(ref);
         if (snap.exists()) {
