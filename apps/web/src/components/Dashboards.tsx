@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { SharedDashboardView, TotalStandings } from "./SharedDashboard";
@@ -8,19 +8,72 @@ import { SuggestionsView } from "./SuggestionsView";
 import { AlbumView } from "./PublicHome";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MobileBottomTabs } from "./MobileBottomTabs";
+import { AdminDashboard } from "./AdminDashboard";
+import { Shield, ChevronLeft } from "lucide-react";
 
-// ── SHARED NAV HEADER ─────────────────────────────────────────────────────────
+// ── ADMIN OVERLAY ──────────────────────────────────────────────────────────────
+// Overlay que permite a usuarios con rol admin acceder al panel de admin
+// sin salir de su dashboard (jeque/piloto).
 
-function AppNav({ title, tabs, activeTab, onTab }: {
+interface AdminOverlayProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function AdminOverlay({ isOpen, onClose }: AdminOverlayProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[99] flex flex-col bg-[#0a0a0a] text-white">
+      <header className="flex items-center justify-between h-14 px-4 md:px-8 border-b border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl z-10">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onClose}
+            className="p-2 text-white/40 hover:text-white transition-colors"
+            aria-label="Cerrar panel admin"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-2.5">
+            <span className="w-0.5 h-5 bg-[#e10600]" />
+            <span className="font-black tracking-[0.15em] uppercase text-sm text-white">F1 Bugambra</span>
+            <span className="px-2 py-0.5 text-[9px] font-mono uppercase tracking-widest bg-[#e10600]/20 text-[#e10600] border border-[#e10600]/30 rounded-sm">
+              ADMIN
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-[10px] font-bold tracking-[0.2em] uppercase bg-white/5 hover:bg-white/10 border border-white/10 rounded-sm transition-colors"
+          >
+            Volver a mi dashboard
+          </button>
+        </div>
+      </header>
+      <div className="flex-1 overflow-auto pt-4 pb-28">
+        <AdminDashboard />
+      </div>
+    </div>
+  );
+}
+
+// ── APP NAV WITH ADMIN TOGGLE ──────────────────────────────────────────────────
+
+interface AppNavProps {
   title: string;
   tabs: { id: string; label: string }[];
   activeTab: string;
   onTab: (id: string) => void;
-}) {
+  isAdmin: boolean;
+  onToggleAdmin: () => void;
+  showAdminBadge?: boolean;
+}
+
+function AppNav({ title, tabs, activeTab, onTab, isAdmin, onToggleAdmin, showAdminBadge = true }: AppNavProps) {
   const { userData } = useAuth();
   return (
     <header className="fixed top-0 inset-x-0 z-50 bg-[#0a0a0a]/90 backdrop-blur-xl border-b border-white/[0.06] safe-top">
-      {/* Top bar */}
       <div className="flex items-center justify-between h-14 px-6 md:px-10">
         <div className="flex items-center gap-3">
           <Link to="/" className="flex items-center gap-2.5 group">
@@ -30,11 +83,21 @@ function AppNav({ title, tabs, activeTab, onTab }: {
           <span className="hidden md:block w-px h-4 bg-white/10" />
           <span className="hidden md:block text-[10px] font-mono tracking-[0.3em] text-white/30 uppercase">{title}</span>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-2">
             <span className="text-[10px] font-mono tracking-[0.25em] text-white/25 uppercase">{userData?.rol}</span>
             <span className="text-[10px] font-bold text-white/70">{userData?.nombre}</span>
           </div>
+          {isAdmin && showAdminBadge && (
+            <button
+              onClick={onToggleAdmin}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-[0.2em] uppercase bg-[#e10600]/20 hover:bg-[#e10600]/30 border border-[#e10600]/30 text-[#e10600] rounded-sm transition-colors"
+              aria-label="Abrir panel de administración"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Admin</span>
+            </button>
+          )}
           <button
             onClick={() => auth.signOut()}
             className="text-[10px] font-bold tracking-[0.3em] uppercase text-white/30 hover:text-[#e10600] transition-colors"
@@ -43,7 +106,6 @@ function AppNav({ title, tabs, activeTab, onTab }: {
           </button>
         </div>
       </div>
-      {/* Tab bar */}
       <div className="hidden md:flex border-t border-white/[0.04] px-6 md:px-10 overflow-x-auto">
         {tabs.map(t => (
           <button
@@ -60,22 +122,25 @@ function AppNav({ title, tabs, activeTab, onTab }: {
   );
 }
 
-// ── JEQUE DASHBOARD ───────────────────────────────────────────────────────────
+// ── BASE DASHBOARD ─────────────────────────────────────────────────────────────
 
-export function JequeDashboard() {
+interface BaseDashboardProps {
+  role: "jeque" | "piloto";
+  tabs: { id: string; label: string }[];
+  canViewBudget: boolean;
+  renderExtraTabs?: () => React.ReactNode;
+}
+
+function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashboardProps) {
   const { userData } = useAuth();
   const { splits } = useSplits();
   const { usuarios } = useUsuarios();
   const [activeTab, setActiveTab] = useState("championship");
+  const [adminOpen, setAdminOpen] = useState(false);
 
-  const tabs = [
-    { id: "championship", label: "Campeonato" },
-    { id: "album",        label: "Álbum de Pilotos" },
-    { id: "profile",      label: "Mi Perfil" },
-    { id: "suggestions",  label: "Buzón de Mejoras" },
-  ];
+  const isAdmin = userData?.rol === "admin" || userData?.email === "ajgarciarias@gmail.com" || userData?.email === "admin@f1bugambra.com";
 
-  const title = tabs.find(t => t.id === activeTab)?.label || "Jeque";
+  const title = tabs.find(t => t.id === activeTab)?.label || role;
 
   const getPilotPhoto = (pilotoId: string) => {
     const u = (usuarios || []).find((u: any) => u.uid === pilotoId || u.piloto_id === pilotoId);
@@ -95,9 +160,17 @@ export function JequeDashboard() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
-      <AppNav title={title} tabs={tabs} activeTab={activeTab} onTab={setActiveTab} />
+      <AppNav
+        title={title}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTab={setActiveTab}
+        isAdmin={isAdmin}
+        onToggleAdmin={() => setAdminOpen(true)}
+      />
+      <AdminOverlay isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
       <main className="pt-24 md:pt-[7.5rem] max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10 pb-28 md:pb-10">
-        {activeTab === "championship" && <SharedDashboardView canViewBudget={true} escuderiaId={userData?.escuderia_id} />}
+        {activeTab === "championship" && <SharedDashboardView canViewBudget={canViewBudget} escuderiaId={userData?.escuderia_id} />}
         {activeTab === "album" && (
           <AlbumView
             validSplits={validSplits}
@@ -109,19 +182,34 @@ export function JequeDashboard() {
         )}
         {activeTab === "profile" && <ProfileView />}
         {activeTab === "suggestions" && <SuggestionsView isAdmin={false} />}
+        {renderExtraTabs && activeTab === "extra" && renderExtraTabs()}
       </main>
     </div>
+  );
+}
+
+// ── JEQUE DASHBOARD ───────────────────────────────────────────────────────────
+
+export function JequeDashboard() {
+  const tabs = [
+    { id: "championship", label: "Campeonato" },
+    { id: "album",        label: "Álbum de Pilotos" },
+    { id: "profile",      label: "Mi Perfil" },
+    { id: "suggestions",  label: "Buzón de Mejoras" },
+  ];
+
+  return (
+    <BaseDashboard
+      role="jeque"
+      tabs={tabs}
+      canViewBudget={true}
+    />
   );
 }
 
 // ── PILOTO DASHBOARD ──────────────────────────────────────────────────────────
 
 export function PilotoDashboard() {
-  const { userData } = useAuth();
-  const { splits } = useSplits();
-  const { usuarios } = useUsuarios();
-  const [activeTab, setActiveTab] = useState("championship");
-
   const tabs = [
     { id: "championship", label: "Campeonato" },
     { id: "album",        label: "Álbum de Pilotos" },
@@ -129,42 +217,12 @@ export function PilotoDashboard() {
     { id: "suggestions",  label: "Buzón de Mejoras" },
   ];
 
-  const title = tabs.find(t => t.id === activeTab)?.label || "Piloto";
-
-  const getPilotPhoto = (pilotoId: string) => {
-    const u = (usuarios || []).find((u: any) => u.uid === pilotoId || u.piloto_id === pilotoId);
-    if ((u as any)?.foto_url) return (u as any).foto_url;
-    for (const s of splits || []) {
-      const p = (s.roster || []).find((r: any) => r.pilotoId === pilotoId);
-      if (p?.foto_url) return p.foto_url;
-    }
-    return "";
-  };
-
-  const allSplits = (splits || []).filter((s: any) => s.id !== "global");
-  const validSplits = (() => { const a = allSplits.filter((s: any) => s.activo); return a.length > 0 ? a : allSplits; })();
-  const [albumSplitId, setAlbumSplitId] = useState<string>("");
-  const resolvedAlbumSplitId = albumSplitId || validSplits[validSplits.length - 1]?.id || "";
-  const albumSplit = validSplits.find((s: any) => s.id === resolvedAlbumSplitId) || validSplits[validSplits.length - 1];
-
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
-      <AppNav title={title} tabs={tabs} activeTab={activeTab} onTab={setActiveTab} />
-      <main className="pt-24 md:pt-[7.5rem] max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10 pb-28 md:pb-10">
-        {activeTab === "championship" && <SharedDashboardView canViewBudget={false} escuderiaId={userData?.escuderia_id} />}
-        {activeTab === "album" && (
-          <AlbumView
-            validSplits={validSplits}
-            currentSplitId={resolvedAlbumSplitId}
-            onSelectSplit={(id: string) => setAlbumSplitId(id)}
-            currentSplit={albumSplit}
-            getPilotPhoto={getPilotPhoto}
-          />
-        )}
-        {activeTab === "profile" && <ProfileView />}
-        {activeTab === "suggestions" && <SuggestionsView isAdmin={false} />}
-      </main>
-    </div>
+    <BaseDashboard
+      role="piloto"
+      tabs={tabs}
+      canViewBudget={false}
+    />
   );
 }
 
