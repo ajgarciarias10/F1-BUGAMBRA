@@ -1,6 +1,141 @@
-import { AlertCircle, CheckCircle2, FileSpreadsheet } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, CheckCircle2, FileSpreadsheet, Database, Loader2 } from "lucide-react";
+import { db } from "../services/firebase";
+import { doc, writeBatch, getDoc } from "firebase/firestore";
 
 export function AdminControlPanel() {
+  const [migrating, setMigrating] = useState(false);
+  const [migrateMsg, setMigrateMsg] = useState("");
+
+  const runMigration = async () => {
+    if (!confirm("¿Ejecutar migración de splits? Esto actualizará:\n- split_1: puntos finales (Roses 185 pts constructores)\n- split_2: puntos finales incluyendo Bélgica\n- split_3: activar con nuevos fichajes (Moles/Pabliyo→Zenith, Jota/Aparicio→Roses, Pinilla→Alfa)\n\n¿Continuar?")) return;
+
+    setMigrating(true);
+    setMigrateMsg("Preparando migración...");
+
+    try {
+      // Data extracted from Excel 2026 sheet
+      const driversData = [
+        { name: "Jose", s1: 155, s1Team: "zenith", s2: 87, s2Team: "zenith", s3Team: "" },
+        { name: "Mimic", s1: 145, s1Team: "alfa_romero", s2: 81, s2Team: "zenith", s3Team: "" },
+        { name: "Jota", s1: 132, s1Team: "roses", s2: 70, s2Team: "alfa_romero", s3Team: "roses" },
+        { name: "Carlos", s1: 54, s1Team: "zenith", s2: 54, s2Team: "zenith", s3Team: "" },
+        { name: "Moles", s1: 95, s1Team: "zenith", s2: 52, s2Team: "alfa_romero", s3Team: "zenith" },
+        { name: "Pabliyo", s1: 75, s1Team: "roses", s2: 49, s2Team: "roses", s3Team: "zenith" },
+        { name: "Fabi", s1: 110, s1Team: "roses", s2: 43, s2Team: "roses", s3Team: "" },
+        { name: "Toni", s1: 49, s1Team: "alfa_romero", s2: 16, s2Team: "roses", s3Team: "" },
+        { name: "Pinilla", s1: 31, s1Team: "alfa_romero", s2: 13, s2Team: "alfa_romero", s3Team: "alfa_romero" },
+        { name: "Samu", s1: 32, s1Team: "roses", s2: 10, s2Team: "roses", s3Team: "" },
+        { name: "Aparicio", s1: 3, s1Team: "zenith", s2: 3, s2Team: "alfa_romero", s3Team: "roses" },
+        { name: "Mesa", s1: 3, s1Team: "zenith", s2: 3, s2Team: "zenith", s3Team: "" },
+      ];
+
+      const teamsData = [
+        { name: "zenith", s1: 130, s2: 189 },
+        { name: "alfa_romero", s1: 132, s2: 130 },
+        { name: "roses", s1: 185, s2: 118 },
+      ];
+
+      const split1Races = ["Australia", "China", "Japón", "Arabia Saudí", "Miami", "Barein"];
+      const split2Races = ["Canadá", "Mónaco", "Barcelona", "Austria", "Gran Bretaña", "Bélgica"];
+      const split3Races = ["Hungría", "Paises Bajos", "Italia", "España", "Azerbayán", "Singapur"];
+
+      const batch = writeBatch(db);
+
+      setMigrateMsg("Actualizando split_1...");
+      for (const d of driversData) {
+        const ref = doc(db, `splits/split_1/equipos/${d.s1Team}/pilotos`, `piloto_${d.name.toLowerCase()}`);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          batch.update(ref, { puntos_piloto: d.s1 });
+        }
+      }
+      for (const t of teamsData) {
+        const ref = doc(db, `splits/split_1/equipos`, t.name);
+        batch.update(ref, { puntos_constructores: t.s1 });
+      }
+      batch.update(doc(db, "splits/split_1"), { activo: false, completado: true, fichajes_abiertos: false });
+
+      setMigrateMsg("Actualizando split_2...");
+      for (const d of driversData) {
+        const ref = doc(db, `splits/split_2/equipos/${d.s2Team}/pilotos`, `piloto_${d.name.toLowerCase()}`);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          batch.update(ref, { puntos_piloto: d.s2 });
+        }
+      }
+      for (const t of teamsData) {
+        const ref = doc(db, `splits/split_2/equipos`, t.name);
+        batch.update(ref, { puntos_constructores: t.s2 });
+      }
+      batch.update(doc(db, "splits/split_2"), { 
+        activo: false, 
+        completado: true, 
+        fichajes_abiertos: false 
+      });
+
+      setMigrateMsg("Configurando split_3...");
+      const s3TeamDrivers: Record<string, typeof driversData> = {};
+      for (const d of driversData) {
+        if (!d.s3Team) continue;
+        if (!s3TeamDrivers[d.s3Team]) s3TeamDrivers[d.s3Team] = [];
+        s3TeamDrivers[d.s3Team].push(d);
+      }
+
+      for (const [teamId, drivers] of Object.entries(s3TeamDrivers)) {
+        batch.set(doc(db, `splits/split_3/equipos`, teamId), {
+          nombre: teamId === "zenith" ? "Zenith" : teamId === "alfa_romero" ? "Alfa Romero" : "Roses",
+          presupuesto: 0,
+          puntos_constructores: 0,
+          jeque_id: "",
+        }, { merge: true });
+
+        for (const d of drivers) {
+          batch.set(doc(db, `splits/split_3/equipos/${teamId}/pilotos`, `piloto_${d.name.toLowerCase()}`), {
+            pilotoId: `piloto_${d.name.toLowerCase()}`,
+            nombre: d.name,
+            equipoId: teamId,
+            puntos_piloto: 0,
+            rating_piloto: d.name === "Jose" ? 95 : d.name === "Mimic" ? 95 : d.name === "Jota" ? 96 : 
+                           d.name === "Carlos" ? 70 : d.name === "Moles" ? 84 : d.name === "Pabliyo" ? 67 :
+                           d.name === "Fabi" ? 96 : d.name === "Toni" ? 82 : d.name === "Pinilla" ? 65 :
+                           d.name === "Samu" ? 71 : d.name === "Aparicio" ? 50 : d.name === "Mesa" ? 70 : 70,
+            victorias: 0, podios: 0, poles: 0, dnfs: 0, carreras_limpias: 0,
+            precio_compra_split: 0, mantener_actual: 0, clausula_actual: 0, precio_carrera_anterior: 0,
+            tipo_fichaje: "mantener", congelado: false,
+          });
+        }
+      }
+
+      batch.update(doc(db, "splits/split_3"), { 
+        activo: true, 
+        completado: false, 
+        fichajes_abiertos: true 
+      });
+
+      for (const race of split3Races) {
+        const raceId = race.toLowerCase().replace(/[^a-z0-9]/g, "");
+        batch.set(doc(db, `splits/split_3/circuitos`, raceId), {
+          nombre: race,
+          completado: false,
+          acta_cerrada: false,
+          economia_procesada: false,
+          resultados: [],
+          numero_carrera: split1Races.length + split2Races.length + split3Races.indexOf(race) + 1,
+        });
+      }
+
+      setMigrateMsg("Escribiendo en Firestore...");
+      await batch.commit();
+      setMigrateMsg("✅ Migración completada correctamente");
+    } catch (err: any) {
+      setMigrateMsg("❌ Error: " + err.message);
+      console.error(err);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <section className="bg-white/[0.03] border border-white/10 p-5 relative overflow-hidden">
       <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
@@ -46,6 +181,29 @@ export function AdminControlPanel() {
             <Step label="3" text="Previsualizar diferencias" />
             <Step label="4" text="Corregir Postgres con revisión" />
           </div>
+        </div>
+
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-sm p-4">
+          <h3 className="text-xs font-black uppercase tracking-widest text-emerald-300 mb-3 flex items-center gap-2">
+            <Database className="w-4 h-4" /> Migración automática splits 1→2→3
+          </h3>
+          <p className="text-xs text-emerald-300/70 mb-4">
+            Cierra split_1 y split_2 con puntos finales del Excel, activa split_3 con nuevos fichajes.
+            Requiere sesión de administrador.
+          </p>
+          <button
+            onClick={runMigration}
+            disabled={migrating}
+            className="w-full sm:w-auto px-4 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-black text-[10px] uppercase tracking-widest rounded-sm flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {migrating && <Loader2 className="w-4 h-4 animate-spin" />}
+            {migrating ? "Ejecutando..." : "Ejecutar migración splits"}
+          </button>
+          {migrateMsg && (
+            <p className={`mt-3 text-xs font-mono ${migrateMsg.includes("Error") ? "text-red-400" : "text-emerald-300"}`}>
+              {migrateMsg}
+            </p>
+          )}
         </div>
       </div>
     </section>
