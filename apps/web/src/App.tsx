@@ -9,8 +9,8 @@ import { PublicHome } from "./components/PublicHome";
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, userData, loading } = useAuth();
   if (loading) return <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-white/40 text-xs tracking-[0.3em] uppercase font-mono">Cargando</div>;
-  if (!user) return <Navigate to="/login" replace />;
-  if (allowedRoles && userData && !allowedRoles.includes(userData.rol || "")) return <Navigate to="/" replace />;
+  if (!user || !userData) return <Navigate to="/login" replace />;
+  if (allowedRoles && !allowedRoles.includes(userData.rol || "")) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 

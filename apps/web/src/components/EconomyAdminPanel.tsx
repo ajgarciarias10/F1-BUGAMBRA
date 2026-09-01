@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment } from "firebase/firestore";
 import { db } from "../services/firebase";
 import {
@@ -120,6 +120,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const [savingBudget, setSavingBudget] = useState<string | null>(null);
   const [processLog, setProcessLog] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"precios" | "rendimiento">("precios");
+  const loadRequestRef = useRef(0);
 
   // Modal de fichaje
   const [fichajeModal, setFichajeModal] = useState<PilotRow | null>(null);
@@ -131,6 +132,12 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   useEffect(() => {
     if (selectedSplitId) loadData(selectedSplitId);
   }, [selectedSplitId]);
+
+  useEffect(() => {
+    if (!activeSplits.some((split: any) => split.id === selectedSplitId)) {
+      setSelectedSplitId(activeSplits[0]?.id ?? "");
+    }
+  }, [splits, selectedSplitId]);
 
   // ─── HELPERS DE PRESUPUESTO ──────────────────────────────────────────────────
 
@@ -161,7 +168,11 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   // ─── CARGA DE DATOS ──────────────────────────────────────────────────────────
 
   async function loadData(splitId: string) {
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
+    setCircuits([]);
+    setTeams([]);
+    setPilots([]);
     try {
       const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
       const rawCircs = circSnap.docs.map(d => {
@@ -178,7 +189,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         if (a.ts !== b.ts) return a.ts - b.ts;
         return a.id.localeCompare(b.id);
       });
-      setCircuits(sortedCircs.map(c => ({ id: c.id, nombre: c.nombre, ts: c.ts, completado: c.completado, economia_procesada: !!c.economia_procesada })));
+      const nextCircuits = sortedCircs.map(c => ({ id: c.id, nombre: c.nombre, ts: c.ts, completado: c.completado, economia_procesada: !!c.economia_procesada }));
 
       const teamsSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
       const newTeams: TeamRow[] = [];
@@ -334,10 +345,12 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         }
       }
 
+      if (requestId !== loadRequestRef.current) return;
+      setCircuits(nextCircuits);
       setTeams(newTeams.sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setPilots(allPilots.sort((a, b) => a.equipoNombre.localeCompare(b.equipoNombre) || a.nombre.localeCompare(b.nombre)));
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }
 

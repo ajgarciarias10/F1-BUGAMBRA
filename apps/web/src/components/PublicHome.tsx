@@ -36,8 +36,14 @@ export function PublicHome() {
     return visible.length > 0 ? visible : all;
   }, [splits]);
 
-  const currentSplitId = activeSplitId || validSplits[validSplits.length - 1]?.id || "";
-  const currentSplit = validSplits.find(s => s.id === currentSplitId);
+  const latestSplitId = validSplits[validSplits.length - 1]?.id || "";
+  const selectedRealSplitId = validSplits.some(split => split.id === activeSplitId)
+    ? activeSplitId
+    : latestSplitId;
+  const currentSplitId = activeTab === "clasificacion" && activeSplitId === "general"
+    ? "general"
+    : selectedRealSplitId;
+  const currentSplit = validSplits.find(split => split.id === selectedRealSplitId);
 
   const nextRace = useMemo(() => {
     return [...(currentSplit?.circuitos || [])]
@@ -195,8 +201,9 @@ export function PublicHome() {
             )}
             {activeTab === "equipos" && (
               <TeamsView
+                key={selectedRealSplitId}
                 validSplits={validSplits}
-                currentSplitId={currentSplitId}
+                currentSplitId={selectedRealSplitId}
                 onSelectSplit={setActiveSplitId}
                 currentSplit={currentSplit}
                 getPilotPhoto={getPilotPhoto}

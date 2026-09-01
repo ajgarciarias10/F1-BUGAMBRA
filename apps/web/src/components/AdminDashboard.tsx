@@ -700,7 +700,9 @@ export function AdminDashboard() {
       onConfirm: async () => {
         setLoading(true);
         try {
-          const sortedSplits = [...splits].sort((a, b) => a.id.localeCompare(b.id));
+          const sortedSplits = splits
+            .filter(split => split.tipo !== "individual")
+            .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0) || a.id.localeCompare(b.id));
           const currentIndex = sortedSplits.findIndex(s => s.id === splitId);
           if (currentIndex <= 0) {
             setMsg("Error: No se puede inicializar el Split 1 desde un split anterior.");
@@ -743,10 +745,12 @@ export function AdminDashboard() {
             );
             for (const prevPd of prevPilotosSnap.docs) {
               const r = prevPd.data();
+              if (r.participa_hasta != null) continue;
               const pid = prevPd.id;
               const inheritedRating = r.rating_piloto ?? 70;
               const precioCompra = r.precio_compra ?? 10;
               const nextEquipoId = r.pending_equipoId ?? r.equipoId;
+              if (!nextEquipoId || nextEquipoId === "agente_libre") continue;
               const pendingPrecio = r.pending_precio_compra;
               const isMantener = r.pending_tipo_fichaje === "mantener";
               // Mantener: descuenta la cuota de renovación del valor del jugador
@@ -780,6 +784,8 @@ export function AdminDashboard() {
                 equipoId:               nextEquipoId,
                 rating_piloto:          inheritedRating,
                 rating_base:            inheritedRating,
+                participa_desde:        1,
+                participa_hasta:        null,
                 tipo_fichaje:           r.pending_tipo_fichaje ?? r.tipo_fichaje,
                 puntos_piloto: 0, victorias: 0, podios: 0,
                 poles: 0, dnfs: 0, carreras_limpias: 0,

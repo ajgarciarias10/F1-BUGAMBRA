@@ -26,6 +26,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
   const pilotsByTeam = useMemo(() => {
     const result: Record<string, any[]> = {};
     for (const pilot of currentSplit?.roster || []) {
+      if (pilot.participa_hasta != null) continue;
       if (!pilot.equipoId || pilot.equipoId === "agente_libre" || pilot.equipoId === "individual") continue;
       (result[pilot.equipoId] ??= []).push(pilot);
     }

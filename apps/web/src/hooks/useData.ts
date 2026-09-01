@@ -114,7 +114,7 @@ export function useSplits() {
           })) as Equipo[];
 
           // Leer pilotos desde splits/{sid}/equipos/{equipoId}/pilotos
-          const roster: PilotInRoster[] = [];
+          const rosterByPilot = new Map<string, PilotInRoster>();
           for (const equipoDoc of equipSnap.docs) {
             try {
               const pilotosSnap = await getDocs(
@@ -123,12 +123,20 @@ export function useSplits() {
               for (const pd of pilotosSnap.docs) {
                 const entry = pd.data() as RosterEntry;
                 const piloto = pilotMap[pd.id];
-                roster.push({
+                const normalizedEntry: PilotInRoster = {
                   ...entry,
                   pilotoId: pd.id,
+                  // The Firestore path is authoritative if a stale copied field disagrees.
+                  equipoId: equipoDoc.id,
                   nombre: piloto?.nombre ?? (entry as any).nombre ?? pd.id,
                   foto_url: piloto?.foto_url ?? (entry as any).foto_url,
-                });
+                };
+                const existing = rosterByPilot.get(pd.id);
+                const existingEnded = existing?.participa_hasta != null;
+                const candidateEnded = normalizedEntry.participa_hasta != null;
+                if (!existing || (existingEnded && !candidateEnded)) {
+                  rosterByPilot.set(pd.id, normalizedEntry);
+                }
               }
             } catch {
               // Equipo individual inaccesible, continuar
@@ -138,10 +146,10 @@ export function useSplits() {
           // Individual seasons (such as Origins) store participants directly
           // below the split because no team exists.
           for (const pd of flatRosterSnap.docs) {
-            if (roster.some(entry => entry.pilotoId === pd.id)) continue;
+            if (rosterByPilot.has(pd.id)) continue;
             const entry = pd.data() as RosterEntry;
             const piloto = pilotMap[pd.id];
-            roster.push({
+            rosterByPilot.set(pd.id, {
               ...entry,
               pilotoId: pd.id,
               equipoId: entry.equipoId || "individual",
@@ -149,6 +157,8 @@ export function useSplits() {
               foto_url: piloto?.foto_url ?? (entry as any).foto_url,
             });
           }
+
+          const roster = [...rosterByPilot.values()];
 
           result.push({
             id: sid,

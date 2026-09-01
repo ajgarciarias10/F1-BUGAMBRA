@@ -158,8 +158,11 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
     return visible.length > 0 ? visible : allSplits;
   })();
   const [teamsSplitId, setTeamsSplitId] = useState<string>("");
-  const resolvedTeamsSplitId = teamsSplitId || validSplits[validSplits.length - 1]?.id || "";
-  const teamsSplit = validSplits.find((s: any) => s.id === resolvedTeamsSplitId) || validSplits[validSplits.length - 1];
+  const latestTeamsSplitId = validSplits[validSplits.length - 1]?.id || "";
+  const resolvedTeamsSplitId = validSplits.some((split: any) => split.id === teamsSplitId)
+    ? teamsSplitId
+    : latestTeamsSplitId;
+  const teamsSplit = validSplits.find((split: any) => split.id === resolvedTeamsSplitId);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
@@ -176,6 +179,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
         {activeTab === "championship" && <SharedDashboardView canViewBudget={canViewBudget} escuderiaId={userData?.escuderia_id} />}
         {activeTab === "equipos" && (
           <TeamsView
+            key={resolvedTeamsSplitId}
             validSplits={validSplits}
             currentSplitId={resolvedTeamsSplitId}
             onSelectSplit={(id: string) => setTeamsSplitId(id)}

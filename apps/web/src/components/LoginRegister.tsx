@@ -1,10 +1,59 @@
 import React, { useState } from "react";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import {
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  linkWithCredential,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  type AuthCredential,
+  type User,
+} from "firebase/auth";
+import { collection, doc, getDoc, getDocs, runTransaction } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
 import { Navigate, Link } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+
+interface PendingGoogleLink {
+  credential: AuthCredential;
+}
+
+function emailClaimId(email: string) {
+  return email;
+}
+
+async function provisionProfile(firebaseUser: User, normalizedEmail: string) {
+  const authEmail = firebaseUser.email || normalizedEmail;
+  const profileRef = doc(db, "usuarios", firebaseUser.uid);
+  const claimRef = doc(db, "auth_emails", emailClaimId(authEmail));
+  await runTransaction(db, async transaction => {
+    const [profileSnap, claimSnap] = await Promise.all([
+      transaction.get(profileRef),
+      transaction.get(claimRef),
+    ]);
+    if (claimSnap.exists() && claimSnap.data().uid !== firebaseUser.uid) {
+      throw new Error("Ya existe una cuenta registrada con este correo.");
+    }
+    if (!profileSnap.exists()) {
+      transaction.set(profileRef, {
+        uid: firebaseUser.uid,
+        email: authEmail,
+        auth_email: authEmail,
+        rol: normalizedEmail === "ajgarciarias@gmail.com" ? "admin" : "usuario",
+        nombre: firebaseUser.displayName?.trim() || normalizedEmail.split("@")[0] || "Usuario",
+        foto_url: firebaseUser.photoURL || "",
+        escuderia_id: "",
+        piloto_id: "",
+      });
+    }
+    transaction.set(claimRef, {
+      uid: firebaseUser.uid,
+      email: authEmail,
+      auth_email: authEmail,
+    });
+  });
+}
 
 export function LoginRegister() {
   const { user, userData } = useAuth();
@@ -15,8 +64,9 @@ export function LoginRegister() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pendingGoogleLink, setPendingGoogleLink] = useState<PendingGoogleLink | null>(null);
 
-  if (user && userData) {
+  if (user && userData && !(loading && pendingGoogleLink)) {
     if (userData.rol === "admin") return <Navigate to="/admin" replace />;
     if (userData.rol === "jeque") return <Navigate to="/jeque" replace />;
     if (userData.rol === "piloto") return <Navigate to="/piloto" replace />;
@@ -30,22 +80,27 @@ export function LoginRegister() {
     setSuccess("");
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
+        const normalizedEmail = email.trim().toLowerCase();
+        const credential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+        if (pendingGoogleLink) {
+          try {
+            await provisionProfile(credential.user, normalizedEmail);
+            await linkWithCredential(credential.user, pendingGoogleLink.credential);
+          } catch (linkError) {
+            await auth.signOut();
+            throw linkError;
+          }
+          setPendingGoogleLink(null);
+          setSuccess("Google se ha vinculado a tu cuenta existente.");
+        } else {
+          await provisionProfile(credential.user, normalizedEmail);
+        }
       } else {
         if (password !== confirmPassword) throw new Error("Las contraseñas no coinciden.");
         const cred = await createUserWithEmailAndPassword(auth, email, password);
-        const newUid = cred.user.uid;
         try {
           const normalizedEmail = email.trim().toLowerCase();
-          await setDoc(doc(db, "usuarios", newUid), {
-            uid: newUid,
-            email: normalizedEmail,
-            rol: normalizedEmail === "ajgarciarias@gmail.com" ? "admin" : "usuario",
-            nombre: normalizedEmail.split("@")[0] || "Usuario",
-            foto_url: "",
-            escuderia_id: "",
-            piloto_id: "",
-          });
+          await provisionProfile(cred.user, normalizedEmail);
           await auth.signOut();
           setIsLogin(true);
           setSuccess("Registro completado. Un administrador podrá inscribirte como piloto en una temporada.");
@@ -56,7 +111,67 @@ export function LoginRegister() {
         }
       }
     } catch (err: any) {
+      if (isLogin && auth.currentUser) await auth.signOut();
       setError(err.message || "Error al autenticar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      const normalizedEmail = result.user.email?.trim().toLowerCase();
+      if (!normalizedEmail) throw new Error("Google no devolvió un correo válido.");
+
+      const ownProfile = await getDoc(doc(db, "usuarios", result.user.uid));
+      if (ownProfile.exists()) {
+        await provisionProfile(result.user, normalizedEmail);
+        return;
+      }
+
+      const existingProfiles = await getDocs(collection(db, "usuarios"));
+      const existingProfile = existingProfiles.docs.find(profile =>
+        String(profile.data().email || "").trim().toLowerCase() === normalizedEmail
+      );
+
+      if (existingProfile && existingProfile.id !== result.user.uid) {
+        await auth.signOut();
+        setError("Firebase ha creado dos identidades para el mismo correo. Activa el modo de una cuenta por email o solicita al administrador que las unifique.");
+        return;
+      }
+
+      await provisionProfile(result.user, normalizedEmail);
+    } catch (err: any) {
+      if (err.code === "auth/account-exists-with-different-credential") {
+        const googleCredential = GoogleAuthProvider.credentialFromError(err);
+        const existingEmail = String(err.customData?.email || "").trim().toLowerCase();
+        if (googleCredential && existingEmail) {
+          setPendingGoogleLink({ credential: googleCredential });
+          setEmail(existingEmail);
+          setPassword("");
+          setIsLogin(true);
+          setError("Este Gmail ya tiene cuenta. Introduce su contraseña y pulsa Entrar para vincular Google sin perder tus datos.");
+          return;
+        }
+      }
+      if (err.code === "auth/operation-not-allowed") {
+        setError("El acceso con Google todavía no está habilitado en Firebase Authentication.");
+        return;
+      }
+      if (err.code === "auth/unauthorized-domain") {
+        setError("Este dominio debe añadirse a los dominios autorizados de Firebase Authentication.");
+        return;
+      }
+      if (err.code !== "auth/popup-closed-by-user") {
+        if (auth.currentUser) await auth.signOut();
+        setError(err.message || "Error al acceder con Google");
+      }
     } finally {
       setLoading(false);
     }
@@ -120,7 +235,7 @@ export function LoginRegister() {
               Acceder
             </button>
             <button
-              onClick={() => setIsLogin(false)}
+              onClick={() => { setIsLogin(false); setPendingGoogleLink(null); }}
               className={`pb-3 text-xs font-bold tracking-[0.25em] uppercase transition-all border-b-2 -mb-px ${!isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
             >
               Registrarse
@@ -138,6 +253,26 @@ export function LoginRegister() {
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={handleGoogleAuth}
+            disabled={loading}
+            className="w-full border border-white/15 bg-white/[0.04] text-white text-xs font-bold tracking-[0.18em] uppercase py-3.5 hover:bg-white/[0.08] hover:border-white/30 transition-colors disabled:opacity-40 flex items-center justify-center gap-3"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[12px] font-black normal-case text-[#4285f4]">G</span>
+            )}
+            Continuar con Google
+          </button>
+
+          <div className="my-7 flex items-center gap-3">
+            <span className="h-px flex-1 bg-white/[0.08]" />
+            <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-white/20">o con correo</span>
+            <span className="h-px flex-1 bg-white/[0.08]" />
+          </div>
+
           <form onSubmit={handleAuth} className="space-y-6">
             <div>
               <label className="block text-[10px] font-mono tracking-[0.3em] text-white/40 uppercase mb-2">Correo</label>
@@ -147,7 +282,10 @@ export function LoginRegister() {
                 className="w-full bg-transparent border-b border-white/20 py-2.5 text-white text-sm placeholder-white/20 focus:outline-none focus:border-[#e10600] transition-colors"
                 placeholder="correo@ejemplo.com"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  if (pendingGoogleLink) setPendingGoogleLink(null);
+                }}
               />
             </div>
 
@@ -191,7 +329,7 @@ export function LoginRegister() {
               disabled={loading}
               className="w-full bg-[#e10600] text-white text-xs font-bold tracking-[0.3em] uppercase py-4 mt-4 hover:bg-red-700 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isLogin ? "Entrar" : "Crear cuenta")}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : pendingGoogleLink && isLogin ? "Entrar y vincular Google" : (isLogin ? "Entrar" : "Crear cuenta")}
             </button>
           </form>
 

@@ -102,7 +102,10 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     }
   }, [splits, activeSplitId]);
 
-  const currentSplit = useMemo(() => splits.find(s => s.id === activeSplitId) || splits[0], [activeSplitId, splits]);
+  const currentSplit = useMemo(
+    () => activeSplitId === "global" ? null : splits.find(split => split.id === activeSplitId) || null,
+    [activeSplitId, splits]
+  );
 
   const currentUserPilotId = useMemo(() => {
     if (!userData) return null;
@@ -117,7 +120,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     let teamId: string | null = null;
 
     if (currentUserPilotId) {
-      const rosterEntry = currentSplit.roster.find((p: any) => p.pilotoId === currentUserPilotId);
+      const rosterEntry = currentSplit.roster.find((p: any) => p.pilotoId === currentUserPilotId && p.participa_hasta == null);
       teamId = rosterEntry?.equipoId || null;
     }
 
@@ -130,7 +133,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     const equipo = (currentSplit.equipos || []).find((e: any) => e.id === teamId);
     if (!equipo) return null;
 
-    const pilotosDelEquipo = currentSplit.roster.filter((p: any) => p.equipoId === teamId);
+    const pilotosDelEquipo = currentSplit.roster.filter((p: any) => p.equipoId === teamId && p.participa_hasta == null);
     const pilotsVal = pilotosDelEquipo.reduce((sum: number, p: any) => sum + (p.clausula_actual || (p.rating_piloto ?? 0) * 0.5), 0);
 
     return {
@@ -141,7 +144,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
   const misPilotos = useMemo(() => {
     if (!currentSplit || !miEscuderia) return [];
-    return currentSplit.roster.filter((p: any) => p.equipoId === miEscuderia.id);
+    return currentSplit.roster.filter((p: any) => p.equipoId === miEscuderia.id && p.participa_hasta == null);
   }, [currentSplit, miEscuderia]);
 
 
