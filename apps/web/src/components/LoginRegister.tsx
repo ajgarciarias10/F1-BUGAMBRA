@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-import { doc, setDoc, getDocs, collection, runTransaction } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
 import { Navigate, Link } from "react-router";
 import { Loader2 } from "lucide-react";
@@ -12,32 +12,15 @@ export function LoginRegister() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("piloto");
-  const [selectedSlotId, setSelectedSlotId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [plantilla, setPlantilla] = useState<any[]>([]);
-
-  useEffect(() => {
-    getDocs(collection(db, "plantilla"))
-      .then(snap => setPlantilla(snap.docs.map(d => ({ ...d.data(), id: d.id }))))
-      .catch(() => {});
-  }, []);
-
-  const availableSlots = plantilla.filter(p => p.rol === role);
-
-  useEffect(() => {
-    if (availableSlots.length > 0 && availableSlots.findIndex(s => s.id === selectedSlotId) === -1) {
-      setSelectedSlotId(availableSlots[0].id);
-    }
-  }, [role, availableSlots, selectedSlotId]);
 
   if (user && userData) {
     if (userData.rol === "admin") return <Navigate to="/admin" replace />;
     if (userData.rol === "jeque") return <Navigate to="/jeque" replace />;
     if (userData.rol === "piloto") return <Navigate to="/piloto" replace />;
-    return <Navigate to="/" replace />;
+    return <Navigate to="/usuario" replace />;
   }
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -50,31 +33,22 @@ export function LoginRegister() {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
         if (password !== confirmPassword) throw new Error("Las contraseñas no coinciden.");
-        if (!selectedSlotId) throw new Error("Debes seleccionar un puesto disponible.");
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         const newUid = cred.user.uid;
         try {
-          await runTransaction(db, async (transaction) => {
-            const plantillaRef = doc(db, "plantilla", selectedSlotId);
-            const plantillaDoc = await transaction.get(plantillaRef);
-            if (!plantillaDoc.exists()) throw new Error("El puesto ya no está disponible.");
-            const pData = plantillaDoc.data();
-            const userData: any = {
-              uid: newUid, email, rol: role,
-              nombre: pData.nombre || "Sin Nombre",
-              foto_url: pData.foto_url || "",
-              escuderia_id: pData.escuderia_id || "",
-              piloto_id: role === "piloto" ? pData.id : "",
-            };
-            transaction.set(doc(db, "usuarios", newUid), userData);
-            transaction.delete(plantillaRef);
-            if (role === "jeque" && userData.escuderia_id) {
-              transaction.update(doc(db, `splits/split_1/equipos`, userData.escuderia_id), { jeque_id: newUid });
-            }
+          const normalizedEmail = email.trim().toLowerCase();
+          await setDoc(doc(db, "usuarios", newUid), {
+            uid: newUid,
+            email: normalizedEmail,
+            rol: normalizedEmail === "ajgarciarias@gmail.com" ? "admin" : "usuario",
+            nombre: normalizedEmail.split("@")[0] || "Usuario",
+            foto_url: "",
+            escuderia_id: "",
+            piloto_id: "",
           });
           await auth.signOut();
           setIsLogin(true);
-          setSuccess("¡Registro completado! Ya puedes iniciar sesión.");
+          setSuccess("Registro completado. Un administrador podrá inscribirte como piloto en una temporada.");
           setPassword(""); setConfirmPassword("");
         } catch (err) {
           await cred.user.delete().catch(() => auth.signOut());
@@ -165,35 +139,6 @@ export function LoginRegister() {
           )}
 
           <form onSubmit={handleAuth} className="space-y-6">
-            {!isLogin && (
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-[10px] font-mono tracking-[0.3em] text-white/40 uppercase mb-2">Rol</label>
-                  <select
-                    className="w-full bg-transparent border-b border-white/20 py-2.5 text-white text-sm focus:outline-none focus:border-[#e10600] transition-colors appearance-none cursor-pointer"
-                    value={role}
-                    onChange={e => setRole(e.target.value)}
-                  >
-                    <option value="piloto" className="bg-zinc-900">Piloto</option>
-                    <option value="jeque" className="bg-zinc-900">Jeque</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono tracking-[0.3em] text-white/40 uppercase mb-2">Puesto disponible</label>
-                  <select
-                    className="w-full bg-transparent border-b border-white/20 py-2.5 text-white text-sm focus:outline-none focus:border-[#e10600] transition-colors appearance-none cursor-pointer"
-                    value={selectedSlotId}
-                    onChange={e => setSelectedSlotId(e.target.value)}
-                  >
-                    {availableSlots.length === 0 && <option value="">No hay puestos disponibles</option>}
-                    {availableSlots.map(s => (
-                      <option key={s.id} value={s.id} className="bg-zinc-900">{s.nombre} — {s.escuderia_id}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
             <div>
               <label className="block text-[10px] font-mono tracking-[0.3em] text-white/40 uppercase mb-2">Correo</label>
               <input

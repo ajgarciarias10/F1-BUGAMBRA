@@ -3,7 +3,7 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
 
-export type Role = "admin" | "jeque" | "piloto" | null;
+export type Role = "admin" | "usuario" | "jeque" | "piloto" | "invitado" | null;
 
 interface UserData {
   uid: string;
@@ -41,7 +41,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const docRef = doc(db, "usuarios", firebaseUser.uid);
         unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
-            setUserData(docSnap.data() as UserData);
+            const data = docSnap.data() as UserData;
+            const email = (firebaseUser.email || (data as any).email || "").toLowerCase();
+            setUserData({
+              ...data,
+              uid: firebaseUser.uid,
+              email,
+              // AJ must be able to run the idempotent data migration even if
+              // the legacy Firestore profile still says "piloto".
+              rol: email === "ajgarciarias@gmail.com" ? "admin" : data.rol,
+            });
           } else {
             setUserData(null);
           }

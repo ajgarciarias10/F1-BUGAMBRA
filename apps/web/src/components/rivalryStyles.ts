@@ -23,9 +23,9 @@ export const rivalryStyles = {
   pilotTeam: "text-[10px] uppercase text-white/35 mt-1 font-mono",
 
   // OVR Badge
-  ovrBadge: "border border-white/10 bg-white/[0.03] px-4 py-3 text-center",
-  ovrLabel: "block text-[9px] uppercase tracking-[0.3em] text-white/30 font-mono",
-  ovrValue: "mt-1 block text-4xl font-black text-white",
+  ovrBadge: "min-w-20 border border-[#e10600]/45 bg-[#e10600]/10 px-4 py-3 text-center shadow-[0_12px_35px_rgba(225,6,0,0.12)]",
+  ovrLabel: "block text-[8px] uppercase tracking-[0.3em] text-red-200/65 font-mono",
+  ovrValue: "mt-1 block text-4xl font-black text-white tabular-nums leading-none",
 
   // Stats internas
   statsGridMain: "grid grid-cols-3 gap-2 text-xs text-white/70 mt-5",

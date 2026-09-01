@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { LoginRegister } from "./components/LoginRegister";
 import { AdminDashboard } from "./components/AdminDashboard";
-import { JequeDashboard, PilotoDashboard } from "./components/Dashboards";
+import { JequeDashboard, PilotoDashboard, UsuarioDashboard } from "./components/Dashboards";
 import { PublicHome } from "./components/PublicHome";
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
@@ -24,6 +24,7 @@ export default function App() {
           <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/jeque" element={<ProtectedRoute allowedRoles={["jeque"]}><JequeDashboard /></ProtectedRoute>} />
           <Route path="/piloto" element={<ProtectedRoute allowedRoles={["piloto"]}><PilotoDashboard /></ProtectedRoute>} />
+          <Route path="/usuario" element={<ProtectedRoute allowedRoles={["usuario", "invitado"]}><UsuarioDashboard /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

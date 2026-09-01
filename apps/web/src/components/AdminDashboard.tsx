@@ -4,10 +4,10 @@ import { useUsuarios, useSplits } from "../hooks/useData";
 import { processRace, RaceResult } from "../services/raceProcessor";
 import { procesarEconomiaCarrera } from "../services/economyService";
 import { db } from "../services/firebase";
-import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch, increment } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch, increment, runTransaction } from "firebase/firestore";
 import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { isSplitUnlocked, buildRivalryTable } from "../utils/splitResolver";
+import { isSplitUnlocked, buildRivalryTable, resolveInitialPilotRating } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
 import { AdminRivalryControlPanel } from "./RivalryPanels";
 import { EconomyAdminPanel } from "./EconomyAdminPanel";
@@ -50,6 +50,19 @@ const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
   return circuitos[circuitos.length - 1]; // Fallback to last one
 };
 
+const canPilotParticipateInRace = (pilot: any, raceSequence: number) => {
+  const startsAt = Number(pilot.participa_desde ?? 1);
+  const endsAt = pilot.participa_hasta == null ? null : Number(pilot.participa_hasta);
+  return raceSequence >= startsAt && (endsAt == null || raceSequence <= endsAt);
+};
+
+const getLastCompletedRaceNumber = (split: any) => Math.max(
+  0,
+  ...(split?.circuitos || [])
+    .filter((race: any) => race.completado)
+    .map((race: any) => Number(race.numero_carrera ?? 0)),
+);
+
 export function AdminDashboard() {
   const { usuarios } = useUsuarios();
   const { splits: rawSplits, loading: loadingSplits } = useSplits();
@@ -60,6 +73,7 @@ export function AdminDashboard() {
   const isSelectedSplitInitialized = useMemo(() => {
     if (!selectedSplitId || selectedSplitId === "split_1") return true;
     if (!currentRawSplit) return false;
+    if (currentRawSplit.tipo === "individual") return true;
     return (currentRawSplit.roster?.length || 0) > 0;
   }, [selectedSplitId, currentRawSplit]);
 
@@ -76,6 +90,10 @@ export function AdminDashboard() {
   const [resetPointsLoading, setResetPointsLoading] = useState(false);
   const [savingRivalries, setSavingRivalries] = useState(false);
   const [rivalriesMsg, setRivalriesMsg] = useState("");
+  const [pilotUserToAssign, setPilotUserToAssign] = useState("");
+  const [pilotTeamToAssign, setPilotTeamToAssign] = useState("");
+  const [assigningPilot, setAssigningPilot] = useState(false);
+  const [endingPilotId, setEndingPilotId] = useState<string | null>(null);
 
   // ─── MIGRACIONES AUTOMÁTICAS AL MONTAR ───────────────────────────────────────
   // Se ejecutan UNA SOLA VEZ. Cada función tiene su propia guardia interna
@@ -122,6 +140,20 @@ export function AdminDashboard() {
 
     return [...uPilots, ...uniquePPilots];
   }, [usuarios, plantilla]);
+
+  const assignableUsers = useMemo(() => {
+    const rosterIds = new Set((currentRawSplit?.roster || []).map((pilot: any) => pilot.pilotoId));
+    return (usuarios || [])
+      .filter((user: any) => user.rol !== "admin" && user.email?.toLowerCase() !== "ajgarciarias@gmail.com")
+      .filter((user: any) => !rosterIds.has(user.piloto_id || user.uid))
+      .sort((a: any, b: any) => (a.nombre || a.email || "").localeCompare(b.nombre || b.email || ""));
+  }, [usuarios, currentRawSplit]);
+
+  const assignmentPreview = useMemo(() => {
+    const user = assignableUsers.find((candidate: any) => candidate.uid === pilotUserToAssign);
+    if (!user || !currentRawSplit) return null;
+    return resolveInitialPilotRating(user.piloto_id || user.uid, currentRawSplit, rawSplits);
+  }, [assignableUsers, pilotUserToAssign, currentRawSplit, rawSplits]);
 
 
   const [selectedCircuitoId, setSelectedCircuitoId] = useState("");
@@ -171,6 +203,12 @@ export function AdminDashboard() {
     setVideoIntroUrl(split?.video_intro ?? "");
     setLogoEdits({});
   }, [selectedSplitId, splits]);
+
+  useEffect(() => {
+    const firstTeam = currentRawSplit?.equipos?.[0]?.id || "individual";
+    setPilotTeamToAssign(firstTeam);
+    setPilotUserToAssign("");
+  }, [selectedSplitId]);
 
   const handleSaveTeamLogo = async (teamId: string, logoUrl: string) => {
     if (!selectedSplitId) return;
@@ -227,6 +265,112 @@ export function AdminDashboard() {
       setMsg("Error: " + err.message);
     } finally {
       setSavingVideoIntro(false);
+    }
+  };
+
+  const handleAssignUserAsPilot = async () => {
+    const targetUser = assignableUsers.find((user: any) => user.uid === pilotUserToAssign);
+    if (!targetUser || !currentRawSplit || !pilotTeamToAssign || !assignmentPreview) return;
+
+    setAssigningPilot(true);
+    setMsg("");
+    try {
+      const pilotId = targetUser.piloto_id || targetUser.uid;
+      const sourceSplit = assignmentPreview.sourceSplitId
+        ? rawSplits.find(split => split.id === assignmentPreview.sourceSplitId)
+        : null;
+      const previousEntry = sourceSplit?.roster.find((pilot: any) => pilot.pilotoId === pilotId);
+      const pendingRaces = [...(currentRawSplit.circuitos || [])]
+        .filter((race: any) => !race.completado)
+        .sort((a: any, b: any) => (a.numero_carrera ?? 999) - (b.numero_carrera ?? 999));
+      const startsAt = pendingRaces[0]?.numero_carrera ?? 1;
+      const isIndividual = currentRawSplit.tipo === "individual" || currentRawSplit.equipos.length === 0;
+      const teamId = isIndividual ? "individual" : pilotTeamToAssign;
+      const pilotData = {
+        pilotoId: pilotId,
+        nombre: targetUser.nombre || targetUser.email || "Piloto",
+        equipoId: teamId,
+        rating_piloto: assignmentPreview.rating,
+        rating_base: assignmentPreview.rating,
+        rookie: assignmentPreview.rookie,
+        participa_desde: startsAt,
+        participa_hasta: null,
+        puntos_piloto: 0,
+        victorias: 0,
+        podios: 0,
+        poles: 0,
+        dnfs: 0,
+        carreras_limpias: 0,
+        precio_compra: previousEntry?.precio_compra ?? 10,
+        clausula_actual: previousEntry?.clausula_actual ?? 20,
+        mantener_actual: previousEntry?.mantener_actual ?? 30,
+        clausula_inicial_split: previousEntry?.clausula_actual ?? 20,
+        mantener_inicial_split: previousEntry?.mantener_actual ?? 30,
+        precio_carrera_anterior: previousEntry?.precio_compra ?? 10,
+        historial_precios: {},
+      };
+
+      const batch = writeBatch(db);
+      batch.set(doc(db, "pilotos", pilotId), {
+        nombre: pilotData.nombre,
+        foto_url: targetUser.foto_url || null,
+        rating_piloto: assignmentPreview.rating,
+      }, { merge: true });
+      batch.set(doc(db, "usuarios", targetUser.uid), {
+        piloto_id: pilotId,
+        rol: targetUser.rol === "jeque" ? "jeque" : "usuario",
+      }, { merge: true });
+      const rosterRef = isIndividual
+        ? doc(db, `splits/${currentRawSplit.id}/roster`, pilotId)
+        : doc(db, `splits/${currentRawSplit.id}/equipos/${teamId}/pilotos`, pilotId);
+      batch.set(rosterRef, pilotData);
+      await batch.commit();
+
+      setPilotUserToAssign("");
+      setMsg(`${pilotData.nombre} inscrito en ${currentRawSplit.nombre} como ${assignmentPreview.rookie ? "Rookie (70 OVR)" : `${assignmentPreview.rating} OVR heredado`}.`);
+      setTimeout(() => setMsg(""), 5000);
+    } catch (err: any) {
+      setMsg("Error al inscribir piloto: " + err.message);
+    } finally {
+      setAssigningPilot(false);
+    }
+  };
+
+  const handleEndPilotParticipation = async (pilot: any) => {
+    if (!currentRawSplit) return;
+    setEndingPilotId(pilot.pilotoId);
+    setMsg("");
+    try {
+      const lastParticipation = getLastCompletedRaceNumber(currentRawSplit);
+      const isIndividual = currentRawSplit.tipo === "individual" || pilot.equipoId === "individual";
+      const rosterRef = isIndividual
+        ? doc(db, `splits/${currentRawSplit.id}/roster`, pilot.pilotoId)
+        : doc(db, `splits/${currentRawSplit.id}/equipos/${pilot.equipoId}/pilotos`, pilot.pilotoId);
+      const matchedUser = usuarios.find((user: any) => user.piloto_id === pilot.pilotoId || user.uid === pilot.pilotoId);
+
+      const batch = writeBatch(db);
+      batch.update(rosterRef, { participa_hasta: lastParticipation });
+      if (matchedUser && matchedUser.rol !== "admin" && matchedUser.rol !== "jeque") {
+        batch.set(doc(db, "usuarios", matchedUser.uid), {
+          rol: "usuario",
+          escuderia_id: "",
+        }, { merge: true });
+      }
+      batch.set(doc(collection(db, `splits/${currentRawSplit.id}/transfers`)), {
+        detalles: `Admin finalizó la participación de ${pilot.nombre} en ${currentRawSplit.nombre}`,
+        timestamp: new Date().toISOString(),
+        tipo: "admin",
+        pilotoId: pilot.pilotoId,
+        equipoOrigenId: pilot.equipoId,
+        equipoDestinoId: "agente_libre",
+      });
+      await batch.commit();
+      setMsg(`Participación de ${pilot.nombre} finalizada sin alterar su historial.`);
+      setTimeout(() => setMsg(""), 4500);
+    } catch (err: any) {
+      setMsg("Error al finalizar participación: " + err.message);
+    } finally {
+      setEndingPilotId(null);
     }
   };
 
@@ -477,75 +621,68 @@ export function AdminDashboard() {
     if (!selectedSplitId || fromTeamId === toTeamId) return;
     try {
       const pData = { ...pilotData };
-      const rating = Number(pData.rating_piloto ?? pData.raw?.rating_piloto ?? 70);
-
       const currentSplit = splits.find(s => s.id === selectedSplitId);
-      const existingEntryForPrice = currentSplit?.roster.find((r: any) => r.pilotoId === pilotId);
-      const precioCompra = Number(existingEntryForPrice?.precio_compra ?? pData.precio_compra ?? pData.raw?.precio_compra ?? 10);
+      const existingEntry = currentSplit?.roster.find(r => r.pilotoId === pilotId);
+      const precioCompra = Number(existingEntry?.precio_compra ?? pData.precio_compra ?? pData.raw?.precio_compra ?? 10);
+      const sourceRef = fromTeamId && fromTeamId !== "agente_libre"
+        ? doc(db, `splits/${selectedSplitId}/equipos/${fromTeamId}/pilotos`, pilotId)
+        : doc(db, `splits/${selectedSplitId}/roster`, pilotId);
+      const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
+      const auditRef = doc(collection(db, `splits/${selectedSplitId}/transfers`));
 
-      // Solo el equipo B paga el precio_compra; equipo A no recibe nada
-      if (toTeamId && toTeamId !== "agente_libre") {
-        await updateDoc(doc(db, `splits/${selectedSplitId}/equipos`, toTeamId), {
-          presupuesto: increment(-precioCompra),
+      if (toTeamId === "agente_libre") {
+        const batch = writeBatch(db);
+        batch.update(sourceRef, { participa_hasta: getLastCompletedRaceNumber(currentSplit) });
+        if (matchedUser && matchedUser.rol !== "admin" && matchedUser.rol !== "jeque") {
+          batch.set(doc(db, "usuarios", matchedUser.uid), {
+            rol: "usuario",
+            escuderia_id: "",
+          }, { merge: true });
+        }
+        batch.set(auditRef, {
+          detalles: `Admin finalizó la participación de ${pilotName} en ${currentSplit?.nombre || selectedSplitId}`,
+          timestamp: new Date().toISOString(),
+          tipo: "admin",
+          pilotoId: pilotId,
+          equipoOrigenId: fromTeamId,
+          equipoDestinoId: toTeamId,
+        });
+        await batch.commit();
+      } else {
+        const destinationRef = doc(db, `splits/${selectedSplitId}/equipos/${toTeamId}/pilotos`, pilotId);
+        await runTransaction(db, async transaction => {
+          const sourceSnapshot = await transaction.get(sourceRef);
+          if (!sourceSnapshot.exists()) {
+            throw new Error("No se encontró la participación de origen del piloto.");
+          }
+
+          transaction.update(doc(db, `splits/${selectedSplitId}/equipos`, toTeamId), {
+            presupuesto: increment(-precioCompra),
+          });
+          transaction.set(destinationRef, {
+            ...sourceSnapshot.data(),
+            pilotoId: pilotId,
+            equipoId: toTeamId,
+          });
+          transaction.delete(sourceRef);
+          if (matchedUser) {
+            transaction.set(doc(db, "usuarios", matchedUser.uid), {
+              escuderia_id: toTeamId,
+            }, { merge: true });
+          }
+          transaction.set(doc(db, "pilotos", pilotId), {
+            nombre: pilotName || pData.nombre || "Piloto",
+          }, { merge: true });
+          transaction.set(auditRef, {
+            detalles: `Admin transfirió a ${pilotName} de ${fromTeamId} a ${toTeamId} (${toTeamId} -${precioCompra}M)`,
+            timestamp: new Date().toISOString(),
+            tipo: "admin",
+            pilotoId: pilotId,
+            equipoOrigenId: fromTeamId,
+            equipoDestinoId: toTeamId,
+          });
         });
       }
-
-      // Sincronizar escuderia_id del usuario
-      const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
-      if (matchedUser) {
-        await setDoc(doc(db, "usuarios", matchedUser.uid), {
-          escuderia_id: toTeamId === "agente_libre" ? "" : toTeamId
-        }, { merge: true });
-      }
-
-      const existingEntry = currentSplit?.roster.find(r => r.pilotoId === pilotId);
-      const isFromFreeAgent = !fromTeamId || fromTeamId === "agente_libre";
-
-      // Borrar doc del equipo anterior
-      if (fromTeamId && fromTeamId !== "agente_libre") {
-        await deleteDoc(doc(db, `splits/${selectedSplitId}/equipos/${fromTeamId}/pilotos`, pilotId));
-      }
-
-      if (toTeamId !== "agente_libre") {
-        const precioCompra = existingEntry?.precio_compra ?? pData.precio_compra ?? pData.precio_compra_split ?? 10;
-        const precioAbs = Math.abs(precioCompra);
-        const defaultClausula = precioCompra < 0 ? Math.round(precioAbs / 2 * 10) / 10 : Math.round(precioAbs * 2 * 10) / 10;
-        const defaultMantener = precioCompra < 0 ? Math.round(precioAbs / 3 * 10) / 10 : Math.round(precioAbs * 3 * 10) / 10;
-        await setDoc(doc(db, `splits/${selectedSplitId}/equipos/${toTeamId}/pilotos`, pilotId), {
-          pilotoId:               pilotId,
-          equipoId:               toTeamId,
-          rating_piloto:          rating,
-          precio_compra:          precioCompra,
-          clausula_actual:        existingEntry?.clausula_actual        ?? defaultClausula,
-          mantener_actual:        existingEntry?.mantener_actual        ?? defaultMantener,
-          clausula_inicial_split: existingEntry?.clausula_inicial_split ?? defaultClausula,
-          mantener_inicial_split: existingEntry?.mantener_inicial_split ?? defaultMantener,
-          precio_carrera_anterior: existingEntry?.precio_carrera_anterior ?? precioCompra,
-          historial_precios:      existingEntry?.historial_precios      ?? {},
-          puntos_piloto:    isFromFreeAgent ? 0 : (existingEntry?.puntos_piloto    ?? pData.puntos_piloto    ?? 0),
-          victorias:        isFromFreeAgent ? 0 : (existingEntry?.victorias        ?? pData.victorias        ?? 0),
-          podios:           isFromFreeAgent ? 0 : (existingEntry?.podios           ?? pData.podios           ?? 0),
-          poles:            isFromFreeAgent ? 0 : (existingEntry?.poles            ?? pData.poles            ?? 0),
-          dnfs:             isFromFreeAgent ? 0 : (existingEntry?.dnfs             ?? pData.dnfs             ?? 0),
-          carreras_limpias: isFromFreeAgent ? 0 : (existingEntry?.carreras_limpias ?? pData.carreras_limpias ?? 0),
-        }, { merge: true });
-
-        // Actualizar nombre en colección global de pilotos (solo nombre/foto)
-        await setDoc(doc(db, "pilotos", pilotId), {
-          nombre: pilotName || pData.nombre || "Piloto",
-        }, { merge: true });
-      }
-
-      let budgetStr = "";
-      if (toTeamId !== "agente_libre") {
-        budgetStr = ` (${toTeamId} -${precioCompra}M)`;
-      }
-
-      await addDoc(collection(db, `splits/${selectedSplitId}/transfers`), {
-        detalles: `Admin transfirió a ${pilotName} de ${fromTeamId} a ${toTeamId}${budgetStr}`,
-        timestamp: new Date().toISOString(),
-        tipo: "admin"
-      });
 
       setMsg(`Piloto ${pilotName} transferido.`);
       setTimeout(() => setMsg(""), 4000);
@@ -631,9 +768,11 @@ export function AdminDashboard() {
                   ? Math.round(nextPrecioAbs / 2 * 10) / 10
                   : Math.round(nextPrecioAbs * 2 * 10) / 10;
 
-              if (r.pending_equipoId && r.pending_equipoId !== r.equipoId) {
-                // Team A gets nothing; Team B pays the signing price
-                budgetAdjustments[nextEquipoId] = (budgetAdjustments[nextEquipoId] || 0) - nextPrecioCompra;
+              if (r.pending_equipoId && pendingPrecio != null && !isFreezeSentinel) {
+                // Both renewals and transfers affect the destination team's
+                // opening budget. Negative prices represent team income.
+                const budgetDelta = pendingPrecio < 0 ? Math.abs(pendingPrecio) : -pendingPrecio;
+                budgetAdjustments[nextEquipoId] = (budgetAdjustments[nextEquipoId] || 0) + budgetDelta;
               }
 
               await setDoc(doc(db, `splits/${splitId}/equipos/${nextEquipoId}/pilotos`, pid), {
@@ -733,7 +872,11 @@ export function AdminDashboard() {
     }
 
     const currentSplit = splits.find(s => s.id === selectedSplitId);
-    const splitPilots = currentSplit?.roster || [];
+    const selectedRace = currentSplit?.circuitos.find((race: any) => race.id === selectedCircuitoId);
+    const selectedRaceSequence = Number(selectedRace?.numero_carrera ?? 1);
+    const splitPilots = (currentSplit?.roster || []).filter((pilot: any) =>
+      canPilotParticipateInRace(pilot, selectedRaceSequence)
+    );
 
     if (splitPilots.length === 0) {
       setMsg("No hay pilotos registrados en este split.");
@@ -1156,7 +1299,9 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {(splits.find(s => s.id === selectedSplitId)?.roster || []).map((p: any, i: number) => {
+                {(splits.find(s => s.id === selectedSplitId)?.roster || [])
+                  .filter((pilot: any) => canPilotParticipateInRace(pilot, numeroCarrera))
+                  .map((p: any, i: number) => {
                   const isPilotDnf = results[p.pilotoId]?.isDnfOwnError || false;
                   const qPosVal = results[p.pilotoId]?.qualyPos;
                   const isQualyDuplicated = typeof qPosVal === "number" && (qualyCount[qPosVal] || 0) > 1;
@@ -1460,6 +1605,65 @@ export function AdminDashboard() {
             </div>
           )}
 
+          {/* Inscribir usuario como piloto */}
+          <div className="mb-4 border border-white/[0.08] bg-[#08090c] p-4">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+              <div className="flex-1 min-w-0">
+                <label className="block text-[9px] font-mono uppercase tracking-[0.3em] text-white/35 mb-2">Usuario registrado</label>
+                <select
+                  value={pilotUserToAssign}
+                  onChange={event => setPilotUserToAssign(event.target.value)}
+                  style={{ colorScheme: "dark", backgroundColor: "#0d0d0f" }}
+                  className="w-full border border-white/10 px-3 py-2.5 text-xs text-white outline-none focus:border-[#e10600]"
+                >
+                  <option value="">Seleccionar usuario</option>
+                  {assignableUsers.map((user: any) => (
+                    <option key={user.uid} value={user.uid}>{user.nombre || user.email} · {user.email}</option>
+                  ))}
+                </select>
+              </div>
+
+              {currentRawSplit?.tipo !== "individual" && (currentRawSplit?.equipos || []).length > 0 && (
+                <div className="w-full lg:w-56">
+                  <label className="block text-[9px] font-mono uppercase tracking-[0.3em] text-white/35 mb-2">Escudería</label>
+                  <select
+                    value={pilotTeamToAssign}
+                    onChange={event => setPilotTeamToAssign(event.target.value)}
+                    style={{ colorScheme: "dark", backgroundColor: "#0d0d0f" }}
+                    className="w-full border border-white/10 px-3 py-2.5 text-xs text-white outline-none focus:border-[#e10600]"
+                  >
+                    {(currentRawSplit?.equipos || []).map((team: any) => (
+                      <option key={team.id} value={team.id}>{team.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="w-full lg:w-48 border border-white/[0.08] bg-white/[0.03] px-3 py-2">
+                <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-white/30">Media inicial automática</span>
+                <strong className={`block mt-1 text-sm ${assignmentPreview?.rookie ? "text-sky-300" : "text-white"}`}>
+                  {assignmentPreview
+                    ? assignmentPreview.rookie
+                      ? "Rookie · 70 OVR"
+                      : `${assignmentPreview.rating} OVR · heredada`
+                    : "Selecciona usuario"}
+                </strong>
+              </div>
+
+              <button
+                onClick={handleAssignUserAsPilot}
+                disabled={!pilotUserToAssign || !pilotTeamToAssign || assigningPilot}
+                className="min-h-11 px-5 bg-[#e10600] hover:bg-[#ff241c] text-white text-[10px] font-black uppercase tracking-[0.18em] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {assigningPilot && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Inscribir piloto
+              </button>
+            </div>
+            <p className="mt-3 text-[9px] font-mono text-white/25">
+              La media se hereda de la última temporada disputada. Sin historial, el piloto debuta como Rookie con 70 OVR.
+            </p>
+          </div>
+
           {/* Tabla de pilotos con mover */}
           <div className="overflow-x-auto border border-white/[0.06]">
             <table className="w-full text-xs border-collapse">
@@ -1468,7 +1672,8 @@ export function AdminDashboard() {
                   <th className="py-2 px-3 text-left font-normal">Piloto</th>
                   <th className="py-2 px-3 text-left font-normal">Equipo actual</th>
                   <th className="py-2 px-3 text-left font-normal">Precio next split</th>
-                  <th className="py-2 px-3 text-left font-normal">Mover a</th>
+                   <th className="py-2 px-3 text-left font-normal">Mover a</th>
+                   <th className="py-2 px-3 text-right font-normal">Participación</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
@@ -1486,22 +1691,44 @@ export function AdminDashboard() {
                         {p.pending_precio_compra != null && <span className="block text-[9px] text-white/30">siguiente split</span>}
                       </td>
                         <td className="py-2 px-3">
-                          <select
-                            style={{ colorScheme: "dark", backgroundColor: "#0d0d0d" }}
-                            className="border border-white/10 px-2 py-1 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors cursor-pointer"
-                            value={p.equipoId || "agente_libre"}
-                            onChange={e => {
-                              const dest = e.target.value;
-                              if (dest !== p.equipoId) {
-                                handleMovePilotOriginal(p.pilotoId, p.nombre, p.equipoId || "agente_libre", dest, p);
-                              }
-                            }}
-                          >
-                            {(currentRawSplit?.equipos || []).map((e: any) => (
-                              <option key={e.id} value={e.id}>{e.nombre}</option>
-                            ))}
-                            <option value="agente_libre">Agente Libre</option>
-                          </select>
+                          {currentRawSplit?.tipo === "individual" ? (
+                            <span className="text-[9px] font-mono uppercase text-white/25">Sin equipos</span>
+                          ) : (
+                            <select
+                              style={{ colorScheme: "dark", backgroundColor: "#0d0d0d" }}
+                              className="border border-white/10 px-2 py-1 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors cursor-pointer"
+                              value={p.equipoId || "agente_libre"}
+                              onChange={e => {
+                                const dest = e.target.value;
+                                if (dest !== p.equipoId) {
+                                  handleMovePilotOriginal(p.pilotoId, p.nombre, p.equipoId || "agente_libre", dest, p);
+                                }
+                              }}
+                            >
+                              {(currentRawSplit?.equipos || []).map((e: any) => (
+                                <option key={e.id} value={e.id}>{e.nombre}</option>
+                              ))}
+                              <option value="agente_libre">Agente Libre</option>
+                            </select>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          {p.participa_hasta != null ? (
+                            <span className="text-[9px] font-mono uppercase tracking-wider text-white/25">Hasta C{p.participa_hasta}</span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmModal({
+                                isOpen: true,
+                                title: "Finalizar participación",
+                                message: `${p.nombre} dejará de participar en ${currentRawSplit?.nombre}. Sus resultados anteriores se conservarán.`,
+                                onConfirm: () => handleEndPilotParticipation(p),
+                              })}
+                              disabled={endingPilotId === p.pilotoId}
+                              className="px-3 py-1.5 border border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/20 text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
+                            >
+                              {endingPilotId === p.pilotoId ? "Procesando" : "Finalizar"}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1513,38 +1740,6 @@ export function AdminDashboard() {
             </table>
           </div>
 
-          {/* Añadir piloto no asignado */}
-          {allPossiblePilots.filter((u: any) => {
-            const rosterIds = (currentRawSplit?.roster || []).map((r: any) => r.pilotoId);
-            return !rosterIds.some((id: string) => id === u.uid || id === u.piloto_id);
-          }).length > 0 && (
-            <div className="mt-4 border-t border-white/[0.06] pt-4">
-              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Añadir piloto sin equipo</p>
-              <div className="flex items-center gap-2.5">
-                <select
-                  style={{ colorScheme: "dark", backgroundColor: "#0d0d0d" }}
-                  className="border border-white/10 px-3 py-2 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors"
-                  value=""
-                  onChange={e => {
-                    const targetUser = allPossiblePilots.find(u => u.uid === e.target.value);
-                    if (targetUser) {
-                      const firstTeam = (currentRawSplit?.equipos || [])[0];
-                      if (firstTeam) handleMovePilotOriginal(targetUser.uid, targetUser.nombre, "agente_libre", firstTeam.id, targetUser.raw);
-                    }
-                  }}
-                >
-                  <option value="">— Seleccionar piloto —</option>
-                  {allPossiblePilots.filter((u: any) => {
-                    const rosterIds = (currentRawSplit?.roster || []).map((r: any) => r.pilotoId);
-                    return !rosterIds.some((id: string) => id === u.uid || id === u.piloto_id);
-                  }).map((u: any) => (
-                    <option key={u.uid} value={u.uid}>{u.nombre}</option>
-                  ))}
-                </select>
-                <span className="text-[9px] text-white/20 font-mono">se añadirá al primer equipo disponible</span>
-              </div>
-            </div>
-          )}
         </section>
 
         {/* Paddock */}

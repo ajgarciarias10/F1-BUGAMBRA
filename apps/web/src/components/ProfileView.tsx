@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
@@ -29,6 +29,45 @@ export function ProfileView() {
   const mySplits = (splits || []).filter(
     (s: any) => s.id !== "global" && s.activo && (s.equipos || []).some((e: any) => e.id === escuderiaId)
   );
+
+  const career = useMemo(() => {
+    if (!userData) return [];
+    const pilotId = userData.piloto_id || (userData.rol === "piloto" ? userData.uid : "");
+    if (!pilotId) return [];
+
+    return (splits || [])
+      .filter((split: any) => split.id !== "global")
+      .map((split: any) => {
+        const entry = (split.roster || []).find((pilot: any) => pilot.pilotoId === pilotId);
+        if (!entry) return null;
+        const team = (split.equipos || []).find((candidate: any) => candidate.id === entry.equipoId);
+        return {
+          splitId: split.id,
+          splitName: split.nombre,
+          order: split.orden,
+          teamName: split.tipo === "individual" ? "Competición individual" : team?.nombre || entry.equipoId || "Sin escudería",
+          teamLogo: team?.logo_url || "",
+          rating: split.tipo === "individual" ? null : entry.rating_piloto ?? 70,
+          points: entry.puntos_piloto ?? 0,
+          rookie: !!entry.rookie,
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => a.order - b.order);
+  }, [splits, userData]);
+
+  const currentParticipation = useMemo(() => {
+    if (!userData) return null;
+    const pilotId = userData.piloto_id || (userData.rol === "piloto" ? userData.uid : "");
+    const activeSplit = (splits || []).find((split: any) => split.activo);
+    if (!pilotId || !activeSplit) return null;
+    const entry = (activeSplit.roster || []).find((pilot: any) =>
+      pilot.pilotoId === pilotId && pilot.participa_hasta == null
+    );
+    if (!entry) return null;
+    const team = (activeSplit.equipos || []).find((candidate: any) => candidate.id === entry.equipoId);
+    return { splitName: activeSplit.nombre, teamName: team?.nombre || "Competición individual" };
+  }, [splits, userData]);
 
   async function saveTeamLogo(splitId: string, logoUrl: string) {
     if (!escuderiaId) return;
@@ -179,10 +218,10 @@ export function ProfileView() {
           {/* Quick stats panel */}
           <div className="w-full border-t border-white/10 my-6 pt-5 grid grid-cols-2 gap-4">
             <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
-              <span className="text-[8px] uppercase tracking-wider text-white/40 font-mono block mb-1">Escudería</span>
-              <span className="text-xs font-bold uppercase text-white tracking-tight truncate max-w-full block">
-                {userData.escuderia_id ? userData.escuderia_id.replace("_", " ") : "Sin Escudería"}
-              </span>
+               <span className="text-[8px] uppercase tracking-wider text-white/40 font-mono block mb-1">Estado actual</span>
+               <span className="text-xs font-bold uppercase text-white tracking-tight truncate max-w-full block">
+                 {userData.rol === "admin" ? "Administrador" : currentParticipation?.teamName || "Espectador"}
+               </span>
             </div>
             <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 flex flex-col justify-center">
               <span className="text-[8px] uppercase tracking-wider text-white/40 font-mono block mb-1">Id de Registro</span>
@@ -312,6 +351,40 @@ export function ProfileView() {
             </button>
           </div>
         </form>
+
+        {career.length > 0 && (
+          <section className="mt-6 border border-white/10 bg-[#0d0e12] overflow-hidden">
+            <div className="p-5 md:p-6 border-b border-white/[0.08]">
+              <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-[#e10600]">Archivo del piloto</p>
+              <h3 className="mt-1 text-xl font-black uppercase tracking-[-0.03em]">Trayectoria por temporadas</h3>
+              <p className="mt-1 text-xs text-white/40">Tus equipos y resultados se conservan aunque no participes en el split vigente.</p>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-px bg-white/[0.06]">
+              {career.map((season: any) => (
+                <div key={season.splitId} className="bg-[#111218] p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 shrink-0 border border-white/10 bg-white/[0.04] p-1.5 flex items-center justify-center">
+                    {season.teamLogo
+                      ? <img src={season.teamLogo} alt={season.teamName} className="w-full h-full object-contain" />
+                      : <span className="font-black text-xs text-white/20">{season.teamName.slice(0, 2).toUpperCase()}</span>}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[8px] font-mono uppercase tracking-[0.24em] text-white/30">{season.splitName}</span>
+                      {season.rookie && <span className="text-[7px] font-black uppercase tracking-[0.18em] text-sky-300">Rookie</span>}
+                    </div>
+                    <p className="mt-1 font-black uppercase truncate">{season.teamName}</p>
+                    <span className="text-[9px] font-mono text-white/35">{season.points} PTS</span>
+                  </div>
+                  {season.rating != null && (
+                    <div className="w-14 h-14 border border-[#e10600]/35 bg-[#e10600]/10 grid place-items-center text-center">
+                      <div><strong className="block text-xl leading-none">{season.rating}</strong><span className="text-[7px] tracking-[0.18em] text-white/45">OVR</span></div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Logo de equipo — solo para jeques */}
         {isJeque && escuderiaId && mySplits.length > 0 && (

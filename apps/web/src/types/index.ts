@@ -4,7 +4,7 @@ export interface Usuario {
   uid: string;
   email: string;
   nombre: string;
-  rol: "admin" | "jeque" | "piloto" | "invitado";
+  rol: "admin" | "usuario" | "jeque" | "piloto" | "invitado";
   piloto_id: string | null; // FK → pilotos/{id}
   foto_url?: string;
   rating_piloto?: number;
@@ -27,6 +27,14 @@ export interface Split {
   orden: number; // 1,2,3,4
   fichajes_abiertos: boolean;
   activo?: boolean;
+  completado?: boolean;
+  tipo?: "equipos" | "individual";
+  duos?: Array<{
+    id: string;
+    nombre: string;
+    puntos: number;
+    puntos_carreras?: number[];
+  }>;
   rivalries?: RivalryConfig;
   video_intro?: string;
 }
@@ -51,6 +59,9 @@ export interface RosterEntry {
   equipoId: string; // "agente_libre" si no tiene equipo
   rating_piloto: number;   // rating actual en este split (0-99)
   rating_base?: number;    // rating de inicio del split, para recalcular desde cero
+  rookie?: boolean;
+  participa_desde?: number;
+  participa_hasta?: number | null;
   tipo_fichaje?: TipoFichaje;
   // Precios del split
   precio_compra: number;
@@ -101,6 +112,8 @@ export interface Circuito {
 export interface RaceResult {
   pilotoId: string;
   pilotoNombre?: string;
+  puntos?: number;
+  equipoId?: string; // Equipo en el momento de la carrera; ausente en resultados legacy
   qualyPos: number; // 1-12, o 99 si DNF
   racePos: number;  // 1-12, o 99 si DNF
   isDnfOwnError: boolean;

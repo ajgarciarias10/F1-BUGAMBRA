@@ -3,12 +3,12 @@ import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Sun, Moon, Play, Radio, ChevronRight } from "lucide-react";
-import { PilotCardF1 } from "./PilotCardF1";
 import { TotalStandings } from "./SharedDashboard";
 import { FomLive } from "./FomLive";
 import { MobileBottomTabs } from "./MobileBottomTabs";
+import { TeamsView } from "./TeamsView";
 
-type Tab = "clasificacion" | "album" | "tv";
+type Tab = "clasificacion" | "equipos" | "tv";
 
 function useTheme() {
   const [dark, setDark] = useState(() => {
@@ -32,8 +32,8 @@ export function PublicHome() {
 
   const validSplits = useMemo(() => {
     const all = (splits || []).filter(s => s.id !== "global");
-    const active = all.filter(s => s.activo);
-    return active.length > 0 ? active : all;
+    const visible = all.filter(s => s.activo || s.completado || s.tipo === "individual");
+    return visible.length > 0 ? visible : all;
   }, [splits]);
 
   const currentSplitId = activeSplitId || validSplits[validSplits.length - 1]?.id || "";
@@ -54,6 +54,11 @@ export function PublicHome() {
 
   const teamStandings = useMemo(() => {
     if (!currentSplit) return [];
+    if (currentSplit.tipo === "individual") {
+      return [...(currentSplit.duos || [])]
+        .map(duo => ({ ...duo, puntos_constructores: duo.puntos }))
+        .sort((a, b) => (b.puntos || 0) - (a.puntos || 0));
+    }
     return [...(currentSplit.equipos || [])].sort(
       (a, b) => (b.puntos_constructores || 0) - (a.puntos_constructores || 0)
     );
@@ -71,12 +76,12 @@ export function PublicHome() {
   };
 
   const dashboardLink = userData
-    ? userData.rol === "admin" ? "/admin" : userData.rol === "jeque" ? "/jeque" : "/piloto"
+    ? userData.rol === "admin" ? "/admin" : userData.rol === "jeque" ? "/jeque" : userData.rol === "piloto" ? "/piloto" : "/usuario"
     : "/login";
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "clasificacion", label: "Clasificación" },
-    { id: "album", label: "Álbum" },
+    { id: "equipos", label: "Equipos" },
     { id: "tv", label: "FOM" },
   ];
 
@@ -188,8 +193,8 @@ export function PublicHome() {
                 getPilotPhoto={getPilotPhoto}
               />
             )}
-            {activeTab === "album" && (
-              <AlbumView
+            {activeTab === "equipos" && (
+              <TeamsView
                 validSplits={validSplits}
                 currentSplitId={currentSplitId}
                 onSelectSplit={setActiveSplitId}
@@ -207,10 +212,10 @@ export function PublicHome() {
 
 // ── HELPERS ────────────────────────────────────────────────────────────────────
 
-function getYoutubeEmbedUrl(url: string): string | null {
-  if (!url) return null;
-  const match = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
-  return match ? `https://www.youtube.com/embed/${match[1]}?rel=0&modestbranding=1` : null;
+function standingsRatingTone(rating: number) {
+  if (rating >= 90) return "border-red-500/45 bg-red-500/10 text-red-600 dark:text-red-200";
+  if (rating >= 80) return "border-amber-500/45 bg-amber-500/10 text-amber-700 dark:text-amber-100";
+  return "border-black/15 dark:border-white/15 bg-black/[0.04] dark:bg-white/[0.06] text-black/65 dark:text-white/75";
 }
 
 // ── STANDINGS ──────────────────────────────────────────────────────────────────
@@ -225,29 +230,30 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
   const leader = pilotStandings[0];
   const leaderPts = leader?.puntos_piloto || 0;
 
-  const embedUrl = getYoutubeEmbedUrl(currentSplit?.video_intro ?? "");
+  const videoIntroUrl = currentSplit?.video_intro || (currentSplit?.id === "origins"
+    ? "https://youtu.be/5OLFg1W5LzU"
+    : "");
 
   return (
     <div className="space-y-8">
 
       {/* Video de introducción del split */}
-      {embedUrl && (
-        <div className="border border-[#0a0a0a]/[0.08] dark:border-white/[0.06] overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#0a0a0a]/[0.06] dark:border-white/[0.06]">
+      {currentSplit?.id === "origins" && videoIntroUrl && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-[#0a0a0a]/[0.08] dark:border-white/[0.06] p-4">
+          <div className="flex items-center gap-3">
             <span className="w-1 h-4 bg-[#e10600] shrink-0" />
             <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#0a0a0a]/50 dark:text-white/50">
               Intro · {currentSplit?.nombre}
             </span>
           </div>
-          <div className="aspect-video">
-            <iframe
-              src={embedUrl}
-              title={`Intro ${currentSplit?.nombre}`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="w-full h-full border-0"
-            />
-          </div>
+          <a
+            href={videoIntroUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center gap-2 bg-[#e10600] px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white hover:bg-[#ff241c] transition-colors"
+          >
+            <Play className="h-4 w-4 fill-current" /> Ver vídeo de Origins
+          </a>
         </div>
       )}
 
@@ -294,7 +300,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                     : "text-[#0a0a0a]/30 dark:text-white/30 hover:text-[#0a0a0a]/60 dark:hover:text-white/60"
                 }`}
               >
-                {v === "pilotos" ? "Pilotos" : "Constructores"}
+                {v === "pilotos" ? "Pilotos" : currentSplit?.tipo === "individual" ? "Dúos" : "Constructores"}
               </button>
             ))}
           </div>
@@ -360,6 +366,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                       }`}>
                         {p.nombre}
                       </p>
+                      {p.rookie && <span className="text-[7px] font-black uppercase tracking-[0.18em] text-sky-500 dark:text-sky-300">Rookie</span>}
                       <p className="text-[10px] text-[#0a0a0a]/25 dark:text-white/25 font-mono md:hidden truncate">
                         {team?.nombre || "—"}
                       </p>
@@ -386,9 +393,9 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                     )}
                   </div>
 
-                  <div className="hidden md:block text-right">
-                    <span className="text-sm font-black font-mono text-[#0a0a0a]/30 dark:text-white/30">
-                      {p.rating_piloto ?? 0}
+                  <div className="hidden md:flex justify-end">
+                    <span className={`min-w-12 border px-2 py-1.5 text-center text-sm font-black font-mono tabular-nums ${standingsRatingTone(Number(p.rating_piloto ?? 0))}`}>
+                      {currentSplit?.tipo === "individual" ? "--" : p.rating_piloto ?? 0}
                     </span>
                   </div>
                 </div>
@@ -411,7 +418,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
         <div className="sport-panel overflow-hidden">
           <div className="grid grid-cols-[2.5rem_1fr_6rem] gap-x-4 px-4 py-3 bg-black/[0.035] dark:bg-white/[0.035] border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">#</span>
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">Escudería</span>
+            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">{currentSplit?.tipo === "individual" ? "Dúo" : "Escudería"}</span>
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase text-right">Pts</span>
           </div>
 
@@ -468,219 +475,6 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-// PilotCard es ahora el componente compartido PilotCardF1
-function PilotCard({ pilot, team, getPilotPhoto, featured = false }: {
-  pilot: any; team: any; getPilotPhoto: (id: string) => string; featured?: boolean;
-}) {
-  return <PilotCardF1 pilot={pilot} team={team} getPilotPhoto={getPilotPhoto} featured={featured} />;
-}
-
-// ── ÁLBUM ──────────────────────────────────────────────────────────────────────
-
-export function AlbumView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto }: any) {
-  const eqMap = useMemo(
-    () => Object.fromEntries((currentSplit?.equipos || []).map((e: any) => [e.id, e])),
-    [currentSplit]
-  );
-
-  const pilotsByTeam = useMemo(() => {
-    if (!currentSplit) return {};
-    const map: Record<string, any[]> = {};
-    for (const p of currentSplit.roster || []) {
-      if (p.equipoId === "agente_libre") continue;
-      (map[p.equipoId] ??= []).push(p);
-    }
-    return map;
-  }, [currentSplit]);
-
-  const champTeamId = useMemo(() => {
-    if (!currentSplit) return "";
-    let best = "", pts = 0;
-    for (const t of currentSplit.equipos || []) {
-      if ((t.puntos_constructores || 0) > pts) { pts = t.puntos_constructores; best = t.id; }
-    }
-    return pts > 0 ? best : "";
-  }, [currentSplit]);
-
-  // Piloto de la semana: solo aparece cuando hay un circuito activo (no completado).
-  // El piloto destacado es el P1 de la carrera anterior (última completada).
-  // El título referencia el circuito activo de esta semana.
-  const { lastRace, activeRace, pilotoDestacado } = useMemo(() => {
-    if (!currentSplit?.circuitos) return { lastRace: null, activeRace: null, pilotoDestacado: null };
-    const sorted = [...(currentSplit.circuitos as any[])].sort(
-      (a, b) => (a.numero_carrera ?? 999) - (b.numero_carrera ?? 999)
-    );
-    // Circuito activo = el primero no completado
-    const active = sorted.find(c => !c.completado) || null;
-    if (!active) return { lastRace: null, activeRace: null, pilotoDestacado: null };
-    // Última carrera completada con resultados
-    const completed = sorted.filter(c => c.completado && Array.isArray(c.resultados) && c.resultados.length > 0);
-    const race = completed[completed.length - 1] || null;
-    if (!race) return { lastRace: null, activeRace: active, pilotoDestacado: null };
-    const winner = race.resultados.find((r: any) => r.racePos === 1);
-    const piloto = winner
-      ? (currentSplit.roster || []).find((p: any) => p.pilotoId === winner.pilotoId) || null
-      : null;
-    return { lastRace: race, activeRace: active, pilotoDestacado: piloto };
-  }, [currentSplit]);
-
-  return (
-    <div className="space-y-10">
-
-      {/* Split / Temporada selector */}
-      <div className="border-b border-white/[0.06]">
-        <div className="flex items-center gap-4 mb-0">
-          <div className="flex items-center gap-2 pr-4 border-r border-white/[0.06] shrink-0">
-            <span className="w-0.5 h-5 bg-[#e10600]" />
-            <span className="text-[9px] font-mono tracking-[0.4em] text-white/20 uppercase leading-none">Temporada</span>
-          </div>
-          <div className="flex overflow-x-auto hide-scrollbar">
-            {validSplits.map((s: any, i: number) => (
-              <button
-                key={s.id}
-                onClick={() => onSelectSplit(s.id)}
-                className={`relative shrink-0 flex flex-col items-start px-5 pb-3 pt-2 transition-all group ${
-                  currentSplitId === s.id ? "" : "opacity-40 hover:opacity-70"
-                }`}
-              >
-                <span className="text-[8px] font-mono tracking-[0.35em] text-white/30 uppercase leading-none mb-1">
-                  T{i + 1}
-                </span>
-                <span className={`text-[11px] font-black uppercase tracking-[0.15em] leading-none ${
-                  currentSplitId === s.id ? "text-white" : "text-white/60"
-                }`}>
-                  {s.nombre}
-                </span>
-                {currentSplitId === s.id && (
-                  <span className="absolute bottom-0 inset-x-0 h-0.5 bg-[#e10600]" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Piloto de la Semana */}
-      {pilotoDestacado && (
-        <div className="sport-panel overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#0a0a0a]/[0.06] dark:border-white/[0.06]">
-            <span className="w-0.5 h-5 bg-[#e10600]" />
-            <div>
-              <p className="text-[9px] font-mono tracking-[0.4em] text-[#0a0a0a]/20 dark:text-white/20 uppercase leading-none">
-                Piloto de la Semana — {activeRace?.nombre}
-              </p>
-              <p className="text-[10px] font-mono text-[#0a0a0a]/40 dark:text-white/40 mt-0.5">
-                P1 en {lastRace?.nombre}
-              </p>
-            </div>
-            <span className="ml-auto text-xl">🏆</span>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-6 p-5 bg-[#0a0a0a]/[0.02] dark:bg-white/[0.01]">
-            {/* Card featured */}
-            <div className="w-full sm:w-44 shrink-0">
-              <PilotCard
-                pilot={pilotoDestacado}
-                team={eqMap[pilotoDestacado.equipoId]}
-                getPilotPhoto={getPilotPhoto}
-                featured
-              />
-            </div>
-
-            {/* Info */}
-            <div className="flex flex-col justify-center space-y-4">
-              <div>
-                <p className="text-2xl font-black uppercase tracking-tight text-[#0a0a0a] dark:text-white leading-none">
-                  {pilotoDestacado.nombre}
-                </p>
-                <p className="text-[11px] font-mono text-[#0a0a0a]/35 dark:text-white/35 mt-1">
-                  {eqMap[pilotoDestacado.equipoId]?.nombre || ""}
-                </p>
-              </div>
-
-              <div className="flex items-baseline gap-3">
-                <span className="text-4xl font-black text-[#e10600] leading-none">P1</span>
-                <span className="text-[11px] font-mono text-[#0a0a0a]/40 dark:text-white/40">{lastRace?.nombre}</span>
-              </div>
-
-              <div className="flex flex-wrap gap-6">
-                {(pilotoDestacado.mantener_actual || 0) > 0 && !pilotoDestacado.congelado && (
-                  <div>
-                    <p className="text-[8px] font-mono tracking-[0.3em] uppercase text-[#0a0a0a]/25 dark:text-white/25">Precio semana</p>
-                    <p className="text-2xl font-black text-[#e10600] tabular-nums">{pilotoDestacado.mantener_actual}M</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-[8px] font-mono tracking-[0.3em] uppercase text-[#0a0a0a]/25 dark:text-white/25">Puntos</p>
-                  <p className="text-2xl font-black text-[#0a0a0a] dark:text-white tabular-nums">{pilotoDestacado.puntos_piloto || 0}</p>
-                </div>
-                <div>
-                  <p className="text-[8px] font-mono tracking-[0.3em] uppercase text-[#0a0a0a]/25 dark:text-white/25">Rating</p>
-                  <p className="text-2xl font-black text-[#0a0a0a] dark:text-white tabular-nums">{pilotoDestacado.rating_piloto ?? 0}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Grid por equipos */}
-      {Object.entries(pilotsByTeam).map(([teamId, pilots]) => {
-        const team = eqMap[teamId];
-        const isChampTeam = champTeamId === teamId;
-        return (
-          <div key={teamId}>
-            {/* Team header */}
-            <div className={`flex items-center gap-4 pb-4 mb-5 border-b ${
-              isChampTeam ? "border-[#e10600]/25" : "border-[#0a0a0a]/[0.06] dark:border-white/[0.05]"
-            }`}>
-              {team?.logo_url ? (
-                <img src={team.logo_url} alt={team.nombre} className="w-8 h-8 object-contain" />
-              ) : (
-                <div className="w-8 h-8 bg-[#0a0a0a]/5 dark:bg-white/5 border border-[#0a0a0a]/10 dark:border-white/10 flex items-center justify-center text-[9px] font-black text-[#0a0a0a]/30 dark:text-white/30">
-                  {team?.nombre?.substring(0, 2).toUpperCase()}
-                </div>
-              )}
-              <div>
-                <h3 className={`font-black uppercase tracking-tight text-sm ${
-                  isChampTeam ? "text-[#e10600]" : "text-[#0a0a0a] dark:text-white"
-                }`}>
-                  {team?.nombre || teamId}
-                  {isChampTeam && <span className="ml-2 text-[10px] font-mono tracking-widest text-[#e10600]/50">· Campeón</span>}
-                </h3>
-                <p className="text-[9px] font-mono text-[#0a0a0a]/25 dark:text-white/25 uppercase tracking-widest mt-0.5">
-                  {team?.puntos_constructores || 0} pts constructores
-                </p>
-              </div>
-            </div>
-
-            {/* Pilot cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-              {(pilots as any[])
-                .sort((a, b) => (b.puntos_piloto || 0) - (a.puntos_piloto || 0))
-                .map((p: any) => (
-                  <PilotCard
-                    key={p.pilotoId}
-                    pilot={p}
-                    team={team}
-                    getPilotPhoto={getPilotPhoto}
-                    featured={pilotoDestacado?.pilotoId === p.pilotoId}
-                  />
-                ))}
-            </div>
-          </div>
-        );
-      })}
-
-      {Object.keys(pilotsByTeam).length === 0 && (
-        <p className="text-center text-[#0a0a0a]/20 dark:text-white/20 text-xs font-mono tracking-widest uppercase py-24">
-          Sin datos de temporada
-        </p>
       )}
     </div>
   );

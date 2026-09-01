@@ -4,8 +4,9 @@ import { db } from "../services/firebase";
 import {
   procesarEconomiaCarrera,
   calcularMillonesClasificacion, calcularMillonesCarrera, calcularPuntosPosicion,
+  calcularMillonesRivalidadClasificacion, calcularMillonesRivalidadCarrera,
   M_PUNTOS_FACTOR, M_POLE, M_VUELTA_RAPIDA, M_SIN_SANCIONADOS,
-  M_SOLO_POR_CARRERA, M_RIVALIDAD_CLASIF, M_RIVALIDAD_CARRERA,
+  M_SOLO_POR_CARRERA,
 } from "../services/economyService";
 import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
 
@@ -295,8 +296,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
           const ptsPos  = isDNF ? 0 : calcularPuntosPosicion(r.racePos);
           const ptsPole = r.qualyPos === 1 ? 2 : 0;
-          const ptsFL   = r.fastestLap ? 2 : 0;
-          const totalPts = ptsPos + ptsPole + ptsFL;
+          const totalPts = ptsPos + ptsPole;
           if (totalPts > 0) team.ingresos_premios += parseFloat((totalPts * M_PUNTOS_FACTOR).toFixed(2));
 
           if (r.qualyPos === 1) team.ingresos_premios += M_POLE;
@@ -323,13 +323,14 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
             .filter(Boolean);
           if (members.length < 2) continue;
 
-          const qualyWinner = members.reduce((best: any, curr: any) => curr.qualyPos < best.qualyPos ? curr : best);
-          const qTeam = newTeams.find(t => t.id === qualyWinner.teamId);
-          if (qTeam) qTeam.ingresos_rivalidades += M_RIVALIDAD_CLASIF;
-
-          const raceWinner = members.reduce((best: any, curr: any) => curr.racePos < best.racePos ? curr : best);
-          const rTeam = newTeams.find(t => t.id === raceWinner.teamId);
-          if (rTeam) rTeam.ingresos_rivalidades += M_RIVALIDAD_CARRERA;
+          [...members].sort((a: any, b: any) => a.qualyPos - b.qualyPos).forEach((member: any, index) => {
+            const team = newTeams.find(t => t.id === member.teamId);
+            if (team) team.ingresos_rivalidades += calcularMillonesRivalidadClasificacion(index + 1, members.length);
+          });
+          [...members].sort((a: any, b: any) => a.racePos - b.racePos).forEach((member: any, index) => {
+            const team = newTeams.find(t => t.id === member.teamId);
+            if (team) team.ingresos_rivalidades += calcularMillonesRivalidadCarrera(index + 1, members.length);
+          });
         }
       }
 
@@ -342,11 +343,11 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   // ─── ACCIONES ────────────────────────────────────────────────────────────────
 
-  async function reprocesarEconomia(circuit: CircuitoCol) {
+  async function procesarEconomia(circuit: CircuitoCol) {
+    if (circuit.economia_procesada) return;
     setReprocesando(circuit.id);
     setProcessLog([`Procesando ${circuit.nombre}…`]);
     try {
-      await updateDoc(doc(db, `splits/${selectedSplitId}/circuitos`, circuit.id), { economia_procesada: false });
       const circuitIndex = circuits.findIndex(c => c.id === circuit.id);
       const previousCircuitIds = circuits.slice(0, circuitIndex).map(c => c.id);
       await procesarEconomiaCarrera(selectedSplitId, circuit.id, circuit.nombre, (msg) => setProcessLog(prev => [...prev, msg]), previousCircuitIds);
@@ -399,7 +400,10 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     const val = parseFloat(rawVal);
     if (isNaN(val)) return;
     setSavingBudget(team.id);
-    await updateDoc(doc(db, `splits/${selectedSplitId}/equipos`, team.id), { presupuesto_inicial: val, presupuesto: val });
+    const presupuesto = team.presupuesto_inicial == null
+      ? val
+      : Math.round((team.presupuesto + val - team.presupuesto_inicial) * 10) / 10;
+    await updateDoc(doc(db, `splits/${selectedSplitId}/equipos`, team.id), { presupuesto_inicial: val, presupuesto });
     setEditingBudget(prev => { const n = { ...prev }; delete n[team.id]; return n; });
     await loadData(selectedSplitId);
     setSavingBudget(null);
@@ -480,7 +484,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   function getNextSplitId(currentSplitId: string): string | null {
     const sorted = splits
       .filter((s: any) => s.id !== "global")
-      .sort((a: any, b: any) => a.id.localeCompare(b.id));
+      .sort((a: any, b: any) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || a.id.localeCompare(b.id));
     const idx = sorted.findIndex((s: any) => s.id === currentSplitId);
     if (idx < 0 || idx >= sorted.length - 1) return null;
     return sorted[idx + 1].id;
@@ -658,13 +662,14 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
       const existingDelta = existingPendingPrice != null ? pendingBudgetDelta(existingPendingPrice) : 0;
       const newDelta = pendingBudgetDelta(pendingPrice);
 
-      // Revert existing pending reservation (any team, including same-team renovation)
-      if (existingPendingTeam && existingPendingPrice != null) {
-        await adjustTeamPresupuesto(splitId, existingPendingTeam, -existingDelta);
+      if (existingPendingTeam === fichajeEquipoId && existingPendingPrice != null) {
+        await adjustTeamPresupuesto(splitId, fichajeEquipoId, newDelta - existingDelta);
+      } else {
+        if (existingPendingTeam && existingPendingPrice != null) {
+          await adjustTeamPresupuesto(splitId, existingPendingTeam, -existingDelta);
+        }
+        await adjustTeamPresupuesto(splitId, fichajeEquipoId, newDelta);
       }
-      // Apply new pending reservation (any team, including same-team renovation)
-      const deltaAdjustment = newDelta - (existingPendingTeam === fichajeEquipoId ? existingDelta : 0);
-      await adjustTeamPresupuesto(splitId, fichajeEquipoId, deltaAdjustment);
 
       await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
         congelado: true,
@@ -892,7 +897,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                         </span>
                         {c.completado && (
                           <button
-                            onClick={() => c.economia_procesada ? fixFichajePricesHistorial(c) : reprocesarEconomia(c)}
+                            onClick={() => c.economia_procesada ? fixFichajePricesHistorial(c) : procesarEconomia(c)}
                             disabled={reprocesando === c.id}
                             className={`flex items-center gap-0.5 text-[7px] tracking-normal normal-case font-normal transition-colors mt-0.5 ${
                               c.economia_procesada ? "text-emerald-500/50 hover:text-amber-300" : "text-amber-400/70 hover:text-amber-300"

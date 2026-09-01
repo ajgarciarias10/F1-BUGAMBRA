@@ -9,9 +9,32 @@ export const isSplitUnlocked = (splitId: string, allSplits: SplitView[]): boolea
   const sorted = [...allSplits].sort((a, b) => a.orden - b.orden);
   const idx = sorted.findIndex(s => s.id === splitId);
   if (idx <= 0) return true;
-  const prev = sorted[idx - 1];
+  const prev = sorted.slice(0, idx).reverse().find(s => s.tipo !== "individual" && s.circuitos.length > 0);
+  if (!prev) return true;
   return prev.circuitos.length > 0 && prev.circuitos.every(c => c.completado);
 };
+
+export function resolveInitialPilotRating(
+  pilotId: string,
+  targetSplit: SplitView,
+  allSplits: SplitView[],
+): { rating: number; rookie: boolean; sourceSplitId: string | null } {
+  const previousEntry = [...allSplits]
+    .filter(split => split.id !== targetSplit.id && split.orden < targetSplit.orden)
+    .sort((a, b) => b.orden - a.orden)
+    .map(split => ({ split, entry: split.roster.find(pilot => pilot.pilotoId === pilotId) }))
+    .find(result => result.entry);
+
+  if (!previousEntry?.entry) {
+    return { rating: 70, rookie: true, sourceSplitId: null };
+  }
+
+  return {
+    rating: Number(previousEntry.entry.rating_piloto ?? 70),
+    rookie: false,
+    sourceSplitId: previousEntry.split.id,
+  };
+}
 
 // ─── COEFICIENTE DE RIVALIDAD ─────────────────────────────────────────────────
 

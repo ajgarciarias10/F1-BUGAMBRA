@@ -1,11 +1,106 @@
 import { useState } from "react";
 import { AlertCircle, CheckCircle2, FileSpreadsheet, Database, Loader2 } from "lucide-react";
 import { db } from "../services/firebase";
-import { doc, writeBatch, getDoc } from "firebase/firestore";
+import { collection, doc, writeBatch, getDoc, getDocs } from "firebase/firestore";
+import { fetchOriginsWorkbook, normalizeOriginsName } from "../services/originsImporter";
 
 export function AdminControlPanel() {
   const [migrating, setMigrating] = useState(false);
   const [migrateMsg, setMigrateMsg] = useState("");
+  const [originsSheetUrl, setOriginsSheetUrl] = useState("");
+  const [importingOrigins, setImportingOrigins] = useState(false);
+  const [originsMsg, setOriginsMsg] = useState("");
+
+  const importOrigins = async () => {
+    if (!originsSheetUrl.trim()) {
+      setOriginsMsg("Introduce la URL del Excel de Origins.");
+      return;
+    }
+
+    setImportingOrigins(true);
+    setOriginsMsg("Leyendo y validando los rangos del Excel...");
+    try {
+      const data = await fetchOriginsWorkbook(originsSheetUrl);
+      const [pilotsSnap, currentRosterSnap, currentRacesSnap] = await Promise.all([
+        getDocs(collection(db, "pilotos")),
+        getDocs(collection(db, "splits/origins/roster")),
+        getDocs(collection(db, "splits/origins/circuitos")),
+      ]);
+      const pilotIdByName = new Map<string, string>();
+      pilotsSnap.docs.forEach(pilotDoc => {
+        const name = String(pilotDoc.data().nombre || "");
+        if (name) pilotIdByName.set(normalizeOriginsName(name), pilotDoc.id);
+      });
+
+      const resolvedPilots = data.pilots.map(pilot => {
+        const normalizedName = normalizeOriginsName(pilot.name);
+        const pilotId = pilotIdByName.get(normalizedName) || `piloto_${normalizedName.replace(/\s+/g, "_")}`;
+        return { ...pilot, pilotId };
+      });
+      const nextPilotIds = new Set(resolvedPilots.map(pilot => pilot.pilotId));
+      const raceIds = data.races.map(name => normalizeOriginsName(name).replace(/\s+/g, "_"));
+      const nextRaceIds = new Set(raceIds);
+      const batch = writeBatch(db);
+
+      currentRosterSnap.docs.forEach(rosterDoc => {
+        if (!nextPilotIds.has(rosterDoc.id)) batch.delete(rosterDoc.ref);
+      });
+      currentRacesSnap.docs.forEach(raceDoc => {
+        if (!nextRaceIds.has(raceDoc.id)) batch.delete(raceDoc.ref);
+      });
+
+      resolvedPilots.forEach(pilot => {
+        batch.set(doc(db, "pilotos", pilot.pilotId), { nombre: pilot.name }, { merge: true });
+        batch.set(doc(db, "splits/origins/roster", pilot.pilotId), {
+          pilotoId: pilot.pilotId,
+          nombre: pilot.name,
+          equipoId: "individual",
+          puntos_piloto: pilot.total,
+        });
+      });
+
+      data.races.forEach((raceName, raceIndex) => {
+        batch.set(doc(db, "splits/origins/circuitos", raceIds[raceIndex]), {
+          nombre: raceName,
+          numero_carrera: raceIndex + 1,
+          completado: true,
+          acta_cerrada: true,
+          economia_procesada: false,
+          resultados: resolvedPilots.map(pilot => ({
+            pilotoId: pilot.pilotId,
+            pilotoNombre: pilot.name,
+            puntos: pilot.racePoints[raceIndex],
+          })),
+          puntos_duos: data.duos.map(duo => ({ nombre: duo.name, puntos: duo.racePoints[raceIndex] })),
+        });
+      });
+
+      batch.set(doc(db, "splits", "origins"), {
+        nombre: "Origins",
+        orden: 0,
+        tipo: "individual",
+        activo: false,
+        completado: true,
+        fichajes_abiertos: false,
+        video_intro: "https://youtu.be/5OLFg1W5LzU",
+        source_url: originsSheetUrl.trim(),
+        imported_at: new Date().toISOString(),
+        duos: data.duos.map((duo, index) => ({
+          id: `duo_${index + 1}`,
+          nombre: duo.name,
+          puntos: duo.total,
+          puntos_carreras: duo.racePoints,
+        })),
+      }, { merge: true });
+
+      await batch.commit();
+      setOriginsMsg(`Origins importado: ${data.pilots.length} pilotos, ${data.duos.length} dúos y ${data.races.length} carreras.`);
+    } catch (err: any) {
+      setOriginsMsg("Error: " + err.message);
+    } finally {
+      setImportingOrigins(false);
+    }
+  };
 
   const runMigration = async () => {
     if (!confirm("¿Ejecutar migración de splits? Esto actualizará:\n- split_1: puntos finales del Excel (Zenith 130, Alfa 132, Roses 185)\n- split_2: puntos finales incluyendo Bélgica (Zenith 189, Alfa 130, Roses 118)\n- split_3: activar con nuevos fichajes del Excel (Moles/Pabliyo→Zenith, Jota/Aparicio→Roses, Pinilla→Alfa)\n\n¿Continuar?")) return;
@@ -206,6 +301,31 @@ export function AdminControlPanel() {
               {migrateMsg}
             </p>
           )}
+        </div>
+
+        <div className="bg-sky-500/10 border border-sky-400/25 rounded-sm p-4">
+          <h3 className="text-xs font-black uppercase tracking-widest text-sky-200 mb-2">Importar Origins desde Google Sheets</h3>
+          <p className="text-xs text-sky-100/55 mb-4">
+            Lee los pilotos, puntos, dúos y seis carreras directamente desde los rangos configurados. Los totales se validan antes de escribir.
+          </p>
+          <div className="flex flex-col lg:flex-row gap-2">
+            <input
+              type="url"
+              value={originsSheetUrl}
+              onChange={event => setOriginsSheetUrl(event.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              className="flex-1 min-w-0 bg-black/30 border border-white/10 px-3 py-2.5 text-xs text-white outline-none focus:border-sky-400/60 font-mono"
+            />
+            <button
+              onClick={importOrigins}
+              disabled={importingOrigins || !originsSheetUrl.trim()}
+              className="px-4 py-2.5 bg-sky-400/15 hover:bg-sky-400/25 border border-sky-300/30 text-sky-100 font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-40"
+            >
+              {importingOrigins && <Loader2 className="w-4 h-4 animate-spin" />}
+              {importingOrigins ? "Importando" : "Importar Excel"}
+            </button>
+          </div>
+          {originsMsg && <p className={`mt-3 text-xs font-mono ${originsMsg.startsWith("Error") ? "text-red-300" : "text-sky-200"}`}>{originsMsg}</p>}
         </div>
       </div>
     </section>

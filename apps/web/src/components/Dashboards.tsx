@@ -5,7 +5,7 @@ import { SharedDashboardView, TotalStandings } from "./SharedDashboard";
 import { ProfileView } from "./ProfileView";
 import { auth } from "../services/firebase";
 import { SuggestionsView } from "./SuggestionsView";
-import { AlbumView } from "./PublicHome";
+import { TeamsView } from "./TeamsView";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 import { AdminDashboard } from "./AdminDashboard";
@@ -125,7 +125,7 @@ function AppNav({ title, tabs, activeTab, onTab, isAdmin, onToggleAdmin, showAdm
 // ── BASE DASHBOARD ─────────────────────────────────────────────────────────────
 
 interface BaseDashboardProps {
-  role: "jeque" | "piloto";
+  role: "jeque" | "piloto" | "usuario";
   tabs: { id: string; label: string }[];
   canViewBudget: boolean;
   renderExtraTabs?: () => React.ReactNode;
@@ -153,10 +153,13 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
   };
 
   const allSplits = (splits || []).filter((s: any) => s.id !== "global");
-  const validSplits = (() => { const a = allSplits.filter((s: any) => s.activo); return a.length > 0 ? a : allSplits; })();
-  const [albumSplitId, setAlbumSplitId] = useState<string>("");
-  const resolvedAlbumSplitId = albumSplitId || validSplits[validSplits.length - 1]?.id || "";
-  const albumSplit = validSplits.find((s: any) => s.id === resolvedAlbumSplitId) || validSplits[validSplits.length - 1];
+  const validSplits = (() => {
+    const visible = allSplits.filter((s: any) => s.activo || s.completado || s.tipo === "individual");
+    return visible.length > 0 ? visible : allSplits;
+  })();
+  const [teamsSplitId, setTeamsSplitId] = useState<string>("");
+  const resolvedTeamsSplitId = teamsSplitId || validSplits[validSplits.length - 1]?.id || "";
+  const teamsSplit = validSplits.find((s: any) => s.id === resolvedTeamsSplitId) || validSplits[validSplits.length - 1];
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
@@ -171,12 +174,12 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
       <AdminOverlay isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
       <main className="pt-24 md:pt-[7.5rem] max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10 pb-28 md:pb-10">
         {activeTab === "championship" && <SharedDashboardView canViewBudget={canViewBudget} escuderiaId={userData?.escuderia_id} />}
-        {activeTab === "album" && (
-          <AlbumView
+        {activeTab === "equipos" && (
+          <TeamsView
             validSplits={validSplits}
-            currentSplitId={resolvedAlbumSplitId}
-            onSelectSplit={(id: string) => setAlbumSplitId(id)}
-            currentSplit={albumSplit}
+            currentSplitId={resolvedTeamsSplitId}
+            onSelectSplit={(id: string) => setTeamsSplitId(id)}
+            currentSplit={teamsSplit}
             getPilotPhoto={getPilotPhoto}
           />
         )}
@@ -193,7 +196,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
 export function JequeDashboard() {
   const tabs = [
     { id: "championship", label: "Campeonato" },
-    { id: "album",        label: "Álbum de Pilotos" },
+    { id: "equipos",      label: "Equipos" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
   ];
@@ -212,7 +215,7 @@ export function JequeDashboard() {
 export function PilotoDashboard() {
   const tabs = [
     { id: "championship", label: "Campeonato" },
-    { id: "album",        label: "Álbum de Pilotos" },
+    { id: "equipos",      label: "Equipos" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
   ];
@@ -224,6 +227,17 @@ export function PilotoDashboard() {
       canViewBudget={false}
     />
   );
+}
+
+export function UsuarioDashboard() {
+  const tabs = [
+    { id: "championship", label: "Campeonato" },
+    { id: "equipos",      label: "Equipos" },
+    { id: "profile",      label: "Mi Perfil" },
+    { id: "suggestions",  label: "Buzón de Mejoras" },
+  ];
+
+  return <BaseDashboard role="usuario" tabs={tabs} canViewBudget={false} />;
 }
 
 // Exported for backwards compat

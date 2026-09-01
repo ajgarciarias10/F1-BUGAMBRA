@@ -27,31 +27,35 @@ export function PilotCardF1({
   const firstName = nameParts.length > 1 ? nameParts[0] : "";
 
   const isSm = size === "sm";
+  const tier = rating >= 90
+    ? { accent: "#f5c451", label: "ELITE" }
+    : rating >= 85
+      ? { accent: "#e10600", label: "PRO" }
+      : rating >= 80
+        ? { accent: "#38bdf8", label: "ADV" }
+        : { accent: "#a1a1aa", label: "CORE" };
 
   return (
     <div className="flex flex-col">
       {/* ── Card ──────────────────────────────────────────────────────────── */}
       <div
-        className={`relative overflow-hidden bg-[#0a0a0a] select-none ${
+        className={`group relative overflow-hidden bg-[#090909] select-none ${
           featured
-            ? "border border-[#e10600]/50 shadow-xl shadow-[#e10600]/10"
-            : "border border-white/[0.07] hover:border-white/[0.18] transition-colors"
+            ? "border border-white/30 shadow-xl shadow-black/40"
+            : "border border-white/[0.12] hover:border-white/30 transition-colors"
         }`}
-        style={{ aspectRatio: "2/3" }}
+        style={{ aspectRatio: "2/3", boxShadow: featured ? `0 0 0 1px ${tier.accent}55` : undefined }}
       >
         {/* Team logo — watermark fondo */}
         {team?.logo_url && (
-          <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none bg-[#111]">
             <img
               src={team.logo_url}
-              className="w-[85%] object-contain opacity-[0.07]"
-              style={{ filter: "blur(2px)" }}
+              alt=""
+              className="w-[82%] object-contain opacity-[0.08]"
             />
           </div>
         )}
-
-        {/* Vignette base */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#1c1c1c] to-[#060606]" style={{ opacity: 0.55 }} />
 
         {/* Foto del piloto — máxima calidad, centrado en zona del rostro */}
         {photo ? (
@@ -59,7 +63,7 @@ export function PilotCardF1({
             src={photo}
             referrerPolicy="no-referrer"
             alt={pilot.nombre}
-            className="absolute inset-0 w-full h-full"
+            className="absolute inset-0 w-full h-full transition-transform duration-500 group-hover:scale-[1.02]"
             style={{ objectFit: "cover", objectPosition: "center 15%", imageRendering: "auto" }}
           />
         ) : (
@@ -70,55 +74,89 @@ export function PilotCardF1({
           </div>
         )}
 
-        {/* Gradiente inferior info */}
+        {/* Single readability scrim */}
         <div
           className="absolute inset-x-0 bottom-0"
-          style={{ height: "58%", background: "linear-gradient(to top, #0a0a0a 55%, transparent)" }}
+          style={{ height: "64%", background: "linear-gradient(to top, #080808 60%, rgba(8,8,8,0.82) 76%, transparent)" }}
         />
 
-        {/* Barra roja izquierda */}
-        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-[#e10600]" />
+        {/* Controlled tier accents */}
+        <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: tier.accent }} />
+        <div
+          className="absolute top-0 right-0 h-1"
+          style={{ width: isSm ? 34 : 52, backgroundColor: tier.accent }}
+        />
 
-        {/* RTG — arriba izquierda */}
-        <div className="absolute z-10" style={{ top: isSm ? 6 : 10, left: isSm ? 7 : 12 }}>
-          <p
-            className="font-mono tracking-[0.3em] uppercase leading-none mb-0.5"
-            style={{ fontSize: isSm ? 5 : 6.5, color: "rgba(255,255,255,0.35)" }}
-          >
-            RTG
-          </p>
-          <p
-            className="font-black text-white leading-none tabular-nums"
-            style={{ fontSize: isSm ? 18 : 26 }}
-          >
-            {rating}
-          </p>
+        {/* OVR badge */}
+        <div
+          className="absolute z-20 bg-[#070707] border border-white/20 shadow-lg shadow-black/50"
+          style={{ top: isSm ? 7 : 11, left: isSm ? 8 : 13, minWidth: isSm ? 43 : 58 }}
+        >
+          <div className="h-1" style={{ backgroundColor: tier.accent }} />
+          <div className="flex flex-col items-center" style={{ padding: isSm ? "5px 6px 6px" : "6px 8px 8px" }}>
+            <span
+              className="font-black text-white leading-none tabular-nums"
+              style={{ fontSize: isSm ? 22 : 31, letterSpacing: "-0.06em" }}
+            >
+              {rating}
+            </span>
+            <span
+              className="font-mono font-bold uppercase leading-none tracking-[0.16em]"
+              style={{ fontSize: isSm ? 7 : 8, color: tier.accent, marginTop: 3 }}
+            >
+              OVR
+            </span>
+          </div>
         </div>
 
-        {/* Logo equipo — arriba derecha */}
-        {team?.logo_url && (
-          <img
-            src={team.logo_url}
-            className="absolute z-10 object-contain"
-            style={{ top: isSm ? 5 : 8, right: isSm ? 6 : 8, width: isSm ? 18 : 26, height: isSm ? 18 : 26 }}
-          />
-        )}
+        {/* Team and status marks */}
+        <div
+          className="absolute z-20 right-0 flex flex-col items-end gap-1.5"
+          style={{ top: isSm ? 8 : 12, paddingRight: isSm ? 7 : 10 }}
+        >
+          {team?.logo_url && (
+            <div
+              className="flex items-center justify-center bg-black/90 border border-white/15"
+              style={{ width: isSm ? 27 : 36, height: isSm ? 27 : 36, padding: isSm ? 4 : 5 }}
+            >
+              <img src={team.logo_url} alt="" className="w-full h-full object-contain" />
+            </div>
+          )}
+          {pilot.rookie && (
+            <span
+              className="bg-white text-black font-black uppercase leading-none tracking-[0.12em]"
+              style={{ fontSize: isSm ? 7 : 8, padding: isSm ? "4px 5px" : "5px 7px" }}
+            >
+              Rookie
+            </span>
+          )}
+        </div>
 
         {/* Contenido inferior */}
-        <div className="absolute bottom-0 inset-x-0 z-10" style={{ padding: isSm ? "0 8px 6px" : "0 10px 8px" }}>
+        <div className="absolute bottom-0 inset-x-0 z-10" style={{ padding: isSm ? "0 9px 7px 11px" : "0 13px 10px 16px" }}>
+          <div className="flex items-center gap-2" style={{ marginBottom: isSm ? 5 : 7 }}>
+            <span className="h-px flex-1" style={{ backgroundColor: tier.accent }} />
+            <span
+              className="font-mono font-bold uppercase tracking-[0.16em]"
+              style={{ color: tier.accent, fontSize: isSm ? 7 : 8 }}
+            >
+              {tier.label}
+            </span>
+          </div>
+
           {/* Nombre */}
-          <div style={{ marginBottom: isSm ? 3 : 4 }}>
+          <div style={{ marginBottom: isSm ? 6 : 8 }}>
             {firstName && (
               <p
-                className="font-bold uppercase leading-none truncate"
-                style={{ fontSize: isSm ? 6 : 8, color: "rgba(255,255,255,0.45)", letterSpacing: "0.1em", marginBottom: 2 }}
+                className="font-bold uppercase leading-none truncate text-white/65"
+                style={{ fontSize: isSm ? 8 : 10, letterSpacing: "0.12em", marginBottom: isSm ? 3 : 4 }}
               >
                 {firstName}
               </p>
             )}
             <p
               className="font-black text-white uppercase leading-none truncate"
-              style={{ fontSize: isSm ? 10 : 13, letterSpacing: "-0.01em" }}
+              style={{ fontSize: isSm ? 13 : 18, letterSpacing: "-0.025em" }}
             >
               {lastName || pilot.nombre}
             </p>
@@ -126,16 +164,16 @@ export function PilotCardF1({
 
           {/* Precio — oculto si congelado o showPrice=false */}
           {mantener > 0 && showPrice && !pilot.congelado && (
-            <div className="flex items-baseline gap-1" style={{ marginBottom: isSm ? 4 : 6 }}>
+            <div className="flex items-baseline justify-between border-t border-white/10" style={{ paddingTop: isSm ? 5 : 7, marginBottom: isSm ? 5 : 7 }}>
               <span
-                className="font-mono uppercase"
-                style={{ fontSize: isSm ? 5 : 6.5, color: "rgba(255,255,255,0.25)", letterSpacing: "0.2em" }}
+                className="font-mono font-bold uppercase text-white/50"
+                style={{ fontSize: isSm ? 7 : 8, letterSpacing: "0.16em" }}
               >
                 Precio
               </span>
               <span
-                className="font-black text-[#e10600] tabular-nums"
-                style={{ fontSize: isSm ? 9 : 11 }}
+                className="font-black tabular-nums"
+                style={{ fontSize: isSm ? 11 : 14, color: tier.accent }}
               >
                 {mantener}M
               </span>
@@ -144,8 +182,8 @@ export function PilotCardF1({
 
           {/* Stats */}
           <div
-            className="grid grid-cols-4 border-t"
-            style={{ borderColor: "rgba(255,255,255,0.08)", paddingTop: isSm ? 4 : 6, paddingBottom: isSm ? 2 : 3 }}
+            className="grid grid-cols-4 bg-white/[0.06] border-y border-white/10"
+            style={{ padding: isSm ? "5px 1px 4px" : "7px 2px 6px" }}
           >
             {[
               { lbl: "PTS", val: pilot.puntos_piloto || 0 },
@@ -153,17 +191,17 @@ export function PilotCardF1({
               { lbl: "POD", val: pilot.podios || 0 },
               { lbl: "POL", val: pilot.poles || 0 },
             ].map(s => (
-              <div key={s.lbl} className="text-center">
-                <p className="font-mono uppercase" style={{ fontSize: isSm ? 5 : 6, color: "rgba(255,255,255,0.2)" }}>{s.lbl}</p>
-                <p className="font-black text-white tabular-nums" style={{ fontSize: isSm ? 8 : 10 }}>{s.val}</p>
+              <div key={s.lbl} className="text-center border-r border-white/10 last:border-r-0">
+                <p className="font-mono font-bold uppercase text-white/45" style={{ fontSize: isSm ? 7 : 8 }}>{s.lbl}</p>
+                <p className="font-black text-white tabular-nums leading-tight" style={{ fontSize: isSm ? 10 : 13 }}>{s.val}</p>
               </div>
             ))}
           </div>
 
           {/* Branding */}
           <p
-            className="text-center font-mono uppercase tracking-[0.3em]"
-            style={{ fontSize: isSm ? 4.5 : 5.5, color: "rgba(255,255,255,0.12)", marginTop: isSm ? 2 : 3 }}
+            className="text-center font-mono font-bold uppercase tracking-[0.22em] text-white/25"
+            style={{ fontSize: isSm ? 6 : 7, marginTop: isSm ? 4 : 5 }}
           >
             F1 Bugambra
           </p>

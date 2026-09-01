@@ -107,10 +107,11 @@ const PILOTS = {
 };
 
 const SPLITS = [
-  { id: "split_1", nombre: "Split 1", circuitos: ["Australia", "China", "Japón", "Arabia Saudí", "Miami", "Barein"] },
-  { id: "split_2", nombre: "Split 2", circuitos: ["Canadá", "Mónaco", "Barcelona", "Austria", "Gran Bretaña", "Bélgica"] },
-  { id: "split_3", nombre: "Split 3", circuitos: ["Hungría", "Paises Bajos", "Italia", "España", "Azerbayán", "Singapur"] },
-  { id: "split_4", nombre: "Split 4", circuitos: ["Austin", "México", "Brasil", "Las Vegas", "Qatar", "Abu Dhabi"] }
+  { id: "origins", nombre: "Origins", orden: 0, tipo: "individual", activo: false, completado: true, fichajes_abiertos: false, video_intro: "https://youtu.be/5OLFg1W5LzU", circuitos: [] },
+  { id: "split_1", nombre: "Split 1", orden: 1, tipo: "equipos", activo: true, completado: false, fichajes_abiertos: true, video_intro: "", circuitos: ["Australia", "China", "Japón", "Arabia Saudí", "Miami", "Barein"] },
+  { id: "split_2", nombre: "Split 2", orden: 2, tipo: "equipos", activo: false, completado: false, fichajes_abiertos: true, video_intro: "", circuitos: ["Canadá", "Mónaco", "Barcelona", "Austria", "Gran Bretaña", "Bélgica"] },
+  { id: "split_3", nombre: "Split 3", orden: 3, tipo: "equipos", activo: false, completado: false, fichajes_abiertos: true, video_intro: "", circuitos: ["Hungría", "Paises Bajos", "Italia", "España", "Azerbayán", "Singapur"] },
+  { id: "split_4", nombre: "Split 4", orden: 4, tipo: "equipos", activo: false, completado: false, fichajes_abiertos: true, video_intro: "", circuitos: ["Austin", "México", "Brasil", "Las Vegas", "Qatar", "Abu Dhabi"] }
 ];
 
 async function load() {
@@ -174,8 +175,12 @@ async function load() {
     const splitRef = doc(db, "splits", s.id);
     promises.push(setDoc(splitRef, {
       nombre: s.nombre,
-      activo: s.id === "split_1",
-      fichajes_abiertos: true
+      orden: s.orden,
+      tipo: s.tipo,
+      activo: s.activo,
+      completado: s.completado,
+      fichajes_abiertos: s.fichajes_abiertos,
+      video_intro: s.video_intro || null
     }));
 
     // Circuitos de este split
@@ -188,8 +193,8 @@ async function load() {
       }));
     }
 
-    // Equipos para este split
-    for (const team of TEAMS) {
+    // Equipos para temporadas que se disputan por escuderías
+    if (s.tipo === "equipos") for (const team of TEAMS) {
       promises.push(setDoc(doc(db, `splits/${s.id}/equipos`, team.id), {
         id: team.id,
         nombre: team.nombre,

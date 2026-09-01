@@ -46,19 +46,23 @@ const ROSTER_SPLIT_1: { pilotoId: string; equipoId: string; precio_compra: numbe
 
 const SPLITS_CONFIG = [
   {
-    id: "split_1", nombre: "Split 1", orden: 1,
+    id: "origins", nombre: "Origins", orden: 0, tipo: "individual" as const,
+    video_intro: "https://youtu.be/5OLFg1W5LzU", circuitos: [],
+  },
+  {
+    id: "split_1", nombre: "Split 1", orden: 1, tipo: "equipos" as const, video_intro: "",
     circuitos: ["Australia", "China", "Japón", "Arabia Saudí", "Miami", "Baréin"],
   },
   {
-    id: "split_2", nombre: "Split 2", orden: 2,
+    id: "split_2", nombre: "Split 2", orden: 2, tipo: "equipos" as const, video_intro: "",
     circuitos: ["Canadá", "Mónaco", "Barcelona", "Austria", "Gran Bretaña", "Bélgica"],
   },
   {
-    id: "split_3", nombre: "Split 3", orden: 3,
+    id: "split_3", nombre: "Split 3", orden: 3, tipo: "equipos" as const, video_intro: "",
     circuitos: ["Hungría", "Países Bajos", "Italia", "España", "Azerbaiyán", "Singapur"],
   },
   {
-    id: "split_4", nombre: "Split 4", orden: 4,
+    id: "split_4", nombre: "Split 4", orden: 4, tipo: "equipos" as const, video_intro: "",
     circuitos: ["Austin", "México", "Brasil", "Las Vegas", "Qatar", "Abu Dabi"],
   },
 ];
@@ -150,6 +154,9 @@ export async function seedDatabase() {
     batch.set(doc(db, "splits", splitCfg.id), {
       nombre: splitCfg.nombre,
       orden: splitCfg.orden,
+      tipo: splitCfg.tipo,
+      completado: splitCfg.id === "origins",
+      video_intro: splitCfg.video_intro || null,
       fichajes_abiertos: false,
     });
 
@@ -164,12 +171,14 @@ export async function seedDatabase() {
       });
     }
 
-    for (const equipo of EQUIPOS) {
-      batch.set(doc(db, `splits/${splitCfg.id}/equipos`, equipo.id), {
-        nombre: equipo.nombre,
-        presupuesto: 100,
-        puntos_constructores: 0,
-      });
+    if (splitCfg.tipo === "equipos") {
+      for (const equipo of EQUIPOS) {
+        batch.set(doc(db, `splits/${splitCfg.id}/equipos`, equipo.id), {
+          nombre: equipo.nombre,
+          presupuesto: 100,
+          puntos_constructores: 0,
+        });
+      }
     }
 
     await batch.commit();

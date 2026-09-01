@@ -54,6 +54,7 @@ export function useSplits() {
       onSnapshot(collection(db, "splits"), bump, errHandler),
       onSnapshot(collectionGroup(db, "equipos"), bump, errHandler),
       onSnapshot(collectionGroup(db, "pilotos"), bump, errHandler),
+      onSnapshot(collectionGroup(db, "roster"), bump, errHandler),
       onSnapshot(collectionGroup(db, "circuitos"), bump, errHandler),
     ];
     return () => unsubs.forEach(u => u());
@@ -89,9 +90,10 @@ export function useSplits() {
         for (const splitDoc of sortedDocs) {
           const sid = splitDoc.id;
 
-          const [circSnap, equipSnap] = await Promise.all([
+          const [circSnap, equipSnap, flatRosterSnap] = await Promise.all([
             getDocs(collection(db, `splits/${sid}/circuitos`)),
             getDocs(collection(db, `splits/${sid}/equipos`)),
+            getDocs(collection(db, `splits/${sid}/roster`)),
           ]);
 
           const circuitos: Circuito[] = circSnap.docs.map(d => ({
@@ -133,12 +135,30 @@ export function useSplits() {
             }
           }
 
+          // Individual seasons (such as Origins) store participants directly
+          // below the split because no team exists.
+          for (const pd of flatRosterSnap.docs) {
+            if (roster.some(entry => entry.pilotoId === pd.id)) continue;
+            const entry = pd.data() as RosterEntry;
+            const piloto = pilotMap[pd.id];
+            roster.push({
+              ...entry,
+              pilotoId: pd.id,
+              equipoId: entry.equipoId || "individual",
+              nombre: piloto?.nombre ?? (entry as any).nombre ?? pd.id,
+              foto_url: piloto?.foto_url ?? (entry as any).foto_url,
+            });
+          }
+
           result.push({
             id: sid,
             nombre: splitDoc.data().nombre ?? sid,
             orden: splitDoc.data().orden ?? 0,
             fichajes_abiertos: splitDoc.data().fichajes_abiertos ?? false,
             activo: splitDoc.data().activo ?? false,
+            completado: splitDoc.data().completado ?? false,
+            tipo: splitDoc.data().tipo ?? "equipos",
+            duos: splitDoc.data().duos ?? [],
             rivalries: splitDoc.data().rivalries,
             video_intro: splitDoc.data().video_intro ?? undefined,
             circuitos,

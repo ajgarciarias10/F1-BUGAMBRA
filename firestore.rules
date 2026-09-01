@@ -51,7 +51,7 @@ service cloud.firestore {
              data.uid is string && data.uid.size() <= 128 &&
              data.nombre is string && data.nombre.size() <= 100 &&
              data.email is string && data.email.size() <= 150 &&
-             data.rol is string && data.rol.matches('^(admin|jeque|piloto)$');
+             data.rol is string && data.rol.matches('^(admin|usuario|invitado|jeque|piloto)$');
       // Financials and stats are optional or initialized to baseline values.
     }
 
@@ -80,7 +80,9 @@ service cloud.firestore {
     match /usuarios/{userId} {
       allow read: if true; // Public for album
       
-      allow create: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin()) && isValidUser(incoming());
+      allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() || (request.auth.uid == userId && incoming().rol == 'usuario')
+      );
       
       allow update: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
         isAdmin() ||
