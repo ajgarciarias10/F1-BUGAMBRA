@@ -82,7 +82,17 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?includeGridData=true`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!response.ok) throw new Error(response.status === 403 ? "Google ha denegado el acceso. Comprueba que tu cuenta sea lectora del documento." : "No se pudo leer el documento.");
+      if (!response.ok) {
+        let apiError: any = null;
+        try { apiError = await response.json(); } catch { /* La respuesta puede no ser JSON. */ }
+        const reason = apiError?.error?.errors?.[0]?.reason;
+        if (reason === "accessNotConfigured" || apiError?.error?.status === "PERMISSION_DENIED" && String(apiError?.error?.message).includes("API has not been used")) {
+          throw new Error("La API de Google Sheets no está habilitada en el proyecto Firebase. Actívala en Google Cloud y vuelve a intentarlo.");
+        }
+        if (response.status === 403) throw new Error("La cuenta Google autenticada no tiene acceso de lectura a este documento o el permiso Sheets no fue concedido.");
+        if (response.status === 404) throw new Error("No se encontró el documento. Comprueba que el enlace sea correcto.");
+        throw new Error(apiError?.error?.message || "No se pudo leer el documento.");
+      }
       const data = await response.json();
       const nextSheets: Sheet[] = data.sheets || [];
       setSheets(nextSheets);
