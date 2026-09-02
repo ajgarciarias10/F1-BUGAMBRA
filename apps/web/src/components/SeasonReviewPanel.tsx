@@ -82,6 +82,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
   const [field, setField] = useState<(typeof FIELD_OPTIONS)[number][0]>("pilotos");
   const [selection, setSelection] = useState<Selection | null>(null);
   const [mappings, setMappings] = useState<Record<string, MappingEntry[]>>({});
+  const [mappingSeasonId, setMappingSeasonId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -103,6 +104,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
   useEffect(() => {
     let cancelled = false;
     setMappings({});
+    setMappingSeasonId(null);
     setSelection(null);
     getDoc(doc(db, "admin_excel_mappings", seasonId)).then(snapshot => {
       if (cancelled) return;
@@ -114,9 +116,11 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         ])) as Record<string, MappingEntry[]>;
         setMappings(normalized);
       }
+      setMappingSeasonId(seasonId);
       if (data?.spreadsheetUrl) setUrl(data.spreadsheetUrl);
     }).catch(() => {
       if (!cancelled) setMappings({});
+      if (!cancelled) setMappingSeasonId(null);
     });
     return () => { cancelled = true; };
   }, [seasonId]);
@@ -329,6 +333,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       : [...previousEntries, entry];
     const nextMappings = { ...mappings, [field]: nextEntries };
     setMappings(nextMappings);
+    setMappingSeasonId(seasonId);
     await setDoc(doc(db, "admin_excel_mappings", seasonId), { seasonId, spreadsheetUrl: url, mappings: nextMappings, updatedAt: new Date().toISOString() }, { merge: true });
     setMessage(`Rango ${selectedRange.range} guardado para ${FIELD_OPTIONS.find(item => item[0] === field)?.[1]}.`);
     const nextField = visibleFieldOptions[visibleFieldOptions.findIndex(item => item[0] === field) + 1];
@@ -378,7 +383,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         </div>
       </div>}
 
-      {Object.keys(mappings).length > 0 && <div className="border border-white/10 p-4"><h3 className="text-xs font-black uppercase tracking-wider mb-3">Mapeo guardado</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-2">{Object.entries(mappings).map(([key, values]) => <div key={key} className="bg-white/[0.03] px-3 py-2 text-[10px]"><div className="flex items-center justify-between mb-1"><span className="text-white/60">{FIELD_OPTIONS.find(item => item[0] === key)?.[1]}</span><span className="text-white/35">{values.length} rango{values.length === 1 ? "" : "s"}</span></div><div className="space-y-1">{values.map((value, index) => <div key={`${value.sheetId}-${value.range}`} className="flex items-center justify-between gap-2"><span className="font-mono text-emerald-300">{value.range} <Check className="inline w-3 h-3" /></span><span className="text-white/35 font-mono truncate">{value.preview.join(" / ") || "Rango vacío"}</span><button onClick={() => removeMapping(key, index)} className="shrink-0 text-white/30 hover:text-red-300" title="Eliminar rango"><X className="w-3.5 h-3.5" /></button></div>)}</div></div>)}</div></div>}
+      {mappingSeasonId === seasonId && Object.keys(mappings).length > 0 && <div className="border border-white/10 p-4"><h3 className="text-xs font-black uppercase tracking-wider mb-3">Mapeo guardado de {reviewSeasons.find(season => season.id === seasonId)?.label || seasonId}</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-2">{Object.entries(mappings).map(([key, values]) => <div key={key} className="bg-white/[0.03] px-3 py-2 text-[10px]"><div className="flex items-center justify-between mb-1"><span className="text-white/60">{FIELD_OPTIONS.find(item => item[0] === key)?.[1]}</span><span className="text-white/35">{values.length} rango{values.length === 1 ? "" : "s"}</span></div><div className="space-y-1">{values.map((value, index) => <div key={`${value.sheetId}-${value.range}`} className="flex items-center justify-between gap-2"><span className="font-mono text-emerald-300">{value.range} <Check className="inline w-3 h-3" /></span><span className="text-white/35 font-mono truncate">{value.preview.join(" / ") || "Rango vacío"}</span><button onClick={() => removeMapping(key, index)} className="shrink-0 text-white/30 hover:text-red-300" title="Eliminar rango"><X className="w-3.5 h-3.5" /></button></div>)}</div></div>)}</div></div>}
     </section>
   );
 }
