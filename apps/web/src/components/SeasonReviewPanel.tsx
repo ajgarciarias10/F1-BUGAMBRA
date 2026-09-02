@@ -18,7 +18,6 @@ const FIELD_OPTIONS = [
   ["puntuacionTotalPiloto", "Puntuación total de piloto"],
   ["puntuacionEquipoCircuito", "Puntuación equipo por circuito"],
   ["puntuacionTotalEquipo", "Puntuación total de equipo"],
-  ["polesEquipos", "Poles por equipo"],
   ["participacionesEquipos", "Participaciones por equipo"],
   ["fichajesSplit", "Fichajes del split"],
   ["rivalidadesSplit", "Rivalidades del split"],
@@ -31,7 +30,7 @@ const FIELD_OPTIONS = [
 ] as const;
 
 const ECONOMY_FIELD_KEYS = [
-  "polesEquipos", "participacionesEquipos",
+  "participacionesEquipos",
   "fichajesSplit", "rivalidadesSplit", "premiosSplit", "precioCompraPiloto",
   "mantenerPiloto", "clausulaPiloto", "tipoCompraPiloto", "precioFinalPiloto",
 ];
