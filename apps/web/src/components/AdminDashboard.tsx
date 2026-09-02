@@ -16,16 +16,16 @@ import { DatabaseExplorer } from "./DatabaseExplorer";
 import { AdminControlPanel } from "./AdminControlPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { SeasonReviewPanel } from "./SeasonReviewPanel";
+import { AdminUsersPanel } from "./AdminUsersPanel";
 
-type AdminTab = "championship" | "control" | "suggestions" | "economy" | "db" | "season-review";
+type AdminTab = "season-review" | "championship" | "users" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
-  { id: "championship", label: "Carreras y mercado" },
   { id: "season-review", label: "Revisión temporadas" },
-  { id: "control", label: "Herramientas antiguas" },
+  { id: "championship", label: "Administración de temporada" },
+  { id: "users", label: "Administración de usuarios" },
   { id: "suggestions", label: "Buzón de mejoras", pulse: true },
-  { id: "economy", label: "Economía" },
-  { id: "db", label: "Base de datos" },
+  { id: "tools", label: "Herramientas técnicas" },
 ];
 
 const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
@@ -1110,14 +1110,12 @@ export function AdminDashboard() {
 
         {adminTab === "season-review" ? (
           <SeasonReviewPanel splits={splits} />
+        ) : adminTab === "users" ? (
+          <AdminUsersPanel />
         ) : adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
-        ) : adminTab === "control" ? (
-          <AdminControlPanel />
-        ) : adminTab === "economy" ? (
-          <EconomyAdminPanel splits={splits} />
-        ) : adminTab === "db" ? (
-          <DatabaseExplorer />
+        ) : adminTab === "tools" ? (
+          <div className="space-y-6"><AdminControlPanel /><EconomyAdminPanel splits={splits} /><DatabaseExplorer /></div>
         ) : (
           <>
             {/* Navegación de Splits */}
