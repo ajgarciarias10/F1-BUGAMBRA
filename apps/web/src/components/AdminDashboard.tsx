@@ -17,12 +17,13 @@ import { AdminControlPanel } from "./AdminControlPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { SeasonReviewPanel } from "./SeasonReviewPanel";
 import { AdminUsersPanel } from "./AdminUsersPanel";
+import { AdminTeamManager } from "./AdminTeamManager";
 
-type AdminTab = "season-review" | "championship" | "users" | "suggestions" | "tools";
+type AdminTab = "season-review" | "teams" | "users" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
   { id: "season-review", label: "Revisión temporadas" },
-  { id: "championship", label: "Administración de temporada" },
+  { id: "teams", label: "Administración de equipos" },
   { id: "users", label: "Administración de usuarios" },
   { id: "suggestions", label: "Buzón de mejoras", pulse: true },
   { id: "tools", label: "Herramientas técnicas" },
@@ -94,7 +95,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [plantilla, setPlantilla] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState<AdminTab>("championship");
+  const [adminTab, setAdminTab] = useState<AdminTab>("teams");
   const [videoIntroUrl, setVideoIntroUrl] = useState("");
   const [savingVideoIntro, setSavingVideoIntro] = useState(false);
   const [logoEdits, setLogoEdits] = useState<Record<string, string>>({});
@@ -1030,15 +1031,17 @@ export function AdminDashboard() {
 
         {adminTab === "season-review" ? (
           <SeasonReviewPanel splits={splits} />
+        ) : adminTab === "teams" ? (
+          <AdminTeamManager splitId={selectedSplitId} teams={currentRawSplit?.equipos || []} roster={currentRawSplit?.roster || []} splits={splits} onSelectSplit={(id: string) => setSelectedSplitId(id)} />
         ) : adminTab === "users" ? (
           <AdminUsersPanel />
         ) : adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
         ) : adminTab === "tools" ? (
           <div className="space-y-6"><AdminControlPanel /><EconomyAdminPanel splits={splits} /><DatabaseExplorer /></div>
-        ) : (
-          <>
-            {/* Navegación de Splits */}
+         ) : (
+           <>
+             {/* Navegación de Splits */}
         <div className="flex flex-wrap gap-1.5 mb-3">
           {splits.filter(s => isSplitUnlocked(s.id, splits)).map(s => (
             <button
