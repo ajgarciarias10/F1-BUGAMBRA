@@ -26,13 +26,12 @@ const FIELD_OPTIONS = [
   ["mantenerPiloto", "Mantener por piloto"],
   ["clausulaPiloto", "Cláusula por piloto"],
   ["tipoCompraPiloto", "Tipo de compra"],
-  ["precioFinalPiloto", "Precio final de piloto"],
 ] as const;
 
 const ECONOMY_FIELD_KEYS = [
   "participacionesEquipos",
   "fichajesSplit", "rivalidadesSplit", "premiosSplit", "precioCompraPiloto",
-  "mantenerPiloto", "clausulaPiloto", "tipoCompraPiloto", "precioFinalPiloto",
+  "mantenerPiloto", "clausulaPiloto", "tipoCompraPiloto",
 ];
 const ORIGINS_FIELDS = FIELD_OPTIONS.filter(([value]) =>
   !["equipoPiloto", ...ECONOMY_FIELD_KEYS].includes(value)
