@@ -792,47 +792,30 @@ export function AdminDashboard() {
 
           // Leer pilotos anidados del split anterior y copiarlos al nuevo
           let pilotsInitialized = 0;
-          const budgetAdjustments: Record<string, number> = {};
-
-          for (const prevEquipoDoc of prevTeamsSnap.docs) {
+           for (const prevEquipoDoc of prevTeamsSnap.docs) {
             const prevPilotosSnap = await getDocs(
               collection(db, `splits/${prevSplit.id}/equipos/${prevEquipoDoc.id}/pilotos`)
             );
             for (const prevPd of prevPilotosSnap.docs) {
               const r = prevPd.data();
               if (r.participa_hasta != null) continue;
-              const pid = prevPd.id;
-              const inheritedRating = r.rating_piloto ?? 70;
-              const precioCompra = r.precio_compra ?? 10;
-              const nextEquipoId = r.pending_equipoId ?? r.equipoId;
-              if (!nextEquipoId || nextEquipoId === "agente_libre") continue;
-              const pendingPrecio = r.pending_precio_compra;
-              const isMantener = r.pending_tipo_fichaje === "mantener";
-              // Mantener: descuenta la cuota de renovación del valor del jugador
-              const nextPrecioCompra = pendingPrecio == null
-                ? precioCompra
-                : isMantener
-                  ? Math.round((precioCompra - pendingPrecio) * 10) / 10
-                  : pendingPrecio;
-              const isFreezeSentinel = pendingPrecio === -110;
-              const nextPrecioAbs = Math.abs(nextPrecioCompra);
-              const nextMantener = isFreezeSentinel
-                ? Math.round((r.mantener_actual ?? precioCompra * 3) * 10) / 10
-                : nextPrecioCompra < 0
-                  ? Math.round(nextPrecioAbs / 3 * 10) / 10
-                  : Math.round(nextPrecioAbs * 3 * 10) / 10;
-              const nextClausula = isFreezeSentinel
-                ? Math.round((r.clausula_actual ?? precioCompra * 2) * 10) / 10
-                : nextPrecioCompra < 0
-                  ? Math.round(nextPrecioAbs / 2 * 10) / 10
-                  : Math.round(nextPrecioAbs * 2 * 10) / 10;
-
-              if (r.pending_equipoId && pendingPrecio != null && !isFreezeSentinel) {
-                // Both renewals and transfers affect the destination team's
-                // opening budget. Negative prices represent team income.
-                const budgetDelta = pendingPrecio < 0 ? Math.abs(pendingPrecio) : -pendingPrecio;
-                budgetAdjustments[nextEquipoId] = (budgetAdjustments[nextEquipoId] || 0) + budgetDelta;
-              }
+               const pid = prevPd.id;
+               const inheritedRating = r.rating_piloto ?? 70;
+               const estado = r.estado_siguiente_split || (
+                 r.pending_tipo_fichaje === "mantener" ? "mantener" :
+                 r.pending_tipo_fichaje === "clausula" ? "clausula" :
+                 r.pending_equipoId ? "subasta" : "agente_libre"
+               );
+               if (estado === "agente_libre") continue;
+               const nextEquipoId = r.pending_equipoId ?? r.equipoId;
+               if (!nextEquipoId || nextEquipoId === "agente_libre") continue;
+               const nextPrecioCompra = Number(r.precio_inicio_siguiente_split);
+               if (!Number.isFinite(nextPrecioCompra)) {
+                 throw new Error(`Falta el precio inicial manual del siguiente split para ${r.nombre || pid}.`);
+               }
+               const nextPrecioAbs = Math.abs(nextPrecioCompra);
+               const nextMantener = Math.round((nextPrecioCompra < 0 ? nextPrecioAbs / 3 : nextPrecioAbs * 3) * 10) / 10;
+               const nextClausula = Math.round((nextPrecioCompra < 0 ? nextPrecioAbs / 2 : nextPrecioAbs * 2) * 10) / 10;
 
               await setDoc(doc(db, `splits/${splitId}/equipos/${nextEquipoId}/pilotos`, pid), {
                 pilotoId:               pid,
@@ -841,7 +824,7 @@ export function AdminDashboard() {
                 rating_base:            inheritedRating,
                 participa_desde:        1,
                 participa_hasta:        null,
-                tipo_fichaje:           r.pending_tipo_fichaje ?? r.tipo_fichaje,
+                 tipo_fichaje:           estado === "subasta" ? "subasta" : estado,
                 puntos_piloto: 0, victorias: 0, podios: 0,
                 poles: 0, dnfs: 0, carreras_limpias: 0,
                 precio_compra:           nextPrecioCompra,
@@ -851,7 +834,7 @@ export function AdminDashboard() {
                 clausula_inicial_split:  nextClausula,
                 precio_carrera_anterior: nextMantener,
                 historial_precios:       {},
-                congelado:               isFreezeSentinel,
+                 congelado:               false,
                 congelado_en:            undefined,
               });
 
@@ -859,17 +842,8 @@ export function AdminDashboard() {
             }
           }
 
-          // Aplicar ajustes de presupuesto por transferencias pendientes
-          for (const [teamId, delta] of Object.entries(budgetAdjustments)) {
-            if (delta !== 0) {
-              await setDoc(doc(db, `splits/${splitId}/equipos`, teamId), {
-                presupuesto: Math.round((100 + delta) * 10) / 10,
-              }, { merge: true });
-            }
-          }
-
-          await addDoc(collection(db, `splits/${splitId}/transfers`), {
-            detalles: `⚙️ Admin inicializó los rosters del ${currentSplitName} desde ${prevSplit.nombre}. ${pilotsInitialized} pilotos copiados con rating heredado. Presupuestos ajustados por transferencias pendientes.`,
+           await addDoc(collection(db, `splits/${splitId}/transfers`), {
+             detalles: `⚙️ Admin inicializó los rosters del ${currentSplitName} desde ${prevSplit.nombre}. ${pilotsInitialized} pilotos copiados con precio inicial manual. Los no renovados quedan libres para subasta.`,
             timestamp: new Date().toISOString(),
             tipo: "admin"
           });

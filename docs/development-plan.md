@@ -11,3 +11,8 @@
 - At split close, a pilot not retained and not acquired by a release clause becomes `agente_libre` and enters the next split auction.
 - A clause operation, auction purchase, and manual retention price are separate events.
 - The opening price of the next split is entered manually after those events are resolved.
+
+## Team Names
+
+- Numeric suffixes in source spreadsheets identify a block or position, not a new team.
+- `Zenith 1`, `Zenith 2`, and `Zenith 3` resolve to the canonical team `Zenith`.

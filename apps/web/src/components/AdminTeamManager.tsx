@@ -9,10 +9,11 @@ export function AdminTeamManager({ splitId, teams, roster, splits, onSelectSplit
   const [editingName, setEditingName] = useState("");
   const [message, setMessage] = useState("");
 
-  const teamId = (name: string) => name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  const normalizeTeamName = (name: string) => name.replace(/\s+\d+\s*$/, "").replace(/\s+/g, " ").trim();
+  const teamId = (name: string) => normalizeTeamName(name).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
   const createTeam = async () => {
-    const name = newName.trim();
+    const name = normalizeTeamName(newName);
     if (!name) return;
     const id = teamId(name);
     if (teams.some(team => team.id === id)) { setMessage("Ya existe un equipo con ese nombre."); return; }

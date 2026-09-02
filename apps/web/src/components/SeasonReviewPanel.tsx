@@ -49,6 +49,7 @@ const columnName = (index: number) => {
 };
 
 const parseSpreadsheetId = (url: string) => url.match(/\/spreadsheets\/d\/([^/]+)/)?.[1] || "";
+const normalizeTeamName = (value: string) => value.replace(/\s+\d+\s*$/, "").replace(/\s+/g, " ").trim();
 
 const parseCell = (value: string) => {
   const match = value.match(/^([A-Z]+)(\d+)$/i);
@@ -291,8 +292,8 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       const id = (value: string, prefix: string) => `${prefix}_${clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
       const pilotNames = readEntries("pilotos").flat().map(clean).filter(Boolean);
       const circuitNames = readEntries("circuitos").flat().map(clean).filter(Boolean);
-      const teamNames = readEntries("equipos").flat().map(clean).filter(Boolean);
-      const pilotTeams = readEntries("equipoPiloto").flat().map(clean).filter(Boolean);
+      const teamNames = [...new Set(readEntries("equipos").flat().map(value => normalizeTeamName(clean(value))).filter(Boolean))];
+      const pilotTeams = readEntries("equipoPiloto").flat().map(value => normalizeTeamName(clean(value))).filter(Boolean);
       const scoreMatrix = readMatrix("puntuacionPilotoCircuito");
       if (pilotTeams.length !== pilotNames.length) throw new Error(`Equipo de cada piloto: hay ${pilotTeams.length} valores para ${pilotNames.length} pilotos.`);
       if (scoreMatrix.length !== pilotNames.length || scoreMatrix.some(row => row.length !== circuitNames.length)) throw new Error(`La matriz debe tener ${pilotNames.length} filas de ${circuitNames.length} columnas.`);
