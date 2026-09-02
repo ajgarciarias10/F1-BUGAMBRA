@@ -18,13 +18,15 @@ import { useAuth } from "../contexts/AuthContext";
 import { SeasonReviewPanel } from "./SeasonReviewPanel";
 import { AdminUsersPanel } from "./AdminUsersPanel";
 import { AdminTeamManager } from "./AdminTeamManager";
+import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 
-type AdminTab = "season-review" | "teams" | "results" | "users" | "suggestions" | "tools";
+type AdminTab = "season-review" | "teams" | "results" | "rivalries" | "users" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
   { id: "season-review", label: "Revisión temporadas" },
   { id: "teams", label: "Administración de equipos" },
   { id: "results", label: "Circuitos y resultados" },
+  { id: "rivalries", label: "Rivalidades" },
   { id: "users", label: "Administración de usuarios" },
   { id: "suggestions", label: "Buzón de mejoras", pulse: true },
   { id: "tools", label: "Herramientas técnicas" },
@@ -943,6 +945,20 @@ export function AdminDashboard() {
         } as RaceResult;
       });
 
+      const duplicatePositions = (field: "qualyPos" | "racePos") => {
+        const counts = new Map<number, number>();
+        finalResults.forEach(result => {
+          const position = result[field];
+          if (position !== 99) counts.set(position, (counts.get(position) || 0) + 1);
+        });
+        return [...counts.entries()].filter(([, count]) => count > 1).map(([position]) => position);
+      };
+      const duplicateQualy = duplicatePositions("qualyPos");
+      const duplicateRace = duplicatePositions("racePos");
+      if (duplicateQualy.length || duplicateRace.length) {
+        throw new Error(`Hay posiciones duplicadas: ${duplicateQualy.length ? `qualy ${duplicateQualy.join(", ")}` : ""}${duplicateQualy.length && duplicateRace.length ? " y " : ""}${duplicateRace.length ? `carrera ${duplicateRace.join(", ")}` : ""}.`);
+      }
+
       await processRace(selectedSplitId, selectedCircuitoId, finalResults);
       setMsg(isEditingFinished ? "Resultados corregidos exitosamente." : "Resultados procesados exitosamente.");
       setTimeout(() => {
@@ -1006,6 +1022,8 @@ export function AdminDashboard() {
           <SeasonReviewPanel splits={splits} />
         ) : adminTab === "teams" ? (
           <AdminTeamManager splitId={selectedSplitId} teams={currentRawSplit?.equipos || []} roster={currentRawSplit?.roster || []} splits={splits} onSelectSplit={(id: string) => setSelectedSplitId(id)} />
+        ) : adminTab === "rivalries" ? (
+          <AdminRivalriesPanel splits={splits} />
         ) : adminTab === "users" ? (
           <AdminUsersPanel />
         ) : adminTab === "suggestions" ? (
