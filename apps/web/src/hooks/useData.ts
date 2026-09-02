@@ -2,6 +2,39 @@ import { useEffect, useState } from "react";
 import { collection, collectionGroup, onSnapshot, getDocs } from "firebase/firestore";
 import { db } from "../services/firebase";
 import type { Usuario, Piloto, SplitView, Circuito, Equipo, PilotInRoster, RosterEntry } from "../types";
+import { computePilotOVR } from "../utils/splitResolver";
+
+const normalizeRaceResults = (results: any[]) => {
+  if (results.every(result => result.racePos != null && result.qualyPos != null)) return results;
+  const points = results.map(result => Number(result.puntos ?? 0));
+  const poleCandidates = points.some(value => value > 16)
+    ? points.map((value, index) => ({ value, index })).filter(item => item.value > 16)
+    : [...points.map((value, index) => ({ value, index })), { value: 0, index: -1 }];
+  const assignments = poleCandidates.flatMap(pole => {
+    const used = new Set<number>();
+    const rows = points.map((value, index) => {
+      if (value === 0) return { position: 99, pole: false };
+      const base = value - (index === pole.index ? 2 : 0);
+      const position = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1].indexOf(base) + 1;
+      if (position === 0 || used.has(position)) return null;
+      used.add(position);
+      return { position, pole: index === pole.index };
+    });
+    return rows.every(Boolean) ? [{ rows: rows as Array<{ position: number; pole: boolean }>, poleIndex: pole.index }] : [];
+  });
+  const selected = assignments.sort((a, b) =>
+    Number((b.poleIndex >= 0 && points[b.poleIndex] > 16)) - Number((a.poleIndex >= 0 && points[a.poleIndex] > 16)) ||
+    b.poleIndex - a.poleIndex
+  ).at(0);
+  if (!selected) return results;
+  const bestPosition = Math.min(...selected.rows.map(row => row.position));
+  return results.map((result, index) => ({
+    ...result,
+    racePos: result.racePos ?? selected.rows[index].position,
+    qualyPos: result.qualyPos ?? (selected.rows[index].pole ? 1 : 99),
+    isDotd: result.isDotd ?? (selected.rows[index].position === bestPosition),
+  }));
+};
 
 // ─── USUARIOS ─────────────────────────────────────────────────────────────────
 
@@ -96,22 +129,30 @@ export function useSplits() {
             getDocs(collection(db, `splits/${sid}/roster`)),
           ]);
 
-          const circuitos: Circuito[] = circSnap.docs.map(d => ({
-            id: d.id,
-            completado: false,
-            acta_cerrada: false,
-            economia_procesada: false,
-            resultados: [],
-            ...d.data(),
-          })) as Circuito[];
+          const circuitos: Circuito[] = circSnap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              completado: false,
+              acta_cerrada: false,
+              economia_procesada: false,
+              ...data,
+              resultados: sid === "origins" ? (data.resultados || []) : normalizeRaceResults((data.resultados || []) as any[]),
+            };
+          }) as Circuito[];
 
-          const equipos: Equipo[] = equipSnap.docs.map(d => ({
-            id: d.id,
-            nombre: d.id,
-            presupuesto: 100,
-            puntos_constructores: 0,
-            ...d.data(),
-          })) as Equipo[];
+          // `agente_libre` es el cajón donde viven los pilotos sin escudería, no una
+          // escudería: no compite, no tiene presupuesto y no debe aparecer en ninguna
+          // lista de equipos. Que un piloto esté libre se sabe por su `equipoId`.
+          const equipos: Equipo[] = equipSnap.docs
+            .filter(d => d.id !== "agente_libre")
+            .map(d => ({
+              id: d.id,
+              nombre: d.id,
+              presupuesto: 100,
+              puntos_constructores: 0,
+              ...d.data(),
+            })) as Equipo[];
 
           // Leer pilotos desde splits/{sid}/equipos/{equipoId}/pilotos
           const rosterByPilot = new Map<string, PilotInRoster>();
@@ -130,6 +171,11 @@ export function useSplits() {
                   equipoId: equipoDoc.id,
                   nombre: piloto?.nombre ?? (entry as any).nombre ?? pd.id,
                   foto_url: piloto?.foto_url ?? (entry as any).foto_url,
+                  rating_piloto: Number(entry.rating_piloto) > 0
+                    ? Number(entry.rating_piloto)
+                    : Number(piloto?.rating_piloto) > 0
+                      ? Number(piloto?.rating_piloto)
+                      : computePilotOVR(entry as any),
                 };
                 const existing = rosterByPilot.get(pd.id);
                 const existingEnded = existing?.participa_hasta != null;
@@ -155,6 +201,11 @@ export function useSplits() {
               equipoId: entry.equipoId || "individual",
               nombre: piloto?.nombre ?? (entry as any).nombre ?? pd.id,
               foto_url: piloto?.foto_url ?? (entry as any).foto_url,
+              rating_piloto: Number(entry.rating_piloto) > 0
+                    ? Number(entry.rating_piloto)
+                    : Number(piloto?.rating_piloto) > 0
+                      ? Number(piloto?.rating_piloto)
+                      : computePilotOVR(entry as any),
             });
           }
 

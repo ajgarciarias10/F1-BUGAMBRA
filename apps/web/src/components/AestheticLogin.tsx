@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronRight, ShieldAlert, Trophy, Gauge } from 'lucide-react';
 
 export function AestheticLogin({ onLogin, error }: { onLogin: (email: string, pass: string) => void, error?: string }) {

@@ -57,7 +57,7 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
       const live = split?.roster?.find((p: any) => p.pilotoId === member.id);
       return {
         ...member,
-        rating:       live?.rating_piloto ?? member.rating ?? 0,
+        rating:       live?.rating_piloto ?? member.rating ?? 70,
         puntos_piloto: live?.puntos_piloto ?? member.puntos_piloto ?? 0,
         price:        getPilotValue(live ?? member),
       };

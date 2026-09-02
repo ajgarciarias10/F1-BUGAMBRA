@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
-import { SharedDashboardView, TotalStandings } from "./SharedDashboard";
+import { SharedDashboardView } from "./SharedDashboard";
 import { ProfileView } from "./ProfileView";
 import { auth } from "../services/firebase";
 import { SuggestionsView } from "./SuggestionsView";
 import { MarketDeadlineView } from "./MarketDeadlineView";
+import { AuctionRoom } from "./AuctionRoom";
 import { PaddockForum } from "./PaddockForum";
 import { TeamsView } from "./TeamsView";
 import { useSplits, useUsuarios } from "../hooks/useData";
@@ -179,7 +180,13 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
       <AdminOverlay isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
       <main className="pt-24 md:pt-[7.5rem] max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10 pb-28 md:pb-10">
         {activeTab === "championship" && <SharedDashboardView canViewBudget={canViewBudget} escuderiaId={userData?.escuderia_id} />}
-        {activeTab === "market" && <MarketDeadlineView />}
+        {activeTab === "market" && (
+          <div className="space-y-6">
+            {/* La sala va arriba: el día de mercado es lo único que importa mientras dura. */}
+            <AuctionRoom splits={validSplits} splitId={resolvedTeamsSplitId} />
+            <MarketDeadlineView />
+          </div>
+        )}
         {activeTab === "paddock" && <PaddockForum />}
         {activeTab === "equipos" && (
           <TeamsView

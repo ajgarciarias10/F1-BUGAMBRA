@@ -347,7 +347,7 @@ function EquipoCard({
                 )}
                 <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent h-2/3 flex items-end justify-center pb-1">
                   <span className="text-[9px] font-black font-mono text-white drop-shadow-[0_2px_2px_rgba(0,0,0,1)] tracking-wider">
-                    {piloto.rating_piloto ?? 0} OVR
+                    {piloto.rating_piloto ?? 70} OVR
                   </span>
                 </div>
                 {isChamp && (

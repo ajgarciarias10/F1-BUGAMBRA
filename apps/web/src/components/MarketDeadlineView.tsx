@@ -40,7 +40,7 @@ function buildCandidateTeams(split: any) {
 function createCopy(pilot: any, split: any, kind: MarketPostKind) {
   const candidateTeams = buildCandidateTeams(split);
   const teamNames = candidateTeams.map(team => team.nombre).join(", ") || "el paddock";
-  const rating = Number(pilot.rating_piloto ?? 0);
+    const rating = Number(pilot.rating_piloto ?? 70);
   const points = Number(pilot.puntos_piloto ?? 0);
   const clause = Number(pilot.clausula_actual ?? 0);
 
@@ -187,7 +187,7 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
                   <div key={pilot.pilotoId} className="border border-white/8 bg-black/20 p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="font-black uppercase tracking-tight">{pilot.nombre}</p>
-                      <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto ?? 0} OVR · {pilot.puntos_piloto ?? 0} PTS · {pilot.clausula_actual ?? 0}M</p>
+                      <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto ?? 70} OVR · {pilot.puntos_piloto ?? 0} PTS · {pilot.clausula_actual ?? 0}M</p>
                     </div>
                     <button
                       onClick={() => publishPost(pilot, "rumor")}
@@ -215,7 +215,7 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
                 <div key={pilot.pilotoId} className="border border-white/8 bg-black/20 p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="font-black uppercase tracking-tight">{pilot.nombre}</p>
-                    <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto ?? 0} OVR · debutante</p>
+                    <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto ?? 70} OVR · debutante</p>
                   </div>
                   <button
                     onClick={() => publishPost(pilot, "rookie")}

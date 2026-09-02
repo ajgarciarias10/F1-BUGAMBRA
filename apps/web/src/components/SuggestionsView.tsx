@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, getDocs, arrayUnion, arrayRemove } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { 
   Sparkles, 
@@ -10,13 +10,10 @@ import {
   Clock, 
   CheckCircle2, 
   AlertTriangle, 
-  XCircle,
-  TrendingUp, 
+  XCircle, 
   Filter, 
   Trash2, 
-  Check, 
-  MessageCircle,
-  HelpCircle
+  MessageCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 

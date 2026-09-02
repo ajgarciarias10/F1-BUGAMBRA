@@ -227,12 +227,14 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     currentSplit.circuitos.filter((c: any) => c.completado && c.resultados).forEach((c: any) => {
       rRes.push({
         circuitName: c.nombre,
-        pilots: c.resultados.map((r: any) => ({
-          id: r.pilotoId,
-          name: r.pilotoNombre || currentSplit.roster.find((p: any) => p.pilotoId === r.pilotoId)?.nombre || r.pilotoId,
-          pts: currentSplit.tipo === "individual"
-            ? Number(r.puntos || 0)
-            : (r.racePos >= 1 && r.racePos <= 12 ? localPOINTS_SCALE[r.racePos - 1] : 0) + (r.qualyPos === 1 ? 2 : 0),
+         pilots: c.resultados.map((r: any) => ({
+           id: r.pilotoId,
+           name: r.pilotoNombre || currentSplit.roster.find((p: any) => p.pilotoId === r.pilotoId)?.nombre || r.pilotoId,
+           racePos: r.racePos,
+           pole: r.qualyPos === 1,
+           pts: r.puntos != null
+             ? Number(r.puntos)
+             : (r.racePos >= 1 && r.racePos <= 12 ? localPOINTS_SCALE[r.racePos - 1] : 0) + (r.qualyPos === 1 ? 2 : 0),
           team: currentSplit.tipo === "individual" ? "Individual" : equipoNombreMap[r.equipoId ?? r.escuderiaId] || "",
         })),
       });
@@ -260,9 +262,9 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         const res = c.resultados.find((r: any) => r.pilotoId === pilotId);
         if (res) {
           const isIndividual = s.tipo === "individual";
-          const points = isIndividual
-            ? Number(res.puntos || 0)
-            : (res.racePos >= 1 && res.racePos <= 12 ? localPOINTS_SCALE[res.racePos - 1] : 0) + (res.qualyPos === 1 ? 2 : 0);
+           const points = res.puntos != null
+             ? Number(res.puntos)
+             : (res.racePos >= 1 && res.racePos <= 12 ? localPOINTS_SCALE[res.racePos - 1] : 0) + (res.qualyPos === 1 ? 2 : 0);
           totalPoints += points;
           if (!isIndividual) {
             if (res.racePos === 1) victories++;
@@ -291,7 +293,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     const validRacePos = history.filter(h => h.racePos >= 1 && h.racePos <= 12).map(h => h.racePos);
     const avgRace = validRacePos.length > 0 ? Number((validRacePos.reduce((a, b) => a + b, 0) / validRacePos.length).toFixed(1)) : 0;
 
-    let finalRating = 70, baseClause = 10, escuderiaName = "Sin equipo", isCongelado = false;
+    let finalRating = 0, baseClause = 10, escuderiaName = "Sin equipo", isCongelado = false;
 
     if (isGlobalView) {
       const latestSplit = [...splits].reverse().find(s => (s.roster || []).some((p: any) => p.pilotoId === pilotId));
@@ -300,7 +302,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         if (entry) {
           const eMap = Object.fromEntries(latestSplit.equipos.map(e => [e.id, e.nombre]));
           escuderiaName = eMap[entry.equipoId] ?? entry.equipoId;
-          finalRating = entry.rating_piloto ?? 70;
+           finalRating = Number(entry.rating_piloto ?? 0);
         }
       } else if (pilotUser?.rating_piloto) {
         finalRating = pilotUser.rating_piloto;
@@ -314,22 +316,24 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         if (entry) {
           const eMap = Object.fromEntries(activeSp.equipos.map(e => [e.id, e.nombre]));
           escuderiaName = eMap[entry.equipoId] ?? "Sin equipo";
-          finalRating = entry.rating_piloto ?? pilotUser?.rating_piloto ?? 70;
+           finalRating = Number(entry.rating_piloto ?? 0);
           baseClause = entry.clausula_actual ?? (finalRating * 0.5);
           isCongelado = !!entry.congelado;
         } else {
-          finalRating = pilotUser?.rating_piloto ?? 70;
+          // Sin ficha en este split: se cae al rating del usuario.
+          finalRating = Number(pilotUser?.rating_piloto ?? 0);
         }
       }
     }
 
-    return { pilotId, name: pilotName, fotoUrl: getPilotPhoto(pilotId), rating: finalRating, clause: baseClause, congelado: isCongelado, escuderiaName, totalPoints, victorias: victories, podiums, poles, dnfs, cleanRaces, dotds, mvps, fastestLaps, participaciones, avgPoints, avgQualy, avgRace, history: history.sort((a, b) => b.splitId.localeCompare(a.splitId) || a.circuitId.localeCompare(b.circuitId)) };
+    return { pilotId, name: pilotName, fotoUrl: getPilotPhoto(pilotId), rating: finalRating, clause: baseClause, congelado: isCongelado, escuderiaName, totalPoints, victorias: victories, podiums, poles, dnfs, cleanRaces, dotds, mvps, fastestLaps, participaciones, avgPoints, avgQualy, avgRace, bestRace: validRacePos.length ? Math.min(...validRacePos) : 0, history: history.sort((a, b) => b.splitId.localeCompare(a.splitId) || a.circuitId.localeCompare(b.circuitId)) };
   };
 
   const pilotProfileStats = useMemo(() => {
     if (!selectedPilotForProfileId) return null;
     return getPilotStats(selectedPilotForProfileId, activeSplitId === "global");
   }, [selectedPilotForProfileId, splits, usuarios, activeSplitId]);
+  const canOpenPilotProfile = activeSplitId !== "origins" && currentSplit?.tipo !== "individual";
 
   const allPaddockPilots = useMemo(() => {
     const list: { id: string; name: string; rtg: number; team: string }[] = [];
@@ -340,7 +344,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         if (!seen.has(p.pilotoId)) {
           seen.add(p.pilotoId);
           const teamName = currentSplit.equipos.find((e: any) => e.id === p.equipoId)?.nombre ?? p.equipoId;
-          list.push({ id: p.pilotoId, name: p.nombre, rtg: p.rating_piloto ?? 0, team: teamName });
+           list.push({ id: p.pilotoId, name: p.nombre, rtg: Number(p.rating_piloto) > 0 ? Number(p.rating_piloto) : 70, team: teamName });
         }
       });
     } else {
@@ -349,7 +353,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           if (!seen.has(p.pilotoId)) {
             seen.add(p.pilotoId);
             const teamName = s.equipos.find((e: any) => e.id === p.equipoId)?.nombre ?? p.equipoId;
-            list.push({ id: p.pilotoId, name: p.nombre, rtg: p.rating_piloto ?? 0, team: teamName });
+             list.push({ id: p.pilotoId, name: p.nombre, rtg: Number(p.rating_piloto) > 0 ? Number(p.rating_piloto) : 70, team: teamName });
           }
         });
       });
@@ -568,9 +572,9 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                 return (
                   <div
                     key={`mis-pilotos-${p.pilotoId}-${i}`}
-                    className="cursor-pointer"
-                    onClick={() => { setSelectedPilotForProfileId(p.pilotoId); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }}
-                    title="Clic para ver estadísticas"
+                    className={canOpenPilotProfile ? "cursor-pointer" : ""}
+                    onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(p.pilotoId); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
+                    title={canOpenPilotProfile ? "Clic para ver estadísticas" : undefined}
                   >
                     <PilotCardF1
                       pilot={p}
@@ -628,8 +632,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                   return (
                     <tr 
                       key={`standings-${p.id || p.name}-${i}`} 
-                      onClick={() => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }}
-                      className="border-b border-white/5 last:border-0 hover:bg-[#e10600]/10 transition-all cursor-pointer group" title="Haz clic para ver la ficha estadística del piloto"
+                       onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
+                       className={`border-b border-white/5 last:border-0 transition-all group ${canOpenPilotProfile ? "hover:bg-[#e10600]/10 cursor-pointer" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística del piloto" : undefined}
                     >
                       <td className={`py-3 pl-2 font-black italic text-lg w-8 ${i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white/30"}`}>{i + 1}</td>
                       <td className="py-3 font-bold">
@@ -764,8 +768,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                   {gp.pilots.sort((a: any, b: any) => b.pts - a.pts).map((rp: any, idx: number) => (
                     <div 
                       key={idx} 
-                      onClick={() => { setSelectedPilotForProfileId(rp.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }}
-                      className="flex justify-between items-center text-xs cursor-pointer hover:bg-white/5 p-1 rounded transition-colors group/row" title="Haz clic para ver la ficha estadística detallada de este piloto"
+                      onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(rp.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
+                      className={`flex justify-between items-center text-xs p-1 rounded transition-colors group/row ${canOpenPilotProfile ? "cursor-pointer hover:bg-white/5" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística detallada de este piloto" : undefined}
                     >
                       <div className="flex flex-col">
                         <span className="font-bold flex items-center gap-2 text-white group-hover/row:text-[#e10600] transition-colors">
@@ -820,7 +824,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
               <button onClick={() => { setActiveProfileTab("compare"); if (!comparePilotIdA && allPaddockPilots.length > 0) setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id); if (!comparePilotIdB && allPaddockPilots.length > 0) { const firstId = selectedPilotForProfileId || allPaddockPilots[0].id; const other = allPaddockPilots.filter(p => p.id !== firstId)[0]; setComparePilotIdB(other?.id || firstId); } }} className={`flex-1 md:flex-initial px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "compare" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}>⚔️ Comparador Cara a Cara</button>
             </div>
 
-            {activeProfileTab === "profile" && (
+            {activeProfileTab === "profile" && currentSplit?.id !== "origins" && (
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/[0.02] border border-white/5 p-4 rounded-sm">
                   <div>
@@ -840,7 +844,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                 {pilotProfileStats ? (
                   <div className="space-y-6">
                     <div className="flex flex-col lg:flex-row gap-6">
-                      {activeSplitId !== "global" && currentSplit?.tipo === "individual" ? (
+                      {activeSplitId !== "global" && currentSplit?.id === "origins" ? (
                         <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 min-h-[360px] bg-white/[0.02] border border-white/10 overflow-hidden flex flex-col justify-end p-6">
                           <div className="absolute inset-x-0 top-0 h-1.5 bg-[#e10600]" />
                           <div className="absolute inset-0 flex items-center justify-center opacity-90">
@@ -876,20 +880,17 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                         <div className="absolute bottom-0 w-full bg-gradient-to-t from-black to-transparent pt-16 pb-6 px-6 z-20">
                           <h3 className="text-2xl font-black italic text-white uppercase tracking-tighter text-center whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-md">{pilotProfileStats.name}</h3>
                           <div className="w-full h-[1px] bg-white/10 my-3.5"></div>
-                          <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-1">
-                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">PTS</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.totalPoints}</span></div>
-                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">WIN</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.victorias}</span></div>
-                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">POD</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.podiums}</span></div>
-                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">POL</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.poles}</span></div>
-                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">VR</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.fastestLaps}</span></div>
-                            <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">DNF</span><span className="text-base leading-none font-black text-red-400">{pilotProfileStats.dnfs}</span></div>
+                           <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-1">
+                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">PTS</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.totalPoints}</span></div>
+                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">POLE</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.poles}</span></div>
+                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">DOTD</span><span className="text-base leading-none font-black text-amber-300">{pilotProfileStats.dotds}</span></div>
                           </div>
                         </div>
                       </div>
                       )}
                       
                       <div className="flex-1 flex flex-col gap-4">
-                        {activeSplitId !== "global" && currentSplit?.tipo === "individual" ? (
+                        {activeSplitId !== "global" && currentSplit?.id === "origins" ? (
                           <div className="grid grid-cols-2 gap-3 flex-1">
                             <div className="bg-white/5 border border-white/5 p-6 flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media de puntos</span><span className="text-4xl font-black text-white font-mono mt-4 tabular-nums">{pilotProfileStats.avgPoints}</span></div>
                             <div className="bg-white/5 border border-white/5 p-6 flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Carreras disputadas</span><span className="text-4xl font-black text-white font-mono mt-4 tabular-nums">{pilotProfileStats.participaciones}</span></div>
@@ -926,13 +927,11 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Puntos</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.avgPoints}</span></div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Qualy</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">P{pilotProfileStats.avgQualy}</span></div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media Carrera</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">P{pilotProfileStats.avgRace}</span></div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Carreras Limpias</span><span className="text-2xl font-black text-teal-400 font-mono mt-1 tabular-nums">{pilotProfileStats.cleanRaces}</span></div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Piloto del Día</span><span className="text-2xl font-black text-amber-400 font-mono mt-1 tabular-nums">{pilotProfileStats.dotds}</span></div>
-                          <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">GPs Disputados</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.participaciones}</span></div>
+                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+                           <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Puntos</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.totalPoints}</span></div>
+                           <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Mejor carrera</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.bestRace ? `P${pilotProfileStats.bestRace}` : "-"}</span></div>
+                           <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Poles</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.poles}</span></div>
+                           <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Driver of the Day</span><span className="text-2xl font-black text-amber-400 font-mono mt-1 tabular-nums">{pilotProfileStats.dotds}</span></div>
                         </div>
                         </>
                         )}
@@ -946,7 +945,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                           <table className="w-full text-xs font-mono text-left text-gray-300">
                             <thead>
                               <tr className="bg-white/[0.03] text-white/30 uppercase text-[9px] tracking-wider border-b border-white/5">
-                                <th className="p-3">Split</th><th className="p-3">Gran Premio / Circuito</th><th className="p-3 text-center">Pos. Qualy</th><th className="p-3 text-center">Pos. Carrera</th><th className="p-3 text-center">Puntos GP</th><th className="p-3 text-center">Detalles</th>
+                                 <th className="p-3">Split</th><th className="p-3">Gran Premio / Circuito</th><th className="p-3 text-center">Pole</th><th className="p-3 text-center">Pos. Carrera</th><th className="p-3 text-center">Puntos GP</th><th className="p-3 text-center">Driver of the Day</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -954,19 +953,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                                 <tr key={`gp-hist-${h.splitId}-${h.circuitId}-${idx}`} className="border-b border-white/5 hover:bg-white/5 last:border-0 transition-colors">
                                   <td className="p-3 text-[#e10600] font-bold">{h.splitName}</td>
                                   <td className="p-3 text-white font-bold">{h.circuitName}</td>
-                                   <td className="p-3 text-center">{h.splitTipo === "individual" ? "N/D" : h.qualyPos ? `P${h.qualyPos}` : "N/D"}</td>
+                                    <td className="p-3 text-center">{h.splitTipo === "individual" ? "N/D" : h.qualyPos === 1 ? "Sí" : "-"}</td>
                                    <td className={`p-3 text-center font-bold ${h.splitTipo === "individual" ? "text-white/30" : h.racePos === 1 ? 'text-amber-400' : h.racePos <= 3 ? 'text-yellow-500' : h.isDnfOwnError ? 'text-red-500' : 'text-white'}`}>
                                      {h.splitTipo === "individual" ? "N/D" : h.isDofOwnError || h.isDnfOwnError ? "DNF 💥" : `P${h.racePos}`}
                                   </td>
                                   <td className="p-3 text-center text-white font-bold text-sm bg-white/[0.02] tabular-nums">{h.points} pts</td>
                                   <td className="p-3">
-                                    <div className="flex gap-1.5 justify-center items-center">
-                                      {h.isClean && <span className="bg-teal-500/10 text-teal-400 px-1.5 py-0.5 rounded text-[8px] font-bold" title="Limpio de incidentes">Limpio</span>}
-                                      {h.fastestLap && <span className="bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded text-[8px] font-bold" title="Vuelta rápida">⚡ VR</span>}
-                                      {h.isDotd && <span className="bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded text-[8px] font-bold" title="Piloto del Día">DotD</span>}
-                                      {h.isMvp && <span className="bg-sky-500/10 text-sky-400 px-1.5 py-0.5 rounded text-[8px] font-bold" title="MVP">MVP</span>}
-                                      {!h.isClean && !h.fastestLap && !h.isDotd && !h.isMvp && <span className="text-white/20 italic">-</span>}
-                                    </div>
+                                     <div className="flex justify-center items-center">{h.isDotd ? <span className="bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded text-[8px] font-bold">Sí</span> : <span className="text-white/20 italic">-</span>}</div>
                                   </td>
                                 </tr>
                               ))}

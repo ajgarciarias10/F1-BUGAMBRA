@@ -4,32 +4,35 @@ import { useUsuarios, useSplits } from "../hooks/useData";
 import { processRace, RaceResult } from "../services/raceProcessor";
 import { procesarEconomiaCarrera } from "../services/economyService";
 import { db } from "../services/firebase";
-import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch, increment, runTransaction } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch } from "firebase/firestore";
 import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { isSplitUnlocked, buildRivalryTable, resolveInitialPilotRating } from "../utils/splitResolver";
+import { isSplitUnlocked, buildRivalryTable } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
 import { AdminRivalryControlPanel } from "./RivalryPanels";
 import { EconomyAdminPanel } from "./EconomyAdminPanel";
 import { StorageImageUpload } from "./StorageImageUpload";
 import { DatabaseExplorer } from "./DatabaseExplorer";
 import { AdminControlPanel } from "./AdminControlPanel";
+import { MediaSyncPanel } from "./MediaSyncPanel";
+import { OVRTrajectoryPanel } from "./OVRTrajectoryPanel";
+import { SplitBuilderPanel } from "./SplitBuilderPanel";
+import { AuctionRoom } from "./AuctionRoom";
 import { useAuth } from "../contexts/AuthContext";
 import { SeasonReviewPanel } from "./SeasonReviewPanel";
 import { AdminUsersPanel } from "./AdminUsersPanel";
 import { AdminTeamManager } from "./AdminTeamManager";
 import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 
-type AdminTab = "season-review" | "teams" | "results" | "rivalries" | "users" | "suggestions" | "tools";
+type AdminTab = "results" | "economy" | "rivalries" | "roster" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
-  { id: "season-review", label: "Revisión temporadas" },
-  { id: "teams", label: "Administración de equipos" },
   { id: "results", label: "Circuitos y resultados" },
+  { id: "economy", label: "Economía" },
   { id: "rivalries", label: "Rivalidades" },
-  { id: "users", label: "Administración de usuarios" },
+  { id: "roster", label: "Usuarios, equipos y pilotos" },
   { id: "suggestions", label: "Buzón de mejoras", pulse: true },
-  { id: "tools", label: "Herramientas técnicas" },
+  { id: "tools", label: "Datos y mantenimiento" },
 ];
 
 const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
@@ -63,23 +66,6 @@ const canPilotParticipateInRace = (pilot: any, raceSequence: number) => {
   return raceSequence >= startsAt && (endsAt == null || raceSequence <= endsAt);
 };
 
-  const getLastCompletedRaceNumber = (split: any) => Math.max(
-    0,
-    ...(split?.circuitos || [])
-      .filter((race: any) => race.completado)
-      .map((race: any) => Number(race.numero_carrera ?? 0)),
-  );
-
-  const getRosterDocRef = (splitId: string, teamId: string, pilotId: string) => {
-    return teamId && teamId !== "agente_libre"
-      ? doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotId)
-      : doc(db, `splits/${splitId}/roster`, pilotId);
-  };
-
-  const getFreeAgentDocRef = (splitId: string, pilotId: string) => {
-    return doc(db, `splits/${splitId}/roster`, pilotId);
-  };
-
 export function AdminDashboard() {
   const { userData } = useAuth();
   const { usuarios } = useUsuarios();
@@ -98,7 +84,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [plantilla, setPlantilla] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState<AdminTab>("teams");
+  const [adminTab, setAdminTab] = useState<AdminTab>("results");
   const [videoIntroUrl, setVideoIntroUrl] = useState("");
   const [savingVideoIntro, setSavingVideoIntro] = useState(false);
   const [logoEdits, setLogoEdits] = useState<Record<string, string>>({});
@@ -108,10 +94,6 @@ export function AdminDashboard() {
   const [resetPointsLoading, setResetPointsLoading] = useState(false);
   const [savingRivalries, setSavingRivalries] = useState(false);
   const [rivalriesMsg, setRivalriesMsg] = useState("");
-  const [pilotUserToAssign, setPilotUserToAssign] = useState("");
-  const [pilotTeamToAssign, setPilotTeamToAssign] = useState("");
-  const [assigningPilot, setAssigningPilot] = useState(false);
-  const [endingPilotId, setEndingPilotId] = useState<string | null>(null);
 
   // ─── MIGRACIONES AUTOMÁTICAS AL MONTAR ───────────────────────────────────────
   // Se ejecutan UNA SOLA VEZ. Cada función tiene su propia guardia interna
@@ -135,43 +117,6 @@ export function AdminDashboard() {
       unsubscribe();
     };
   }, []);
-
-  const allPossiblePilots = useMemo(() => {
-    const uPilots = usuarios.filter((u: any) => u.rol === "piloto").map((u: any) => ({
-      uid: u.uid,
-      piloto_id: u.piloto_id || u.uid,
-      nombre: u.nombre,
-      registered: true,
-      raw: u
-    }));
-
-    const pPilots = plantilla.filter((p: any) => p.rol === "piloto").map((p: any) => ({
-      uid: p.id,
-      piloto_id: p.id,
-      nombre: p.nombre,
-      registered: false,
-      raw: p
-    }));
-
-    const seenPilotIds = new Set(uPilots.map(p => p.piloto_id));
-    const uniquePPilots = pPilots.filter(p => !seenPilotIds.has(p.piloto_id));
-
-    return [...uPilots, ...uniquePPilots];
-  }, [usuarios, plantilla]);
-
-  const assignableUsers = useMemo(() => {
-    const rosterIds = new Set((currentRawSplit?.roster || []).map((pilot: any) => pilot.pilotoId));
-    return (usuarios || [])
-      .filter((user: any) => !rosterIds.has(user.piloto_id || user.uid))
-      .sort((a: any, b: any) => (a.nombre || a.email || "").localeCompare(b.nombre || b.email || ""));
-  }, [usuarios, currentRawSplit]);
-
-  const assignmentPreview = useMemo(() => {
-    const user = assignableUsers.find((candidate: any) => candidate.uid === pilotUserToAssign);
-    if (!user || !currentRawSplit) return null;
-    return resolveInitialPilotRating(user.piloto_id || user.uid, currentRawSplit, rawSplits);
-  }, [assignableUsers, pilotUserToAssign, currentRawSplit, rawSplits]);
-
 
   const [selectedCircuitoId, setSelectedCircuitoId] = useState("");
   const [isEditingFinished, setIsEditingFinished] = useState(false);
@@ -220,12 +165,6 @@ export function AdminDashboard() {
     setVideoIntroUrl(split?.video_intro ?? "");
     setLogoEdits({});
   }, [selectedSplitId, splits]);
-
-  useEffect(() => {
-    const firstTeam = currentRawSplit?.equipos?.[0]?.id || "individual";
-    setPilotTeamToAssign(firstTeam);
-    setPilotUserToAssign("");
-  }, [selectedSplitId]);
 
   const handleSaveTeamLogo = async (teamId: string, logoUrl: string) => {
     if (!selectedSplitId) return;
@@ -282,136 +221,6 @@ export function AdminDashboard() {
       setMsg("Error: " + err.message);
     } finally {
       setSavingVideoIntro(false);
-    }
-  };
-
-  const handleAssignUserAsPilot = async () => {
-    const targetUser = assignableUsers.find((user: any) => user.uid === pilotUserToAssign);
-    if (!targetUser || !currentRawSplit || !pilotTeamToAssign || !assignmentPreview) return;
-
-    setAssigningPilot(true);
-    setMsg("");
-    try {
-      const pilotId = targetUser.piloto_id || targetUser.uid;
-      const sourceSplit = assignmentPreview.sourceSplitId
-        ? rawSplits.find(split => split.id === assignmentPreview.sourceSplitId)
-        : null;
-      const previousEntry = sourceSplit?.roster.find((pilot: any) => pilot.pilotoId === pilotId);
-      const pendingRaces = [...(currentRawSplit.circuitos || [])]
-        .filter((race: any) => !race.completado)
-        .sort((a: any, b: any) => (a.numero_carrera ?? 999) - (b.numero_carrera ?? 999));
-      const startsAt = pendingRaces[0]?.numero_carrera ?? 1;
-      const isIndividual = currentRawSplit.tipo === "individual" || currentRawSplit.equipos.length === 0;
-      const teamId = isIndividual ? "individual" : pilotTeamToAssign;
-      const pilotData = {
-        pilotoId: pilotId,
-        nombre: targetUser.nombre || targetUser.email || "Piloto",
-        equipoId: teamId,
-        rating_piloto: assignmentPreview.rating,
-        rating_base: assignmentPreview.rating,
-         // A pilot with any previous split entry inherits that rating and is never a rookie.
-         rookie: assignmentPreview.rookie && !previousEntry,
-        participa_desde: startsAt,
-        participa_hasta: null,
-        puntos_piloto: 0,
-        victorias: 0,
-        podios: 0,
-        poles: 0,
-        dnfs: 0,
-        carreras_limpias: 0,
-        precio_compra: previousEntry?.precio_compra ?? 10,
-        clausula_actual: previousEntry?.clausula_actual ?? 20,
-        mantener_actual: previousEntry?.mantener_actual ?? 30,
-        clausula_inicial_split: previousEntry?.clausula_actual ?? 20,
-        mantener_inicial_split: previousEntry?.mantener_actual ?? 30,
-        precio_carrera_anterior: previousEntry?.precio_compra ?? 10,
-        historial_precios: {},
-      };
-
-      const batch = writeBatch(db);
-      batch.set(doc(db, "pilotos", pilotId), {
-        nombre: pilotData.nombre,
-        foto_url: targetUser.foto_url || null,
-        rating_piloto: assignmentPreview.rating,
-      }, { merge: true });
-      batch.set(doc(db, "usuarios", targetUser.uid), {
-        piloto_id: pilotId,
-        rol: targetUser.rol === "jeque" ? "jeque" : "usuario",
-      }, { merge: true });
-      const rosterRef = isIndividual
-        ? doc(db, `splits/${currentRawSplit.id}/roster`, pilotId)
-        : doc(db, `splits/${currentRawSplit.id}/equipos/${teamId}/pilotos`, pilotId);
-      batch.set(rosterRef, pilotData);
-      await batch.commit();
-
-      setPilotUserToAssign("");
-      setMsg(`${pilotData.nombre} inscrito en ${currentRawSplit.nombre} como ${assignmentPreview.rookie ? "Rookie (70 OVR)" : `${assignmentPreview.rating} OVR heredado`}.`);
-      setTimeout(() => setMsg(""), 5000);
-    } catch (err: any) {
-      setMsg("Error al inscribir piloto: " + err.message);
-    } finally {
-      setAssigningPilot(false);
-    }
-  };
-
-  const handleEndPilotParticipation = async (pilot: any) => {
-    if (!currentRawSplit) return;
-    setEndingPilotId(pilot.pilotoId);
-    setMsg("");
-    try {
-      let rosterRef = getRosterDocRef(currentRawSplit.id, pilot.equipoId, pilot.pilotoId);
-      const matchedUser = usuarios.find((user: any) => user.piloto_id === pilot.pilotoId || user.uid === pilot.pilotoId);
-
-      let sourceSnap = await getDoc(rosterRef);
-      // El roster enriquecido puede conservar el equipo antiguo mientras se
-      // propaga una transferencia. Buscar el documento real evita bloquear
-      // el cierre del contrato por una ruta desactualizada.
-      if (!sourceSnap.exists()) {
-        for (const team of currentRawSplit.equipos || []) {
-          const candidateRef = doc(db, `splits/${currentRawSplit.id}/equipos/${team.id}/pilotos`, pilot.pilotoId);
-          const candidateSnap = await getDoc(candidateRef);
-          if (candidateSnap.exists()) {
-            rosterRef = candidateRef;
-            sourceSnap = candidateSnap;
-            break;
-          }
-        }
-      }
-      if (!sourceSnap.exists()) {
-        const flatRef = getFreeAgentDocRef(currentRawSplit.id, pilot.pilotoId);
-        const flatSnap = await getDoc(flatRef);
-        if (flatSnap.exists()) {
-          rosterRef = flatRef;
-          sourceSnap = flatSnap;
-        }
-      }
-      if (!sourceSnap.exists()) throw new Error("No se encontró el piloto en el roster actual.");
-
-      const batch = writeBatch(db);
-      // Finalizar saca al piloto completamente del roster de esta temporada.
-      // No es una transferencia de mercado: vuelve a ser un usuario normal.
-      batch.delete(rosterRef);
-       if (matchedUser && matchedUser.rol !== "jeque") {
-         batch.set(doc(db, "usuarios", matchedUser.uid), {
-           rol: "usuario",
-           escuderia_id: "",
-         }, { merge: true });
-      }
-      batch.set(doc(collection(db, `splits/${currentRawSplit.id}/transfers`)), {
-        detalles: `Admin finalizó la participación de ${pilot.nombre} en ${currentRawSplit.nombre}`,
-        timestamp: new Date().toISOString(),
-        tipo: "admin",
-        pilotoId: pilot.pilotoId,
-        equipoOrigenId: pilot.equipoId,
-         equipoDestinoId: null,
-      });
-      await batch.commit();
-       setMsg(`${pilot.nombre} eliminado del equipo y devuelto a usuario.`);
-      setTimeout(() => setMsg(""), 4500);
-    } catch (err: any) {
-      setMsg("Error al finalizar participación: " + err.message);
-    } finally {
-      setEndingPilotId(null);
     }
   };
 
@@ -479,32 +288,12 @@ export function AdminDashboard() {
   };
 
   // Management State
-  const [newTeamName, setNewTeamName] = useState("");
-  const [editStates, setEditStates] = useState<Record<string, any>>({});
-  const [teamBudgets, setTeamBudgets] = useState<Record<string, string>>({});
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
     message: string;
     onConfirm: () => void;
   } | null>(null);
-
-  const getEditVal = (pilotId: string, field: string, defaultVal: any) => {
-    if (editStates[pilotId]?.hasOwnProperty(field)) {
-      return editStates[pilotId][field];
-    }
-    return defaultVal;
-  };
-
-  const handleEditChange = (pilotId: string, field: string, val: any) => {
-    setEditStates(prev => ({
-      ...prev,
-      [pilotId]: {
-        ...prev[pilotId],
-        [field]: val
-      }
-    }));
-  };
 
   const handleUpdatePilotName = async (pilotId: string, newName: string) => {
     if (!newName || !newName.trim()) return;
@@ -540,26 +329,6 @@ export function AdminDashboard() {
       setMsg("Error al actualizar nombre: " + err.message);
     }
   };
-
-  const handleCreateTeam = async () => {
-    if (!selectedSplitId || !newTeamName) return;
-    setLoading(true);
-    try {
-      const teamId = newTeamName.toLowerCase().replace(/\s+/g, '_');
-      await setDoc(doc(db, `splits/${selectedSplitId}/equipos`, teamId), {
-        nombre: newTeamName,
-        presupuesto: 100,
-        puntos_constructores: 0
-      });
-      setNewTeamName("");
-      setMsg("Equipo creado en el split.");
-    } catch (err: any) {
-      setMsg("Error: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
 
   const handleToggleFichajes = async () => {
     if (!selectedSplitId) return;
@@ -601,159 +370,12 @@ export function AdminDashboard() {
     }
   };
 
-  const handleUpdateBudget = async (teamId: string, budget: number) => {
-    if (!selectedSplitId || isNaN(budget)) return;
-    setLoading(true);
-    try {
-      const ref = doc(db, `splits/${selectedSplitId}/equipos`, teamId);
-      await setDoc(ref, { presupuesto: budget }, { merge: true });
-      setTeamBudgets(prev => {
-        const copy = { ...prev };
-        delete copy[teamId];
-        return copy;
-      });
-      setMsg(`Presupuesto de ${teamId} actualizado a ${budget}M.`);
-      setTimeout(() => {
-        setMsg("");
-      }, 4000);
-    } catch (err: any) {
-      setMsg("Error: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdatePilotProps = async (teamId: string, pilotId: string, props: any) => {
-    if (!selectedSplitId || !teamId) return;
-    setLoading(true);
-    try {
-      const pilotRef = doc(db, `splits/${selectedSplitId}/equipos/${teamId}/pilotos`, pilotId);
-      const pilotSnap = await getDoc(pilotRef);
-      const oldPrecio = Number(pilotSnap.data()?.precio_compra ?? 0);
-      const newPrecio = Number(props.precio_compra || props.precio_compra_split || 0);
-
-      await setDoc(pilotRef, {
-        clausula_actual: Number(props.clausula_actual || 0),
-        precio_compra:   newPrecio,
-        puntos_piloto:   Number(props.puntos_piloto || 0),
-        rating_piloto:   Number(props.rating_piloto || 0),
-      }, { merge: true });
-
-      // Ajustar presupuesto por diferencia de precio
-      if (newPrecio !== oldPrecio) {
-        const teamRef = doc(db, `splits/${selectedSplitId}/equipos`, teamId);
-        const teamSnap = await getDoc(teamRef);
-        const currentBudget = Number(teamSnap.data()?.presupuesto ?? 0);
-        const delta = newPrecio - oldPrecio;
-        await setDoc(teamRef, { presupuesto: Number((currentBudget - delta).toFixed(1)) }, { merge: true });
-      }
-
-      setEditStates(prev => { const copy = { ...prev }; delete copy[pilotId]; return copy; });
-      setMsg(`Piloto actualizado en este Split.`);
-      setTimeout(() => setMsg(""), 4000);
-    } catch (err: any) {
-      setMsg("Error: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleMovePilotOriginal = async (pilotId: string, pilotName: string, fromTeamId: string, toTeamId: string, pilotData?: any) => {
-    if (!selectedSplitId || fromTeamId === toTeamId) return;
-    try {
-      const pData = { ...pilotData };
-      const currentSplit = splits.find(s => s.id === selectedSplitId);
-      const existingEntry = currentSplit?.roster.find(r => r.pilotoId === pilotId);
-      const precioCompra = Number(existingEntry?.precio_compra ?? pData.precio_compra ?? pData.raw?.precio_compra ?? 10);
-      const sourceRef = getRosterDocRef(selectedSplitId, fromTeamId, pilotId);
-      const destinationRef = toTeamId === "agente_libre"
-        ? getFreeAgentDocRef(selectedSplitId, pilotId)
-        : doc(db, `splits/${selectedSplitId}/equipos/${toTeamId}/pilotos`, pilotId);
-      const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
-      const auditRef = doc(collection(db, `splits/${selectedSplitId}/transfers`));
-
-      const sourceSnap = await getDoc(sourceRef);
-      if (!sourceSnap.exists()) {
-        throw new Error("No se encontró la participación de origen del piloto.");
-      }
-
-      const sourceData = sourceSnap.data();
-
-      if (toTeamId === "agente_libre") {
-        const batch = writeBatch(db);
-        batch.set(destinationRef, {
-          ...sourceData,
-          pilotoId: pilotId,
-          nombre: pilotName || pData.nombre || sourceData.nombre || "Piloto",
-          equipoId: "agente_libre",
-          participa_hasta: getLastCompletedRaceNumber(currentSplit),
-          congelado: false,
-          congelado_en: null,
-          pending_equipoId: null,
-          pending_precio_compra: null,
-          pending_tipo_fichaje: null,
-        }, { merge: true });
-        if (sourceRef.path !== destinationRef.path) {
-          batch.delete(sourceRef);
-        }
-         if (matchedUser && matchedUser.rol !== "jeque") {
-           batch.set(doc(db, "usuarios", matchedUser.uid), {
-             rol: "usuario",
-            escuderia_id: "",
-          }, { merge: true });
-        }
-        batch.set(auditRef, {
-          detalles: `Admin finalizó la participación de ${pilotName} en ${currentSplit?.nombre || selectedSplitId}`,
-          timestamp: new Date().toISOString(),
-          tipo: "admin",
-          pilotoId: pilotId,
-          equipoOrigenId: fromTeamId,
-          equipoDestinoId: toTeamId,
-        });
-        await batch.commit();
-      } else {
-        await runTransaction(db, async transaction => {
-          transaction.update(doc(db, `splits/${selectedSplitId}/equipos`, toTeamId), {
-            presupuesto: increment(-precioCompra),
-          });
-          transaction.set(destinationRef, {
-            ...sourceData,
-            pilotoId: pilotId,
-            equipoId: toTeamId,
-          });
-          transaction.delete(sourceRef);
-          if (matchedUser) {
-            transaction.set(doc(db, "usuarios", matchedUser.uid), {
-              escuderia_id: toTeamId,
-            }, { merge: true });
-          }
-          transaction.set(doc(db, "pilotos", pilotId), {
-            nombre: pilotName || pData.nombre || "Piloto",
-          }, { merge: true });
-          transaction.set(auditRef, {
-            detalles: `Admin transfirió a ${pilotName} de ${fromTeamId} a ${toTeamId} (${toTeamId} -${precioCompra}M)`,
-            timestamp: new Date().toISOString(),
-            tipo: "admin",
-            pilotoId: pilotId,
-            equipoOrigenId: fromTeamId,
-            equipoDestinoId: toTeamId,
-          });
-        });
-      }
-
-      setMsg(`Piloto ${pilotName} transferido.`);
-      setTimeout(() => setMsg(""), 4000);
-    } catch (err: any) {
-      setMsg("Error al transferir piloto: " + err.message);
-    }
-  };
-
   const handleSyncSplitRosters = (splitId: string) => {
     const currentSplitName = splits.find(s => s.id === splitId)?.nombre || splitId;
     setConfirmModal({
       isOpen: true,
       title: `Inicializar ${currentSplitName}`,
-      message: `¿Seguro que quieres INICIALIZAR las plantillas del ${currentSplitName.toUpperCase()} a partir del Split anterior? Los presupuestos se resetearán a 100M, los puntos a 0, victorias a 0 y podios a 0. El RATING de cada piloto se heredará del valor final que tenga en el split anterior.`,
+       message: `¿Seguro que quieres INICIALIZAR las plantillas del ${currentSplitName.toUpperCase()} a partir del Split anterior? Los presupuestos heredarán el saldo conciliado, mientras que los puntos, victorias y podios empezarán en 0. El RATING de cada piloto se heredará del valor final que tenga en el split anterior.`,
       onConfirm: async () => {
         setLoading(true);
         try {
@@ -766,20 +388,44 @@ export function AdminDashboard() {
             setLoading(false);
             return;
           }
-          const prevSplit = sortedSplits[currentIndex - 1];
-          setMsg(`Leyendo roster de ${prevSplit.nombre}...`);
+           const prevSplit = sortedSplits[currentIndex - 1];
+           setMsg(`Leyendo roster de ${prevSplit.nombre}...`);
 
-          // Copiar equipos del split anterior (reset presupuesto/puntos)
-          const prevTeamsSnap = await getDocs(collection(db, `splits/${prevSplit.id}/equipos`));
-          for (const prevTeamDoc of prevTeamsSnap.docs) {
-            const teamData = prevTeamDoc.data();
-            await setDoc(doc(db, `splits/${splitId}/equipos`, prevTeamDoc.id), {
-              id: prevTeamDoc.id,
-              nombre: teamData.nombre || prevTeamDoc.id,
-              presupuesto: 100,
-              puntos_constructores: 0
+           for (const previousSplit of sortedSplits.slice(0, currentIndex)) {
+             const previousCircuits = await getDocs(collection(db, `splits/${previousSplit.id}/circuitos`));
+             if (previousCircuits.empty) {
+               throw new Error(`${previousSplit.nombre} no tiene carreras registradas.`);
+             }
+             const pendingCircuits = previousCircuits.docs.filter(circuitDoc => {
+               const circuit = circuitDoc.data();
+               return !circuit.completado
+                 || !circuit.acta_cerrada
+                 || !circuit.economia_procesada
+                 || !Array.isArray(circuit.resultados)
+                 || circuit.resultados.length === 0;
+             });
+             if (pendingCircuits.length) {
+               throw new Error(`${previousSplit.nombre} tiene carreras sin resultados cerrados o sin economía procesada: ${pendingCircuits.map(circuit => circuit.data().nombre || circuit.id).join(", ")}.`);
+             }
+           }
+
+           // Copiar equipos del split anterior conservando el saldo ya conciliado.
+           const prevTeamsSnap = await getDocs(collection(db, `splits/${prevSplit.id}/equipos`));
+           for (const prevTeamDoc of prevTeamsSnap.docs) {
+             const teamData = prevTeamDoc.data();
+             const inheritedBudget = Number(teamData.presupuesto ?? 100);
+             await setDoc(doc(db, `splits/${splitId}/equipos`, prevTeamDoc.id), {
+               id: prevTeamDoc.id,
+               nombre: teamData.nombre || prevTeamDoc.id,
+               presupuesto: inheritedBudget,
+               presupuesto_inicial: inheritedBudget,
+               presupuesto_arrastre: inheritedBudget,
+               puntos_constructores: 0
             }, { merge: true });
           }
+          await setDoc(doc(db, `splits/${splitId}/equipos`, "agente_libre"), {
+            id: "agente_libre", nombre: "Agentes libres", presupuesto: 0, puntos_constructores: 0,
+          }, { merge: true });
 
           // Borrar pilotos anidados existentes en este split
           const existingEquiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
@@ -808,16 +454,30 @@ export function AdminDashboard() {
                  r.pending_tipo_fichaje === "clausula" ? "clausula" :
                  r.pending_equipoId ? "subasta" : "agente_libre"
                );
-               if (estado === "agente_libre") continue;
+                if (estado === "agente_libre") {
+                  await setDoc(doc(db, `splits/${splitId}/equipos/agente_libre/pilotos`, pid), {
+                    ...r,
+                    pilotoId: pid,
+                    equipoId: "agente_libre",
+                    precio_compra: 0,
+                    mantener_actual: 0,
+                    clausula_actual: 0,
+                    tipo_fichaje: "subasta",
+                    participa_desde: 1,
+                    participa_hasta: null,
+                  });
+                  pilotsInitialized++;
+                  continue;
+                }
                const nextEquipoId = r.pending_equipoId ?? r.equipoId;
                if (!nextEquipoId || nextEquipoId === "agente_libre") continue;
                const nextPrecioCompra = Number(r.precio_inicio_siguiente_split);
                if (!Number.isFinite(nextPrecioCompra)) {
                  throw new Error(`Falta el precio inicial manual del siguiente split para ${r.nombre || pid}.`);
                }
-               const nextPrecioAbs = Math.abs(nextPrecioCompra);
-               const nextMantener = Math.round((nextPrecioCompra < 0 ? nextPrecioAbs / 3 : nextPrecioAbs * 3) * 10) / 10;
-               const nextClausula = Math.round((nextPrecioCompra < 0 ? nextPrecioAbs / 2 : nextPrecioAbs * 2) * 10) / 10;
+               // Un precio negativo divide en vez de multiplicar, conservando el signo (Excel T2/T3).
+               const nextMantener = Math.round((nextPrecioCompra < 0 ? nextPrecioCompra / 3 : nextPrecioCompra * 3) * 10) / 10;
+               const nextClausula = Math.round((nextPrecioCompra < 0 ? nextPrecioCompra / 2 : nextPrecioCompra * 2) * 10) / 10;
 
               await setDoc(doc(db, `splits/${splitId}/equipos/${nextEquipoId}/pilotos`, pid), {
                 pilotoId:               pid,
@@ -923,27 +583,35 @@ export function AdminDashboard() {
     setLoading(true);
     setMsg("");
     try {
-      const finalResults: RaceResult[] = splitPilots.map((p: any) => {
-        const item = results[p.pilotoId] || {};
-        const isDnf = !!item.isDnfOwnError;
-
-        const enteredQualy = typeof item.qualyPos === "number" ? item.qualyPos : parseInt(item.qualyPos as any);
-        const qPos = isDnf ? 99 : enteredQualy;
-
-        const enteredRace = typeof item.racePos === "number" ? item.racePos : parseInt(item.racePos as any);
-        if (!isDnf && (isNaN(enteredQualy) || enteredQualy <= 0 || isNaN(enteredRace) || enteredRace <= 0)) {
-          throw new Error(`Faltan las posiciones de qualy o carrera de ${p.nombre}.`);
+       const finalResults: RaceResult[] = splitPilots.map((p: any) => {
+         const item = results[p.pilotoId] || {};
+         const enteredQualy = typeof item.qualyPos === "number" ? item.qualyPos : parseInt(item.qualyPos as any);
+         const enteredRace = typeof item.racePos === "number" ? item.racePos : parseInt(item.racePos as any);
+         if (isNaN(enteredQualy) || enteredQualy <= 0) {
+           throw new Error(`Falta la posición de clasificación de ${p.nombre}.`);
+         }
+         if (isNaN(enteredRace) || enteredRace <= 0) {
+          throw new Error(`Falta la posición de carrera de ${p.nombre}.`);
         }
-        const rPos = isDnf ? 99 : enteredRace;
+        const isDnf = enteredRace === 99;
 
-        return {
-          pilotoId: p.pilotoId,
-          pilotoNombre: p.nombre,
-          qualyPos: qPos,
-          racePos: rPos,
-          isDnfOwnError: isDnf,
-        } as RaceResult;
-      });
+         return {
+           pilotoId: p.pilotoId,
+           pilotoNombre: p.nombre,
+           qualyPos: enteredQualy,
+           racePos: enteredRace,
+           isDnfOwnError: isDnf,
+           fastestLap: item.fastestLap === true,
+           isClean: !isDnf && item.isClean !== false,
+         } as RaceResult;
+       });
+
+       if (finalResults.filter(result => result.qualyPos === 1).length !== 1) {
+         throw new Error("Debe seleccionarse exactamente una pole.");
+       }
+       if (finalResults.filter(result => result.fastestLap).length !== 1) {
+         throw new Error("Debe seleccionarse exactamente una vuelta rápida.");
+       }
 
       const duplicatePositions = (field: "qualyPos" | "racePos") => {
         const counts = new Map<number, number>();
@@ -953,7 +621,7 @@ export function AdminDashboard() {
         });
         return [...counts.entries()].filter(([, count]) => count > 1).map(([position]) => position);
       };
-      const duplicateQualy = duplicatePositions("qualyPos");
+       const duplicateQualy = duplicatePositions("qualyPos");
       const duplicateRace = duplicatePositions("racePos");
       if (duplicateQualy.length || duplicateRace.length) {
         throw new Error(`Hay posiciones duplicadas: ${duplicateQualy.length ? `qualy ${duplicateQualy.join(", ")}` : ""}${duplicateQualy.length && duplicateRace.length ? " y " : ""}${duplicateRace.length ? `carrera ${duplicateRace.join(", ")}` : ""}.`);
@@ -1018,18 +686,197 @@ export function AdminDashboard() {
           ))}
         </div>
 
-        {adminTab === "season-review" ? (
-          <SeasonReviewPanel splits={splits} />
-        ) : adminTab === "teams" ? (
-          <AdminTeamManager splitId={selectedSplitId} teams={currentRawSplit?.equipos || []} roster={currentRawSplit?.roster || []} splits={splits} onSelectSplit={(id: string) => setSelectedSplitId(id)} />
-        ) : adminTab === "rivalries" ? (
+        {adminTab === "rivalries" ? (
           <AdminRivalriesPanel splits={splits} />
-        ) : adminTab === "users" ? (
-          <AdminUsersPanel />
+        ) : adminTab === "economy" ? (
+          <EconomyAdminPanel splits={splits} />
+        ) : adminTab === "roster" ? (
+          <div className="space-y-6">
+            <AdminTeamManager splitId={selectedSplitId} teams={currentRawSplit?.equipos || []} roster={currentRawSplit?.roster || []} splits={splits} onSelectSplit={(id: string) => setSelectedSplitId(id)} />
+          {/* MOVER PILOTOS */}
+          <section className="bg-white/[0.03] border border-white/10 p-4 relative overflow-hidden">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+              <div>
+                <h2 className="text-sm font-black italic tracking-tighter text-white flex items-center gap-2.5">
+                  <span className="w-1 h-5 bg-[#e10600] block" />
+                  Edición de equipos y pilotos
+                </h2>
+                <p className="text-[9px] text-white/40 uppercase tracking-widest mt-1 font-mono">
+                  Gestión de transferencias, logos y fotos del split
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-white/[0.02] p-1.5 border border-white/5">
+                  <span className="text-[9px] font-mono uppercase text-white/40">MERCADO:</span>
+                  <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+                    splits.find(s => s.id === selectedSplitId)?.fichajes_abiertos
+                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                    : "bg-red-500/20 text-red-500 border border-red-500/30"
+                  }`}>
+                    {splits.find(s => s.id === selectedSplitId)?.fichajes_abiertos ? "Abierto" : "Cerrado"}
+                  </span>
+                  <button onClick={handleToggleFichajes}
+                    className="px-2.5 py-0.5 bg-white/10 hover:bg-white/25 text-[9px] uppercase font-bold tracking-wider transition-colors">
+                    Cambiar
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white/[0.02] p-1.5 border border-white/5">
+                  <span className="text-[9px] font-mono uppercase text-white/40">WEB PÚBLICA:</span>
+                  <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+                    splits.find(s => s.id === selectedSplitId)?.activo
+                    ? "bg-[#e10600]/20 text-[#e10600] border border-[#e10600]/30"
+                    : "bg-white/5 text-white/30 border border-white/10"
+                  }`}>
+                    {splits.find(s => s.id === selectedSplitId)?.activo ? "Activo" : "Oculto"}
+                  </span>
+                  <button onClick={handleSetSplitActivo}
+                    className="px-2.5 py-0.5 bg-white/10 hover:bg-white/25 text-[9px] uppercase font-bold tracking-wider transition-colors">
+                    {splits.find(s => s.id === selectedSplitId)?.activo ? "Desactivar" : "Activar"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Video Intro del Split */}
+            <div className="mb-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 border-t border-white/[0.04] pt-3">
+              <span className="text-[10px] font-mono uppercase text-white/40 shrink-0 w-20">Video Intro</span>
+              <input
+                type="url"
+                value={videoIntroUrl}
+                onChange={e => setVideoIntroUrl(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-3 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+              />
+              <button
+                onClick={handleSaveVideoIntro}
+                disabled={savingVideoIntro}
+                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1.5"
+              >
+                {savingVideoIntro ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                Guardar
+              </button>
+            </div>
+
+            {/* Logos de escuderías */}
+            <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
+              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Logos de escuderías</p>
+              {(currentRawSplit?.equipos || []).map((team: any) => {
+                const editVal = logoEdits[team.id] ?? (team.logo_url ?? "");
+                const isSavingL = savingLogo === team.id;
+                return (
+                  <div key={team.id} className="flex items-center gap-2">
+                    <span className="text-[10px] text-white/50 w-28 shrink-0 truncate font-mono">{team.nombre}</span>
+                    <StorageImageUpload
+                      storagePath={`logos/${selectedSplitId}/${team.id}`}
+                      currentUrl={editVal || undefined}
+                      onUpload={url => {
+                        setLogoEdits(prev => ({ ...prev, [team.id]: url }));
+                        handleSaveTeamLogo(team.id, url);
+                      }}
+                      size="sm"
+                    />
+                    <input
+                      type="url"
+                      value={editVal}
+                      onChange={e => setLogoEdits(prev => ({ ...prev, [team.id]: e.target.value }))}
+                      placeholder="o pega URL aquí"
+                      className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                    />
+                    <button
+                      onClick={() => handleSaveTeamLogo(team.id, editVal)}
+                      disabled={isSavingL}
+                      className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                    >
+                      {isSavingL ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
+                    </button>
+                  </div>
+                );
+              })}
+              {(currentRawSplit?.equipos || []).length === 0 && (
+                <p className="text-[9px] font-mono text-white/15">Sin escuderías en este split</p>
+              )}
+            </div>
+
+            {/* Fotos de pilotos */}
+            <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
+              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Fotos de pilotos</p>
+              {(currentRawSplit?.roster || [])
+                .slice()
+                .sort((a: any, b: any) => (a.nombre || "").localeCompare(b.nombre || ""))
+                .map((p: any) => {
+                  const usuario = (usuarios || []).find((u: any) => u.uid === p.pilotoId || u.piloto_id === p.pilotoId);
+                  const currentPhoto = usuario?.foto_url || p.foto_url || "";
+                  const editVal = photoEdits[p.pilotoId] ?? currentPhoto;
+                  const isSaving = savingPhoto === p.pilotoId;
+                  return (
+                    <div key={p.pilotoId} className="flex items-center gap-2">
+                      {/* Preview */}
+                      <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 shrink-0 bg-white/[0.02] flex items-center justify-center">
+                        {currentPhoto ? (
+                          <img src={currentPhoto} className="w-full h-full object-cover" />
+                        ) : (
+                          <UserIcon className="w-4 h-4 text-white/10" />
+                        )}
+                      </div>
+                      <span className="text-[10px] text-white/50 w-24 shrink-0 truncate font-mono">{p.nombre}</span>
+                      <StorageImageUpload
+                        storagePath={`fotos/pilotos/${p.pilotoId}`}
+                        currentUrl={currentPhoto || undefined}
+                        onUpload={url => handleSavePilotPhoto(p.pilotoId, url)}
+                        size="sm"
+                      />
+                      <input
+                        type="url"
+                        value={editVal}
+                        onChange={e => setPhotoEdits(prev => ({ ...prev, [p.pilotoId]: e.target.value }))}
+                        placeholder="o pega URL aquí"
+                        className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                      />
+                      <button
+                        onClick={() => handleSavePilotPhoto(p.pilotoId, editVal)}
+                        disabled={isSaving}
+                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                      >
+                        {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
+                      </button>
+                    </div>
+                  );
+                })}
+              {(currentRawSplit?.roster || []).length === 0 && (
+                <p className="text-[9px] font-mono text-white/15">Sin pilotos en este split</p>
+              )}
+            </div>
+
+            {!isSelectedSplitInitialized && selectedSplitId !== "split_1" && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">⚠️ Split no inicializado</h4>
+                  <p className="text-[10px] text-white/60 mt-0.5 max-w-2xl">
+                    Este split hereda dinámicamente el plantel del anterior. Inicialízalo para poder mover pilotos de forma independiente.
+                  </p>
+                </div>
+                <button onClick={() => handleSyncSplitRosters(selectedSplitId)}
+                  className="bg-amber-500 hover:bg-amber-600 text-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider shrink-0 transition-colors cursor-pointer">
+                  Inicializar Split
+                </button>
+              </div>
+            )}
+
+          </section>
+            <AdminUsersPanel />
+          </div>
         ) : adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
         ) : adminTab === "tools" ? (
-          <div className="space-y-6"><AdminControlPanel /><EconomyAdminPanel splits={splits} /><DatabaseExplorer /></div>
+          <div className="space-y-6">
+            <AuctionRoom splits={splits} splitId={selectedSplitId} />
+            <SplitBuilderPanel splits={splits} />
+            <OVRTrajectoryPanel splits={splits} />
+            <MediaSyncPanel splits={splits} />
+            <SeasonReviewPanel splits={splits} />
+            <AdminControlPanel />
+            <DatabaseExplorer />
+          </div>
          ) : (
            <>
              {/* Navegación de Splits */}
@@ -1354,21 +1201,21 @@ export function AdminDashboard() {
             <table className="w-full text-sm text-left border-collapse">
               <thead>
                 <tr className="text-[9px] text-white/30 uppercase tracking-[0.2em] font-mono border-b border-white/10 pb-2">
-                  <th className="pb-2 pl-3 font-normal">Piloto</th>
-                  <th className="pb-2 font-normal">Qualy</th>
-                  <th className="pb-2 font-normal">Race</th>
-                  <th className="pb-2 text-center font-normal">DNF</th>
+                   <th className="pb-2 pl-3 font-normal">Piloto</th>
+                   <th className="pb-2 text-center font-normal">Qualy</th>
+                   <th className="pb-2 text-center font-normal">V. rápida</th>
+                   <th className="pb-2 text-center font-normal">Limpio</th>
+                   <th className="pb-2 font-normal">Race</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
                 {(splits.find(s => s.id === selectedSplitId)?.roster || [])
                   .filter((pilot: any) => canPilotParticipateInRace(pilot, numeroCarrera))
                   .map((p: any, i: number) => {
-                  const isPilotDnf = results[p.pilotoId]?.isDnfOwnError || false;
-                  const qPosVal = results[p.pilotoId]?.qualyPos;
-                  const isQualyDuplicated = typeof qPosVal === "number" && (qualyCount[qPosVal] || 0) > 1;
+                   const qPosVal = results[p.pilotoId]?.qualyPos;
+                    const isQualyDuplicated = typeof qPosVal === "number" && qPosVal !== 99 && (qualyCount[qPosVal] || 0) > 1;
                   const rPosVal = results[p.pilotoId]?.racePos;
-                  const isRaceDuplicated = !isPilotDnf && typeof rPosVal === "number" && (raceCount[rPosVal] || 0) > 1;
+                   const isRaceDuplicated = typeof rPosVal === "number" && rPosVal !== 99 && (raceCount[rPosVal] || 0) > 1;
                   return (
                     <tr key={`pilot-row-${p.pilotoId}-${i}`} className="group border-b border-white/5 hover:bg-white/5 transition-colors">
                       <td className="py-2.5 pl-3">
@@ -1384,26 +1231,26 @@ export function AdminDashboard() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-2.5">
-                        <input
-                          type="number"
-                          min="1"
-                          max="15"
-                          className={`w-12 bg-[#1a1a1a]/50 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${
-                            isQualyDuplicated
-                              ? "border-amber-500/60 text-amber-300 bg-amber-500/5"
-                              : "border-white/10 text-white"
-                          }`}
-                          title={isQualyDuplicated ? "¡Posición de Qualy duplicada!" : undefined}
-                          disabled={isActaCerrada || isPilotDnf}
-                          value={isPilotDnf ? "" : (qPosVal ?? "")} 
-                          onChange={e => {
-                            const val = parseInt(e.target.value);
-                            handleUpdate(p.pilotoId, "qualyPos", isNaN(val) ? "" : val);
-                          }}
-                        />
-                      </td>
-                      <td className="py-2.5">
+                       <td className="py-2.5 text-center">
+                         <input type="number" min="1" max="20" disabled={isActaCerrada}
+                           value={qPosVal ?? ""} title={isQualyDuplicated ? "¡Posición de clasificación duplicada!" : qPosVal === 1 ? "Pole position" : undefined}
+                           className={`w-12 bg-[#1a1a1a]/50 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${isQualyDuplicated ? "border-amber-500/60 text-amber-300 bg-amber-500/5" : "border-white/10 text-white"}`}
+                           onChange={e => {
+                             const val = parseInt(e.target.value);
+                             handleUpdate(p.pilotoId, "qualyPos", isNaN(val) ? "" : val);
+                           }} />
+                       </td>
+                       <td className="py-2.5 text-center">
+                         <input type="checkbox" checked={results[p.pilotoId]?.fastestLap === true} disabled={isActaCerrada} title="Vuelta rápida"
+                           className="w-4 h-4 accent-fuchsia-500"
+                           onChange={e => handleUpdate(p.pilotoId, "fastestLap", e.target.checked)} />
+                       </td>
+                       <td className="py-2.5 text-center">
+                         <input type="checkbox" checked={results[p.pilotoId]?.isClean !== false} disabled={isActaCerrada} title="Desmarcar si el piloto fue sancionado"
+                           className="w-4 h-4 accent-emerald-500"
+                           onChange={e => handleUpdate(p.pilotoId, "isClean", e.target.checked)} />
+                       </td>
+                       <td className="py-2.5">
                         <input
                           type="number"
                           min="1"
@@ -1414,45 +1261,13 @@ export function AdminDashboard() {
                               : "border-white/10 text-white"
                           }`}
                           title={isRaceDuplicated ? "¡Posición de carrera duplicada!" : undefined}
-                          disabled={isActaCerrada || isPilotDnf}
-                          value={isPilotDnf ? "" : (rPosVal ?? "")}
+                           disabled={isActaCerrada}
+                           value={rPosVal ?? ""}
                           onChange={e => {
                             const val = parseInt(e.target.value);
                             handleUpdate(p.pilotoId, "racePos", isNaN(val) ? "" : val);
                           }}
                         />
-                      </td>
-                      <td className="py-2.5 text-center">
-                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
-                          disabled={isActaCerrada}
-                          checked={results[p.pilotoId]?.isDnfOwnError || false}
-                          onChange={e => {
-                            const isDnf = e.target.checked;
-                            if (isDnf) {
-                              setResults(prev => ({
-                                ...prev,
-                                [p.pilotoId]: {
-                                  ...prev[p.pilotoId],
-                                  pilotoId: p.pilotoId,
-                                   isDnfOwnError: true,
-                                   racePos: 99,
-                                   qualyPos: 99
-                                }
-                              }));
-                            } else {
-                              setResults(prev => ({
-                                ...prev,
-                                [p.pilotoId]: {
-                                  ...prev[p.pilotoId],
-                                   pilotoId: p.pilotoId,
-                                   isDnfOwnError: false,
-                                   racePos: undefined,
-                                   qualyPos: undefined
-                                }
-                              }));
-                            }
-                         }}
-                       />
                       </td>
                     </tr>
                   );
@@ -1463,313 +1278,6 @@ export function AdminDashboard() {
         </section>
 
 
-        {/* MOVER PILOTOS */}
-        <section className="mt-5 bg-white/[0.03] border border-white/10 p-4 relative overflow-hidden">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
-            <div>
-              <h2 className="text-sm font-black italic tracking-tighter text-white flex items-center gap-2.5">
-                <span className="w-1 h-5 bg-[#e10600] block" />
-                Edición de equipos y pilotos
-              </h2>
-              <p className="text-[9px] text-white/40 uppercase tracking-widest mt-1 font-mono">
-                Gestión de transferencias, logos y fotos del split
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-white/[0.02] p-1.5 border border-white/5">
-                <span className="text-[9px] font-mono uppercase text-white/40">MERCADO:</span>
-                <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                  splits.find(s => s.id === selectedSplitId)?.fichajes_abiertos
-                  ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                  : "bg-red-500/20 text-red-500 border border-red-500/30"
-                }`}>
-                  {splits.find(s => s.id === selectedSplitId)?.fichajes_abiertos ? "Abierto" : "Cerrado"}
-                </span>
-                <button onClick={handleToggleFichajes}
-                  className="px-2.5 py-0.5 bg-white/10 hover:bg-white/25 text-[9px] uppercase font-bold tracking-wider transition-colors">
-                  Cambiar
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5 bg-white/[0.02] p-1.5 border border-white/5">
-                <span className="text-[9px] font-mono uppercase text-white/40">WEB PÚBLICA:</span>
-                <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                  splits.find(s => s.id === selectedSplitId)?.activo
-                  ? "bg-[#e10600]/20 text-[#e10600] border border-[#e10600]/30"
-                  : "bg-white/5 text-white/30 border border-white/10"
-                }`}>
-                  {splits.find(s => s.id === selectedSplitId)?.activo ? "Activo" : "Oculto"}
-                </span>
-                <button onClick={handleSetSplitActivo}
-                  className="px-2.5 py-0.5 bg-white/10 hover:bg-white/25 text-[9px] uppercase font-bold tracking-wider transition-colors">
-                  {splits.find(s => s.id === selectedSplitId)?.activo ? "Desactivar" : "Activar"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Video Intro del Split */}
-          <div className="mb-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 border-t border-white/[0.04] pt-3">
-            <span className="text-[10px] font-mono uppercase text-white/40 shrink-0 w-20">Video Intro</span>
-            <input
-              type="url"
-              value={videoIntroUrl}
-              onChange={e => setVideoIntroUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=..."
-              className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-3 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
-            />
-            <button
-              onClick={handleSaveVideoIntro}
-              disabled={savingVideoIntro}
-              className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1.5"
-            >
-              {savingVideoIntro ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-              Guardar
-            </button>
-          </div>
-
-          {/* Logos de escuderías */}
-          <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
-            <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Logos de escuderías</p>
-            {(currentRawSplit?.equipos || []).map((team: any) => {
-              const editVal = logoEdits[team.id] ?? (team.logo_url ?? "");
-              const isSavingL = savingLogo === team.id;
-              return (
-                <div key={team.id} className="flex items-center gap-2">
-                  <span className="text-[10px] text-white/50 w-28 shrink-0 truncate font-mono">{team.nombre}</span>
-                  <StorageImageUpload
-                    storagePath={`logos/${selectedSplitId}/${team.id}`}
-                    currentUrl={editVal || undefined}
-                    onUpload={url => {
-                      setLogoEdits(prev => ({ ...prev, [team.id]: url }));
-                      handleSaveTeamLogo(team.id, url);
-                    }}
-                    size="sm"
-                  />
-                  <input
-                    type="url"
-                    value={editVal}
-                    onChange={e => setLogoEdits(prev => ({ ...prev, [team.id]: e.target.value }))}
-                    placeholder="o pega URL aquí"
-                    className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
-                  />
-                  <button
-                    onClick={() => handleSaveTeamLogo(team.id, editVal)}
-                    disabled={isSavingL}
-                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
-                  >
-                    {isSavingL ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
-                  </button>
-                </div>
-              );
-            })}
-            {(currentRawSplit?.equipos || []).length === 0 && (
-              <p className="text-[9px] font-mono text-white/15">Sin escuderías en este split</p>
-            )}
-          </div>
-
-          {/* Fotos de pilotos */}
-          <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
-            <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Fotos de pilotos</p>
-            {(currentRawSplit?.roster || [])
-              .slice()
-              .sort((a: any, b: any) => (a.nombre || "").localeCompare(b.nombre || ""))
-              .map((p: any) => {
-                const usuario = (usuarios || []).find((u: any) => u.uid === p.pilotoId || u.piloto_id === p.pilotoId);
-                const currentPhoto = usuario?.foto_url || p.foto_url || "";
-                const editVal = photoEdits[p.pilotoId] ?? currentPhoto;
-                const isSaving = savingPhoto === p.pilotoId;
-                return (
-                  <div key={p.pilotoId} className="flex items-center gap-2">
-                    {/* Preview */}
-                    <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 shrink-0 bg-white/[0.02] flex items-center justify-center">
-                      {currentPhoto ? (
-                        <img src={currentPhoto} className="w-full h-full object-cover" />
-                      ) : (
-                        <UserIcon className="w-4 h-4 text-white/10" />
-                      )}
-                    </div>
-                    <span className="text-[10px] text-white/50 w-24 shrink-0 truncate font-mono">{p.nombre}</span>
-                    <StorageImageUpload
-                      storagePath={`fotos/pilotos/${p.pilotoId}`}
-                      currentUrl={currentPhoto || undefined}
-                      onUpload={url => handleSavePilotPhoto(p.pilotoId, url)}
-                      size="sm"
-                    />
-                    <input
-                      type="url"
-                      value={editVal}
-                      onChange={e => setPhotoEdits(prev => ({ ...prev, [p.pilotoId]: e.target.value }))}
-                      placeholder="o pega URL aquí"
-                      className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
-                    />
-                    <button
-                      onClick={() => handleSavePilotPhoto(p.pilotoId, editVal)}
-                      disabled={isSaving}
-                      className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
-                    >
-                      {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
-                    </button>
-                  </div>
-                );
-              })}
-            {(currentRawSplit?.roster || []).length === 0 && (
-              <p className="text-[9px] font-mono text-white/15">Sin pilotos en este split</p>
-            )}
-          </div>
-
-          {!isSelectedSplitInitialized && selectedSplitId !== "split_1" && (
-            <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-              <div>
-                <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">⚠️ Split no inicializado</h4>
-                <p className="text-[10px] text-white/60 mt-0.5 max-w-2xl">
-                  Este split hereda dinámicamente el plantel del anterior. Inicialízalo para poder mover pilotos de forma independiente.
-                </p>
-              </div>
-              <button onClick={() => handleSyncSplitRosters(selectedSplitId)}
-                className="bg-amber-500 hover:bg-amber-600 text-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider shrink-0 transition-colors cursor-pointer">
-                Inicializar Split
-              </button>
-            </div>
-          )}
-
-          {/* Inscribir usuario como piloto */}
-          <div className="mb-4 border border-white/[0.08] bg-[#08090c] p-4">
-            <div className="flex flex-col lg:flex-row lg:items-end gap-3">
-              <div className="flex-1 min-w-0">
-                <label className="block text-[9px] font-mono uppercase tracking-[0.3em] text-white/35 mb-2">Usuario registrado</label>
-                <select
-                  value={pilotUserToAssign}
-                  onChange={event => setPilotUserToAssign(event.target.value)}
-                  style={{ colorScheme: "dark", backgroundColor: "#0d0d0f" }}
-                  className="w-full border border-white/10 px-3 py-2.5 text-xs text-white outline-none focus:border-[#e10600]"
-                >
-                  <option value="">Seleccionar usuario</option>
-                  {assignableUsers.map((user: any) => (
-                    <option key={user.uid} value={user.uid}>{user.nombre || user.email} · {user.email}</option>
-                  ))}
-                </select>
-              </div>
-
-              {currentRawSplit?.tipo !== "individual" && (currentRawSplit?.equipos || []).length > 0 && (
-                <div className="w-full lg:w-56">
-                  <label className="block text-[9px] font-mono uppercase tracking-[0.3em] text-white/35 mb-2">Escudería</label>
-                  <select
-                    value={pilotTeamToAssign}
-                    onChange={event => setPilotTeamToAssign(event.target.value)}
-                    style={{ colorScheme: "dark", backgroundColor: "#0d0d0f" }}
-                    className="w-full border border-white/10 px-3 py-2.5 text-xs text-white outline-none focus:border-[#e10600]"
-                  >
-                    {(currentRawSplit?.equipos || []).map((team: any) => (
-                      <option key={team.id} value={team.id}>{team.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="w-full lg:w-48 border border-white/[0.08] bg-white/[0.03] px-3 py-2">
-                <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-white/30">Media inicial automática</span>
-                <strong className={`block mt-1 text-sm ${assignmentPreview?.rookie ? "text-sky-300" : "text-white"}`}>
-                  {assignmentPreview
-                    ? assignmentPreview.rookie
-                      ? "Rookie · 70 OVR"
-                      : `${assignmentPreview.rating} OVR · heredada`
-                    : "Selecciona usuario"}
-                </strong>
-              </div>
-
-              <button
-                onClick={handleAssignUserAsPilot}
-                disabled={!pilotUserToAssign || !pilotTeamToAssign || assigningPilot}
-                className="min-h-11 px-5 bg-[#e10600] hover:bg-[#ff241c] text-white text-[10px] font-black uppercase tracking-[0.18em] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {assigningPilot && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Inscribir piloto
-              </button>
-            </div>
-            <p className="mt-3 text-[9px] font-mono text-white/25">
-              La media se hereda de la última temporada disputada. Sin historial, el piloto debuta como Rookie con 70 OVR.
-            </p>
-          </div>
-
-          {/* Tabla de pilotos con mover */}
-          <div className="overflow-x-auto border border-white/[0.06]">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[0.25em] text-white/25 font-normal">
-                  <th className="py-2 px-3 text-left font-normal">Piloto</th>
-                  <th className="py-2 px-3 text-left font-normal">Equipo actual</th>
-                  <th className="py-2 px-3 text-left font-normal">Precio next split</th>
-                   <th className="py-2 px-3 text-left font-normal">Mover a</th>
-                   <th className="py-2 px-3 text-right font-normal">Participación</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {(currentRawSplit?.roster || [])
-                  .slice()
-                  .sort((a: any, b: any) => (a.equipoId || "").localeCompare(b.equipoId || "") || (a.nombre || "").localeCompare(b.nombre || ""))
-                  .map((p: any) => {
-                        const teamNombre = p.equipoId === "agente_libre"
-                          ? "Agente Libre"
-                          : (currentRawSplit?.equipos || []).find((e: any) => e.id === p.equipoId)?.nombre || p.equipoId || "Agente Libre";
-                    return (
-                      <tr key={p.pilotoId} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-2 px-3 font-bold text-white/90">{p.nombre}</td>
-                        <td className="py-2 px-3 text-white/40 font-mono text-[10px]">{teamNombre}</td>
-                      <td className="py-2 px-3 text-white/40 font-mono text-[10px]">
-                        {typeof p.pending_precio_compra === "number" ? `${p.pending_precio_compra}M` : `${p.precio_compra ?? 0}M`}
-                        {p.pending_precio_compra != null && <span className="block text-[9px] text-white/30">siguiente split</span>}
-                      </td>
-                        <td className="py-2 px-3">
-                          {currentRawSplit?.tipo === "individual" ? (
-                            <span className="text-[9px] font-mono uppercase text-white/25">Sin equipos</span>
-                          ) : (
-                            <select
-                              style={{ colorScheme: "dark", backgroundColor: "#0d0d0d" }}
-                              className="border border-white/10 px-2 py-1 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors cursor-pointer"
-                              value={p.equipoId || "agente_libre"}
-                              onChange={e => {
-                                const dest = e.target.value;
-                                if (dest !== p.equipoId) {
-                                  handleMovePilotOriginal(p.pilotoId, p.nombre, p.equipoId || "agente_libre", dest, p);
-                                }
-                              }}
-                            >
-                              {(currentRawSplit?.equipos || []).map((e: any) => (
-                                <option key={e.id} value={e.id}>{e.nombre}</option>
-                              ))}
-                              <option value="agente_libre">Agente Libre</option>
-                            </select>
-                          )}
-                        </td>
-                        <td className="py-2 px-3 text-right">
-                           {p.participa_hasta != null && p.equipoId !== "agente_libre" ? (
-                            <span className="text-[9px] font-mono uppercase tracking-wider text-white/25">Hasta C{p.participa_hasta}</span>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmModal({
-                                isOpen: true,
-                                title: "Finalizar participación",
-                                message: `${p.nombre} dejará de participar en ${currentRawSplit?.nombre}. Sus resultados anteriores se conservarán.`,
-                                onConfirm: () => handleEndPilotParticipation(p),
-                              })}
-                              disabled={endingPilotId === p.pilotoId}
-                              className="px-3 py-1.5 border border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/20 text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
-                            >
-                              {endingPilotId === p.pilotoId ? "Procesando" : "Finalizar"}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                {(currentRawSplit?.roster || []).length === 0 && (
-                  <tr><td colSpan={3} className="py-8 text-center text-[10px] font-mono text-white/15 uppercase tracking-widest">Sin pilotos en este split</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-        </section>
 
         {/* Paddock */}
 

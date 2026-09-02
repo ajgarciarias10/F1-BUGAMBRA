@@ -167,6 +167,27 @@ service cloud.firestore {
         allow create, update, delete: if isSignedIn() && isValidId(pilotoId) && (isAdmin() || isJeque());
       }
 
+      // 3.5. Subasta en vivo. La sala la abre y la adjudica el admin; los jeques solo
+      // pueden mover la puja, y el resto de la liga la ve en directo.
+      match /subasta/{salaId} {
+        allow read: if true;
+        allow create, delete: if isAdmin();
+        allow update: if isSignedIn() && (
+          isAdmin() ||
+          (isJeque() && incoming().diff(existing()).affectedKeys()
+            .hasOnly(['estado', 'puja_actual', 'puja_equipo_id', 'puja_equipo_nombre',
+                      'termina_en', 'prorrogada', 'actualizado_en']))
+        );
+
+        // El historial de pujas es solo añadir: nadie reescribe lo que ya pujó.
+        match /pujas/{pujaId} {
+          allow read: if true;
+          allow create: if isSignedIn() && (isAdmin() || isJeque());
+          allow update: if false;
+          allow delete: if isAdmin();
+        }
+      }
+
       // 3.4. Notificaciones / Historial de Fichajes Sub-collection
       match /transfers/{transferId} {
         allow get, list: if isSignedIn();

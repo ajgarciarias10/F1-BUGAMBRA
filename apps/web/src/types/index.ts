@@ -57,8 +57,11 @@ export type TipoFichaje = "subasta" | "clausula" | "mantener";
 export interface RosterEntry {
   pilotoId: string;
   equipoId: string; // "agente_libre" si no tiene equipo
-  rating_piloto: number;   // rating actual en este split (0-99)
-  rating_base?: number;    // rating de inicio del split, para recalcular desde cero
+  rating_piloto: number;   // rating actual en este split (0-99), redondeado
+  rating_base?: number;    // rating heredado del split anterior; el bloque evoluciona desde él
+  rating_exacto?: number;  // el mismo valor sin redondear, para que la herencia no pierda décimas
+  // Evolución del OVR carrera a carrera dentro del split
+  historial_rating?: Record<string, { carrera: string; rating: number; rating_exacto?: number; delta: number }>;
   rookie?: boolean;
   participa_desde?: number;
   participa_hasta?: number | null;
@@ -70,7 +73,7 @@ export interface RosterEntry {
   clausula_inicial_split: number;
   mantener_inicial_split: number;
   precio_carrera_anterior: number;
-  historial_precios: Record<string, { carrera: string; mantener: number; clausula: number }>;
+  historial_precios: Record<string, { carrera: string; mantener: number | null; clausula: number | null; congelado?: boolean }>;
   pending_equipoId?: string;          // transfer pending to next split
   pending_precio_compra?: number;    // purchase price to apply next split
   pending_tipo_fichaje?: TipoFichaje;

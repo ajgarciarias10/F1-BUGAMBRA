@@ -372,12 +372,12 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
       {/* Tabla pilotos */}
       {currentSplitId !== "general" && view === "pilotos" && (
         <div className="sport-panel overflow-hidden">
-          <div className="grid grid-cols-[2.5rem_1fr_auto_auto] md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 px-4 py-3 bg-black/[0.035] dark:bg-white/[0.035] border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
+          <div className="grid grid-cols-[2.5rem_1fr_4rem_4rem] md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 px-4 py-3 bg-black/[0.035] dark:bg-white/[0.035] border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">#</span>
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">Piloto</span>
             <span className="hidden md:block text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">Escudería</span>
             <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase text-right">Pts</span>
-            <span className="hidden md:block text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase text-right">OVR</span>
+            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase text-right">OVR</span>
           </div>
 
           <div className="divide-y divide-[#0a0a0a]/[0.04] dark:divide-white/[0.04]">
@@ -391,7 +391,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
               return (
                 <div
                   key={p.pilotoId}
-                  className={`grid grid-cols-[2.5rem_1fr_auto_auto] md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 px-3 py-4 items-center transition-colors hover:bg-[#0a0a0a]/[0.02] dark:hover:bg-white/[0.02] relative ${
+                    className={`grid grid-cols-[2.5rem_1fr_4rem_4rem] md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 px-3 py-4 items-center transition-colors hover:bg-[#0a0a0a]/[0.02] dark:hover:bg-white/[0.02] relative ${
                     isFirst ? "bg-[#0a0a0a]/[0.03] dark:bg-white/[0.03]" : ""
                   }`}
                 >
@@ -449,9 +449,9 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                     )}
                   </div>
 
-                  <div className="hidden md:flex justify-end">
+                  <div className="flex justify-end">
                     <span className={`min-w-12 border px-2 py-1.5 text-center text-sm font-black font-mono tabular-nums ${standingsRatingTone(Number(p.rating_piloto ?? 0))}`}>
-                      {currentSplit?.tipo === "individual" ? "--" : p.rating_piloto ?? 0}
+                      {currentSplit?.tipo === "individual" ? "--" : Number(p.rating_piloto) > 0 ? p.rating_piloto : 70}
                     </span>
                   </div>
                 </div>

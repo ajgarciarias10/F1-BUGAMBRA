@@ -15,10 +15,24 @@ export function AdminRivalriesPanel({ splits }: { splits: any[] }) {
   useEffect(() => {
     setGroups(Array.isArray(split?.rivalidades_manual) ? split.rivalidades_manual : []);
     setSelectedPilots([]);
+    if (Array.isArray(split?.rivalidades_manual) && split.rivalidades_manual.length && !split?.rivalries?.groups?.length) {
+      void saveGroups(split.rivalidades_manual);
+    }
   }, [splitId, split?.rivalidades_manual]);
 
   const saveGroups = async (nextGroups: Rivalry[]) => {
-    await setDoc(doc(db, "splits", splitId), { rivalidades_manual: nextGroups }, { merge: true });
+    const equipoNombreMap = Object.fromEntries((split?.equipos || []).map((team: any) => [team.id, team.nombre]));
+    const groups = nextGroups.map(group => {
+      const members = group.pilotoIds.map(pilotId => {
+        const pilot = split?.roster?.find((item: any) => item.pilotoId === pilotId);
+        return { id: pilotId, nombre: pilot?.nombre || pilotId, equipoId: pilot?.equipoId || "", equipoNombre: equipoNombreMap[pilot?.equipoId] || pilot?.equipoId || "", rating: pilot?.rating_piloto ?? 0, puntos_piloto: pilot?.puntos_piloto ?? 0, statusRank: 0, price: pilot?.precio_compra ?? 0 };
+      });
+      return { id: group.id, statusRank: 0, type: members.length === 2 ? "pair" : "triad", members, groupScore: members.reduce((sum: number, member: any) => sum + member.rating, 0) / Math.max(1, members.length) };
+    });
+    await setDoc(doc(db, "splits", splitId), {
+      rivalidades_manual: nextGroups,
+      rivalries: { splitId, totalPilotos: split?.roster?.length || 0, pairCount: groups.filter(group => group.type === "pair").length, coeficiente: 1, rivalidades: [], groups, soloPilots: [] },
+    }, { merge: true });
     setGroups(nextGroups);
     setMessage("Rivalidades guardadas.");
   };

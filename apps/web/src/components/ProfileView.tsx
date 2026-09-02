@@ -47,7 +47,12 @@ export function ProfileView() {
           order: split.orden,
           teamName: split.tipo === "individual" ? "Competición individual" : team?.nombre || entry.equipoId || "Sin escudería",
           teamLogo: team?.logo_url || "",
-          rating: split.tipo === "individual" ? null : entry.rating_piloto ?? 70,
+          // Origins también puntúa: para parte de la parrilla es su debut, y la trayectoria
+          // arranca ahí. Solo se oculta el OVR si esa temporada no llegó a calcularlo.
+          rating: Number(entry.rating_piloto) > 0 ? Number(entry.rating_piloto) : null,
+          // El OVR con el que arrancó el split: la diferencia con el de cierre es lo que
+          // el piloto ganó o perdió en ese bloque.
+          ratingBase: Number(entry.rating_base) > 0 ? Number(entry.rating_base) : null,
           points: entry.puntos_piloto ?? 0,
           rookie: !!entry.rookie,
         };
@@ -55,6 +60,23 @@ export function ProfileView() {
       .filter(Boolean)
       .sort((a: any, b: any) => a.order - b.order);
   }, [splits, userData]);
+
+  // La trayectoria encadenada: cada split parte del OVR con el que cerró el anterior, así
+  // que la variación se mide contra ese valor y no contra un 70 fijo.
+  const careerWithProgress = useMemo(() => {
+    let previousRating: number | null = null;
+    return career.map((season: any) => {
+      const from = season.ratingBase ?? previousRating;
+      const change = season.rating != null && from != null ? season.rating - from : null;
+      if (season.rating != null) previousRating = season.rating;
+      return { ...season, ratingFrom: from, ratingChange: change };
+    });
+  }, [career]);
+
+  const careerPeak = useMemo(() => {
+    const ratings = career.map((season: any) => season.rating).filter((r: any) => r != null);
+    return ratings.length ? Math.max(...ratings) : null;
+  }, [career]);
 
   const currentParticipation = useMemo(() => {
     if (!userData) return null;
@@ -375,9 +397,15 @@ export function ProfileView() {
               <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-[#e10600]">Archivo del piloto</p>
               <h3 className="mt-1 text-xl font-black uppercase tracking-[-0.03em]">Trayectoria por temporadas</h3>
               <p className="mt-1 text-xs text-white/40">Tus equipos y resultados se conservan aunque no participes en el split vigente.</p>
+              {careerPeak != null && (
+                <p className="mt-2 text-[9px] font-mono uppercase tracking-[0.24em] text-white/30">
+                  Techo de carrera <span className="text-amber-300 font-black">{careerPeak} OVR</span>
+                  <span className="text-white/20"> · el overall se arrastra de un split al siguiente</span>
+                </p>
+              )}
             </div>
             <div className="grid sm:grid-cols-2 gap-px bg-white/[0.06]">
-              {career.map((season: any) => (
+              {careerWithProgress.map((season: any) => (
                 <div key={season.splitId} className="bg-[#111218] p-4 flex items-center gap-4">
                   <div className="w-12 h-12 shrink-0 border border-white/10 bg-white/[0.04] p-1.5 flex items-center justify-center">
                     {season.teamLogo
@@ -393,8 +421,21 @@ export function ProfileView() {
                     <span className="text-[9px] font-mono text-white/35">{season.points} PTS</span>
                   </div>
                   {season.rating != null && (
-                    <div className="w-14 h-14 border border-[#e10600]/35 bg-[#e10600]/10 grid place-items-center text-center">
-                      <div><strong className="block text-xl leading-none">{season.rating}</strong><span className="text-[7px] tracking-[0.18em] text-white/45">OVR</span></div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-14 h-14 border border-[#e10600]/35 bg-[#e10600]/10 grid place-items-center text-center">
+                        <div><strong className="block text-xl leading-none">{season.rating}</strong><span className="text-[7px] tracking-[0.18em] text-white/45">OVR</span></div>
+                      </div>
+                      {season.ratingChange != null && (
+                        <span className={`text-[9px] font-mono font-black tabular-nums ${
+                          season.ratingChange > 0 ? "text-emerald-400"
+                          : season.ratingChange < 0 ? "text-[#e10600]"
+                          : "text-white/25"
+                        }`}>
+                          {season.ratingChange > 0 ? "▲" : season.ratingChange < 0 ? "▼" : "="}
+                          {season.ratingChange !== 0 && Math.abs(season.ratingChange)}
+                          <span className="text-white/25 font-normal"> de {season.ratingFrom}</span>
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

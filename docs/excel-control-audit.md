@@ -89,7 +89,15 @@ cláusula = precio de compra * 2
 mantener = cláusula * 1,5 = precio de compra * 3
 ```
 
-El Excel aplica una reducción de cláusula de `20% del precio de compra` después de la primera carrera del bloque y mantiene ese valor el resto del bloque. El precio de mantener positivo permanece fijo en las fórmulas observadas; no se recalcula en cada carrera desde la cláusula reducida.
+Corregido tras revisar las series completas del bloque en la hoja: el recorte **no** es único. Mantener y cláusula avanzan en pasos iguales en cada carrera, y la cláusula aterriza exactamente en el precio de compra en la última carrera del bloque. El mantener conserva la proporción con la que arrancó.
+
+```text
+cláusula(n) = cláusula inicial + n * (precio de compra - cláusula inicial) / (carreras - 1)
+mantener(n) = mantener inicial + n * (mantener final - mantener inicial) / (carreras - 1)
+mantener final = precio de compra * (mantener inicial / cláusula inicial)
+```
+
+Con seis carreras el paso de la cláusula es el `20% del precio de compra`, que es de donde venía la lectura antigua de "una sola reducción del 20%".
 
 Para precios negativos, el Excel conserva el signo:
 
@@ -98,7 +106,17 @@ mantener inicial = precio de compra / 3
 cláusula inicial = precio de compra / 2
 ```
 
-La magnitud negativa aumenta una vez y el valor de mantener se vuelve a relacionar con la cláusula. Esto no coincide con la lógica antigua de Firestore, que convertía el precio a valor absoluto y actualizaba precios en cada carrera.
+La misma fórmula sirve sin distinguir el signo: la magnitud negativa crece hasta duplicarse porque la cláusula va de `precio / 2` a `precio`.
+
+Series observadas en la hoja de 2026 (bloque de seis carreras):
+
+```text
+Carlos   +61,5  cláusula 123,0 · 110,7 · 98,4 · 86,1 · 73,8 · 61,5
+Aparicio  -42   cláusula -21,0 · -25,2 · -29,4 · -33,6 · -37,8 · -42,0
+                mantener -14,0 · -16,8 · -19,6 · -22,4 · -25,2 · -28,0
+```
+
+La lógica antigua de Firestore no coincidía por partida doble: convertía el precio negativo a valor absoluto, lo movía en la dirección contraria, y en los positivos aplicaba la reducción una sola vez dejando el mantener congelado.
 
 El valor `-110` aparece como centinela histórico para congelaciones. En la nueva base no se utilizará como precio real: la congelación será un estado explícito.
 
@@ -109,7 +127,7 @@ Al comenzar un bloque nuevo, el Excel permite introducir manualmente el tipo y p
 - Las plantillas vuelven al mercado tras seis carreras, salvo excepciones.
 - Una escudería completa no puede continuar pujando.
 - La puja termina un minuto antes de la hora de carrera en el ejemplo del reglamento.
-- El dinero de una cláusula se retira del sistema; no se entrega a la escudería vendedora.
+- El dinero de una cláusula se retira del sistema; no se entrega a la escudería vendedora. Verificado contra los saldos de cierre del Split 2: Alfa Romero y Roses solo cuadran sin ese abono.
 - Los cambios de reglamento requieren consulta y votación.
 - Los handicaps se describen de forma textual y todavía no forman parte del motor automático.
 

@@ -38,7 +38,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
   const selectedTeam = (currentSplit?.equipos || []).find((team: any) => team.id === selectedTeamId);
   const selectedPilots = selectedTeam ? pilotsByTeam[selectedTeam.id] || [] : [];
   const selectedAverage = selectedPilots.length
-    ? Math.round(selectedPilots.reduce((sum, pilot) => sum + Number(pilot.rating_piloto ?? 70), 0) / selectedPilots.length)
+    ? Math.round(selectedPilots.reduce((sum, pilot) => sum + (Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70), 0) / selectedPilots.length)
     : 0;
   const videoIntroUrl = getSplitIntroUrl(currentSplit?.id, currentSplit?.video_intro);
   const isIndividual = currentSplit?.tipo === "individual" || (currentSplit?.equipos || []).length === 0;
@@ -149,7 +149,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
             {(currentSplit?.equipos || []).map((team: any) => {
               const pilots = pilotsByTeam[team.id] || [];
               const average = pilots.length
-                ? Math.round(pilots.reduce((sum, pilot) => sum + Number(pilot.rating_piloto ?? 70), 0) / pilots.length)
+                ? Math.round(pilots.reduce((sum, pilot) => sum + (Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70), 0) / pilots.length)
                 : 0;
               const selected = team.id === selectedTeamId;
               return (
@@ -219,7 +219,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                   .sort((a, b) => Number(b.rating_piloto || 0) - Number(a.rating_piloto || 0))
                   .map(pilot => {
                     const photo = getPilotPhoto(pilot.pilotoId);
-                    const rating = Number(pilot.rating_piloto ?? 70);
+                    const rating = Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70;
                     return (
                       <div key={pilot.pilotoId} className="bg-[#101116] p-4 flex items-center gap-3 min-w-0">
                         <div className="w-14 h-14 shrink-0 overflow-hidden bg-white/5 border border-white/10">
