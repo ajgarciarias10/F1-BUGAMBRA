@@ -203,7 +203,11 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       const circuitIds = circuitNames.map(name => name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
       const scoreMatrix = readMatrixEntries("puntuacionPilotoCircuito");
       const scoreColumns = Math.max(0, ...scoreMatrix.map(row => row.length));
-      if (scoreMatrix.length !== pilotNames.length || scoreColumns < circuitNames.length) throw new Error(`La matriz de pilotos tiene ${scoreMatrix.length} filas x ${scoreColumns} columnas, pero se esperaban ${pilotNames.length} filas x ${circuitNames.length} columnas.`);
+      const incompleteRows = scoreMatrix.map((row, index) => row.length < circuitNames.length ? index + 1 : 0).filter(Boolean);
+      if (scoreMatrix.length !== pilotNames.length || scoreColumns < circuitNames.length || incompleteRows.length > 0) {
+        const rowShape = scoreMatrix.map(row => row.length).join(", ");
+        throw new Error(`La matriz tiene ${scoreMatrix.length} filas y las filas tienen ${rowShape || "0"} columnas; se esperaban ${pilotNames.length} filas de ${circuitNames.length} columnas. Filas incompletas: ${incompleteRows.join(", ") || "ninguna"}.`);
+      }
       const number = (value: string, label: string) => { const parsed = Number(value.replace(",", ".")); if (!Number.isFinite(parsed)) throw new Error(`${label} no es un número válido.`); return parsed; };
       const totalEntries = mappings.puntuacionTotalPiloto?.length ? readEntries("puntuacionTotalPiloto").flat().filter(Boolean) : [];
       const pilotTotals = pilotNames.map((_, index) => totalEntries[index] ? number(totalEntries[index], `Total del piloto ${pilotNames[index]}`) : scoreMatrix[index].slice(0, circuitNames.length).reduce((sum, value, circuitIndex) => sum + number(value, `Puntuación ${pilotNames[index]} C${circuitIndex + 1}`), 0));
