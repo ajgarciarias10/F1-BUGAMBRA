@@ -21,6 +21,10 @@ const FIELD_OPTIONS = [
   ["economia", "Economía"],
 ] as const;
 
+const ORIGINS_FIELDS = FIELD_OPTIONS.filter(([value]) =>
+  !["equipoPiloto", "economia"].includes(value)
+);
+
 const columnName = (index: number) => {
   let name = "";
   let value = index + 1;
@@ -47,6 +51,13 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
+  const visibleFieldOptions = seasonId === "origins" ? ORIGINS_FIELDS : FIELD_OPTIONS;
+
+  useEffect(() => {
+    if (!visibleFieldOptions.some(([value]) => value === field)) {
+      setField(visibleFieldOptions[0][0]);
+    }
+  }, [field, visibleFieldOptions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,7 +161,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
     setMappings(nextMappings);
     await setDoc(doc(db, "admin_excel_mappings", seasonId), { seasonId, spreadsheetUrl: url, mappings: nextMappings, updatedAt: new Date().toISOString() }, { merge: true });
     setMessage(`Rango ${selectedRange.range} guardado para ${FIELD_OPTIONS.find(item => item[0] === field)?.[1]}.`);
-    const nextField = FIELD_OPTIONS[FIELD_OPTIONS.findIndex(item => item[0] === field) + 1];
+    const nextField = visibleFieldOptions[visibleFieldOptions.findIndex(item => item[0] === field) + 1];
     if (nextField) setField(nextField[0]);
   };
 
@@ -177,7 +188,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         <div className="p-3 border-b border-white/10 flex flex-wrap items-center gap-2">
           <MousePointer2 className="w-4 h-4 text-emerald-300" />
           <span className="text-[10px] uppercase tracking-wider text-white/45">Selecciona un rango para:</span>
-          <select value={field} onChange={event => setField(event.target.value as typeof field)} className="bg-black/40 border border-white/10 px-2 py-1.5 text-[10px] text-white">{FIELD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <select value={field} onChange={event => setField(event.target.value as typeof field)} className="bg-black/40 border border-white/10 px-2 py-1.5 text-[10px] text-white">{visibleFieldOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <span className="text-[10px] font-mono text-emerald-300">{selectedRange?.range || "sin selección"}</span>
           <button onClick={saveSelection} disabled={!selectedRange} className="ml-auto inline-flex items-center gap-1.5 border border-emerald-500/30 text-emerald-300 px-3 py-1.5 text-[10px] uppercase font-black disabled:opacity-30"><Save className="w-3.5 h-3.5" /> Guardar rango</button>
         </div>
