@@ -7,6 +7,7 @@ import { TotalStandings } from "./SharedDashboard";
 import { FomLive } from "./FomLive";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 import { TeamsView } from "./TeamsView";
+import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
 
 type Tab = "clasificacion" | "equipos" | "tv";
 
@@ -237,9 +238,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
   const leader = pilotStandings[0];
   const leaderPts = leader?.puntos_piloto || 0;
 
-  const videoIntroUrl = currentSplit?.video_intro || (currentSplit?.id === "origins"
-    ? "https://youtu.be/5OLFg1W5LzU"
-    : "");
+  const videoIntroUrl = getSplitIntroUrl(currentSplit?.id, currentSplit?.video_intro);
 
   return (
     <div className="space-y-8">
@@ -275,12 +274,20 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
           <div className="aspect-video w-full bg-black">
             <iframe
               className="w-full h-full"
-              src={`https://www.youtube.com/embed/${videoIntroUrl.split("v=")[1]?.split("&")[0]}`}
+              src={getYoutubeEmbedUrl(videoIntroUrl)}
               title={`Vídeo de ${currentSplit?.nombre}`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
             />
           </div>
+          <a
+            href={videoIntroUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex items-center justify-center gap-2 bg-[#e10600] px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white hover:bg-[#ff241c] transition-colors"
+          >
+            Abrir en YouTube
+          </a>
         </div>
       )}
 

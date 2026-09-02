@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Play, Shield, Users } from "lucide-react";
+import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
 
 interface TeamsViewProps {
   validSplits: any[];
@@ -38,9 +39,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
   const selectedAverage = selectedPilots.length
     ? Math.round(selectedPilots.reduce((sum, pilot) => sum + Number(pilot.rating_piloto ?? 70), 0) / selectedPilots.length)
     : 0;
-  const videoIntroUrl = currentSplit?.video_intro || (currentSplit?.id === "origins"
-    ? "https://youtu.be/5OLFg1W5LzU"
-    : "");
+  const videoIntroUrl = getSplitIntroUrl(currentSplit?.id, currentSplit?.video_intro);
   const isIndividual = currentSplit?.tipo === "individual" || (currentSplit?.equipos || []).length === 0;
 
   return (
@@ -130,11 +129,19 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
               </div>
               <iframe
                 className="w-full aspect-video"
-                src={`https://www.youtube.com/embed/${videoIntroUrl.split("v=")[1]?.split("&")[0]}`}
+                src={getYoutubeEmbedUrl(videoIntroUrl)}
                 title={`Vídeo de ${currentSplit?.nombre}`}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
               />
+              <a
+                href={videoIntroUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center justify-center gap-2 bg-[#e10600] px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white hover:bg-[#ff241c] transition-colors"
+              >
+                Abrir en YouTube
+              </a>
             </div>
           )}
           <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
