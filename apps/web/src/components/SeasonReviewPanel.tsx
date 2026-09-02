@@ -102,6 +102,8 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
 
   useEffect(() => {
     let cancelled = false;
+    setMappings({});
+    setSelection(null);
     getDoc(doc(db, "admin_excel_mappings", seasonId)).then(snapshot => {
       if (cancelled) return;
       const data = snapshot.data();
@@ -348,7 +350,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       <div className="border border-white/10 bg-white/[0.03] p-5 rounded-sm">
         <div className="flex items-start gap-3 mb-5">
           <div className="p-2 bg-emerald-500/10 text-emerald-300"><FileSpreadsheet className="w-5 h-5" /></div>
-          <div><h2 className="font-black uppercase tracking-tight text-lg">Revisión de temporadas</h2><p className="text-xs text-white/45 mt-1">Lee el Excel original y configura los rangos sin modificarlo.</p></div>
+          <div><h2 className="font-black uppercase tracking-tight text-lg">Revisión de temporadas</h2><p className="text-xs text-white/45 mt-1">Revisando exclusivamente: <strong className="text-emerald-300">{reviewSeasons.find(season => season.id === seasonId)?.label || seasonId}</strong>. Sus rangos no se mezclan con ninguna otra temporada.</p></div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-[180px_1fr_auto] gap-3">
           <select value={seasonId} onChange={event => setSeasonId(event.target.value)} className="bg-black/30 border border-white/10 px-3 py-2 text-xs text-white">
