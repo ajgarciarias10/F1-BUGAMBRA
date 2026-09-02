@@ -37,10 +37,14 @@ export function PublicHome() {
     return visible.length > 0 ? visible : all;
   }, [splits]);
 
-  const latestSplitId = validSplits[validSplits.length - 1]?.id || "";
+  const activeSeasonSplitId = validSplits.find(split => split.activo)?.id
+    || validSplits.find(split => split.id === "split_3")?.id
+    || validSplits.find(split => split.orden === 3)?.id
+    || validSplits[validSplits.length - 1]?.id
+    || "";
   const selectedRealSplitId = validSplits.some(split => split.id === activeSplitId)
     ? activeSplitId
-    : latestSplitId;
+    : activeSeasonSplitId;
   const currentSplitId = activeTab === "clasificacion" && activeSplitId === "general"
     ? "general"
     : selectedRealSplitId;
