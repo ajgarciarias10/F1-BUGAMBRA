@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GoogleAuthProvider, linkWithPopup, reauthenticateWithPopup } from "firebase/auth";
-import { collection, doc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { Check, FileSpreadsheet, Loader2, MousePointer2, Save, ShieldCheck } from "lucide-react";
 import { auth, db } from "../services/firebase";
 
@@ -46,6 +46,19 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDoc(doc(db, "admin_excel_mappings", seasonId)).then(snapshot => {
+      if (cancelled) return;
+      const data = snapshot.data();
+      if (data?.mappings) setMappings(data.mappings);
+      if (data?.spreadsheetUrl) setUrl(data.spreadsheetUrl);
+    }).catch(() => {
+      if (!cancelled) setMappings({});
+    });
+    return () => { cancelled = true; };
+  }, [seasonId]);
 
   const activeSheet = sheets.find(sheet => sheet.properties.sheetId === activeSheetId);
   const selectedRange = useMemo(() => {
@@ -123,8 +136,10 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
     if (!selectedRange || activeSheetId == null) return;
     const nextMappings = { ...mappings, [field]: { sheetId: activeSheetId, range: selectedRange.range, preview: selectedRange.values.slice(0, 3).map(row => row.join(" | ")) } };
     setMappings(nextMappings);
-    await setDoc(doc(collection(db, "admin_excel_mappings"), seasonId), { seasonId, spreadsheetUrl: url, mappings: nextMappings, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(doc(db, "admin_excel_mappings", seasonId), { seasonId, spreadsheetUrl: url, mappings: nextMappings, updatedAt: new Date().toISOString() }, { merge: true });
     setMessage(`Rango ${selectedRange.range} guardado para ${FIELD_OPTIONS.find(item => item[0] === field)?.[1]}.`);
+    const nextField = FIELD_OPTIONS[FIELD_OPTIONS.findIndex(item => item[0] === field) + 1];
+    if (nextField) setField(nextField[0]);
   };
 
   return (
@@ -159,7 +174,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         </div>
       </div>}
 
-      {Object.keys(mappings).length > 0 && <div className="border border-white/10 p-4"><h3 className="text-xs font-black uppercase tracking-wider mb-3">Mapeo guardado</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-2">{Object.entries(mappings).map(([key, value]) => <div key={key} className="flex items-center justify-between bg-white/[0.03] px-3 py-2 text-[10px]"><span className="text-white/60">{FIELD_OPTIONS.find(item => item[0] === key)?.[1]}</span><span className="font-mono text-emerald-300">{value.range} <Check className="inline w-3 h-3" /></span></div>)}</div></div>}
+      {Object.keys(mappings).length > 0 && <div className="border border-white/10 p-4"><h3 className="text-xs font-black uppercase tracking-wider mb-3">Mapeo guardado</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-2">{Object.entries(mappings).map(([key, value]) => <div key={key} className="bg-white/[0.03] px-3 py-2 text-[10px]"><div className="flex items-center justify-between"><span className="text-white/60">{FIELD_OPTIONS.find(item => item[0] === key)?.[1]}</span><span className="font-mono text-emerald-300">{value.range} <Check className="inline w-3 h-3" /></span></div><p className="mt-1 text-white/35 font-mono truncate">{value.preview.join(" / ") || "Rango vacío"}</p></div>)}</div></div>}
     </section>
   );
 }
