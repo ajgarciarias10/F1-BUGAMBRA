@@ -108,8 +108,8 @@ const PILOTS = {
 
 const SPLITS = [
   { id: "origins", nombre: "Origins", orden: 0, tipo: "individual", activo: false, completado: true, fichajes_abiertos: false, video_intro: "https://youtu.be/5OLFg1W5LzU", circuitos: [] },
-  { id: "split_1", nombre: "Split 1", orden: 1, tipo: "equipos", activo: true, completado: false, fichajes_abiertos: true, video_intro: "", circuitos: ["Australia", "China", "Japón", "Arabia Saudí", "Miami", "Barein"] },
-  { id: "split_2", nombre: "Split 2", orden: 2, tipo: "equipos", activo: false, completado: false, fichajes_abiertos: true, video_intro: "", circuitos: ["Canadá", "Mónaco", "Barcelona", "Austria", "Gran Bretaña", "Bélgica"] },
+  { id: "split_1", nombre: "Split 1", orden: 1, tipo: "equipos", activo: true, completado: false, fichajes_abiertos: true, video_intro: "https://www.youtube.com/watch?v=PCj87_WObys", circuitos: ["Australia", "China", "Japón", "Arabia Saudí", "Miami", "Barein"] },
+  { id: "split_2", nombre: "Split 2", orden: 2, tipo: "equipos", activo: false, completado: false, fichajes_abiertos: true, video_intro: "https://www.youtube.com/watch?v=I3Ou8CxbU1I", circuitos: ["Canadá", "Mónaco", "Barcelona", "Austria", "Gran Bretaña", "Bélgica"] },
   { id: "split_3", nombre: "Split 3", orden: 3, tipo: "equipos", activo: false, completado: false, fichajes_abiertos: true, video_intro: "", circuitos: ["Hungría", "Paises Bajos", "Italia", "España", "Azerbayán", "Singapur"] },
   { id: "split_4", nombre: "Split 4", orden: 4, tipo: "equipos", activo: false, completado: false, fichajes_abiertos: true, video_intro: "", circuitos: ["Austin", "México", "Brasil", "Las Vegas", "Qatar", "Abu Dhabi"] }
 ];

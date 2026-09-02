@@ -92,6 +92,17 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                 </a>
               </div>
             )}
+            {currentSplit?.id !== "origins" && videoIntroUrl && (
+              <div className="min-h-64 bg-black p-6">
+                <iframe
+                  className="w-full aspect-video"
+                  src={`https://www.youtube.com/embed/${videoIntroUrl.split("v=")[1]?.split("&")[0]}`}
+                  title={`Vídeo de ${currentSplit?.nombre}`}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            )}
           </div>
           {(currentSplit?.duos || []).length > 0 && (
             <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
@@ -109,6 +120,23 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
         </div>
       ) : (
         <>
+          {videoIntroUrl && (
+            <div className="border border-black/10 dark:border-white/10 bg-[#101116] text-white p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="w-1 h-4 bg-[#e10600] shrink-0" />
+                <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-white/50">
+                  Vídeo · {currentSplit?.nombre}
+                </span>
+              </div>
+              <iframe
+                className="w-full aspect-video"
+                src={`https://www.youtube.com/embed/${videoIntroUrl.split("v=")[1]?.split("&")[0]}`}
+                title={`Vídeo de ${currentSplit?.nombre}`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+          )}
           <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {(currentSplit?.equipos || []).map((team: any) => {
               const pilots = pilotsByTeam[team.id] || [];

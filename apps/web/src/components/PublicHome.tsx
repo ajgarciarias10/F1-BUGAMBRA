@@ -264,6 +264,26 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
         </div>
       )}
 
+      {currentSplit?.id !== "origins" && videoIntroUrl && (
+        <div className="border border-[#0a0a0a]/[0.08] dark:border-white/[0.06] p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="w-1 h-4 bg-[#e10600] shrink-0" />
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#0a0a0a]/50 dark:text-white/50">
+              Vídeo · {currentSplit?.nombre}
+            </span>
+          </div>
+          <div className="aspect-video w-full bg-black">
+            <iframe
+              className="w-full h-full"
+              src={`https://www.youtube.com/embed/${videoIntroUrl.split("v=")[1]?.split("&")[0]}`}
+              title={`Vídeo de ${currentSplit?.nombre}`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
+
       {/* Controles */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06] pb-6">
         <div className="flex items-center gap-3 flex-wrap">
