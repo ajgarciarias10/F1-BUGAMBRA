@@ -69,6 +69,18 @@ export function ProfileView() {
     return { splitName: activeSplit.nombre, teamName: team?.nombre || "Competición individual" };
   }, [splits, userData]);
 
+  const pilotStatus = useMemo(() => {
+    const pilotId = userData?.piloto_id || (userData?.rol === "piloto" ? userData.uid : "");
+    if (!pilotId) return null;
+    const activeSplit = (splits || []).find((split: any) => split.activo);
+    const lastSeason = [...career].sort((a: any, b: any) => b.order - a.order)[0];
+    return {
+      activeSeasonName: activeSplit?.nombre || "temporada activa",
+      lastSeasonName: lastSeason?.splitName || "Sin temporada registrada",
+      isFormerPilot: !currentParticipation,
+    };
+  }, [career, currentParticipation, splits, userData]);
+
   async function saveTeamLogo(splitId: string, logoUrl: string) {
     if (!escuderiaId) return;
     setSavingLogo(splitId);
@@ -220,8 +232,13 @@ export function ProfileView() {
             <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
                <span className="text-[8px] uppercase tracking-wider text-white/40 font-mono block mb-1">Estado actual</span>
                <span className="text-xs font-bold uppercase text-white tracking-tight truncate max-w-full block">
-                 {userData.rol === "admin" ? "Administrador" : currentParticipation?.teamName || "Espectador"}
-               </span>
+                  {userData.rol === "admin" && !pilotStatus ? "Administrador" : currentParticipation?.teamName || (pilotStatus?.isFormerPilot ? "Ex piloto F1" : "Espectador")}
+                </span>
+                {pilotStatus?.isFormerPilot && (
+                  <span className="block mt-1 text-[9px] text-white/35 font-mono uppercase tracking-wider">
+                    No compite en {pilotStatus.activeSeasonName} · Última: {pilotStatus.lastSeasonName}
+                  </span>
+                )}
             </div>
             <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 flex flex-col justify-center">
               <span className="text-[8px] uppercase tracking-wider text-white/40 font-mono block mb-1">Id de Registro</span>
@@ -281,10 +298,10 @@ export function ProfileView() {
           </div>
 
           {/* Drag & Drop Area */}
-          <div className="space-y-2">
-            <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
-              Foto de Perfil (Avatar)
-            </label>
+            <div className="space-y-2">
+              <label className="text-xs font-mono uppercase tracking-widest text-white/50 block font-bold">
+                Foto de Perfil Personalizada
+              </label>
             
             <div
               onDragEnter={handleDrag}
@@ -310,7 +327,7 @@ export function ProfileView() {
                 Arrastra tu imagen aquí o haz clic para subir
               </p>
               <p className="text-[10px] text-white/40 mt-1 uppercase font-mono tracking-wider">
-                Soporta PNG, JPG y GIF. Se redimensiona automáticamente.
+                Sube la imagen que quieras. Se redimensiona automáticamente y se ve en toda la app.
               </p>
             </div>
           </div>

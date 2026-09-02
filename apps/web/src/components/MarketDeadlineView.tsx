@@ -1,0 +1,274 @@
+import { useEffect, useMemo, useState } from "react";
+import { addDoc, collection, deleteDoc, doc, onSnapshot } from "firebase/firestore";
+import { db } from "../services/firebase";
+import { useAuth } from "../contexts/AuthContext";
+import { useSplits } from "../hooks/useData";
+import { CalendarClock, Megaphone, ShieldAlert, Sparkles, TrendingUp, Trash2 } from "lucide-react";
+
+type MarketPostKind = "rumor" | "rookie";
+
+interface MarketPost {
+  id: string;
+  splitId: string;
+  pilotId: string;
+  pilotName: string;
+  kind: MarketPostKind;
+  headline: string;
+  body: string;
+  candidateTeams: Array<{ id: string; nombre: string }>;
+  rating?: number;
+  points?: number;
+  rookie?: boolean;
+  createdAt: string;
+  createdBy: string;
+  authorName: string;
+}
+
+const SPLIT_ID = "split_3";
+
+function buildCandidateTeams(split: any) {
+  return [...(split?.equipos || [])]
+    .sort((a, b) => {
+      const aScore = Number(a.presupuesto ?? 0) * 2 - Number(a.puntos_constructores ?? 0);
+      const bScore = Number(b.presupuesto ?? 0) * 2 - Number(b.puntos_constructores ?? 0);
+      return bScore - aScore || String(a.nombre || a.id).localeCompare(String(b.nombre || b.id));
+    })
+    .slice(0, 3)
+    .map((team: any) => ({ id: team.id, nombre: team.nombre || team.id }));
+}
+
+function createCopy(pilot: any, split: any, kind: MarketPostKind) {
+  const candidateTeams = buildCandidateTeams(split);
+  const teamNames = candidateTeams.map(team => team.nombre).join(", ") || "el paddock";
+  const rating = Number(pilot.rating_piloto ?? 0);
+  const points = Number(pilot.puntos_piloto ?? 0);
+  const clause = Number(pilot.clausula_actual ?? 0);
+
+  if (kind === "rookie") {
+    return {
+      headline: `Rookie drafteado: ${pilot.nombre} rompe el guion`,
+      body: `${pilot.nombre} llega como rookie y ya mete ruido en el mercado. Con ${rating} OVR, ${points} puntos y una cláusula de ${clause}M, el paddock lo mira como una apuesta de futuro. Los focos apuntan a ${teamNames}.`,
+    };
+  }
+
+  return {
+    headline: `Deadline Watch: ${pilot.nombre} agita el mercado`,
+    body: `${pilot.nombre} aparece en la lista de agentes libres con ${points} puntos, ${rating} OVR y una cláusula de ${clause}M. El rumor ya suena fuerte y los destinos más lógicos pasan por ${teamNames}.`,
+  };
+}
+
+export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean }) {
+  const { user, userData } = useAuth();
+  const { splits } = useSplits();
+  const [posts, setPosts] = useState<MarketPost[]>([]);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+
+  const marketSplit = useMemo(() => {
+    return (splits || []).find((split: any) => split.id === SPLIT_ID)
+      || (splits || []).find((split: any) => split.activo)
+      || null;
+  }, [splits]);
+
+  const freeAgents = useMemo(() => {
+    return (marketSplit?.roster || [])
+      .filter((pilot: any) => pilot.equipoId === "agente_libre")
+      .sort((a: any, b: any) => (Number(b.rating_piloto ?? 0) - Number(a.rating_piloto ?? 0)) || (Number(b.puntos_piloto ?? 0) - Number(a.puntos_piloto ?? 0)));
+  }, [marketSplit]);
+
+  const rookies = useMemo(() => {
+    return (marketSplit?.roster || [])
+      .filter((pilot: any) => pilot.rookie)
+      .sort((a: any, b: any) => (Number(b.rating_piloto ?? 0) - Number(a.rating_piloto ?? 0)) || (Number(b.puntos_piloto ?? 0) - Number(a.puntos_piloto ?? 0)));
+  }, [marketSplit]);
+
+  const seasonSummaries = useMemo(() => {
+    return (splits || []).filter((split: any) => split.completado && split.circuitos?.length).map((split: any) => {
+      const winner = [...(split.roster || [])].sort((a, b) => Number(b.puntos_piloto ?? 0) - Number(a.puntos_piloto ?? 0))[0];
+      const poles = (split.roster || []).map((pilot: any) => ({
+        name: pilot.nombre,
+        value: split.circuitos.reduce((total: number, race: any) => total + (race.resultados || []).filter((result: any) => result.pilotoId === pilot.pilotoId && result.qualyPos === 1).length, 0),
+      })).sort((a, b) => b.value - a.value)[0];
+      const team = [...(split.equipos || [])].sort((a, b) => Number(b.puntos_constructores ?? 0) - Number(a.puntos_constructores ?? 0))[0];
+      return { id: split.id, name: split.nombre, winner: winner?.nombre || "Sin ganador", points: winner?.puntos_piloto ?? 0, team: team?.nombre || "Sin ganador", poles: poles?.name || "Sin datos", poleCount: poles?.value || 0 };
+    });
+  }, [splits]);
+
+  const isAdmin = userData?.rol === "admin";
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "market_posts"), (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as MarketPost[];
+      setPosts(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    });
+    return unsub;
+  }, []);
+
+  const publishPost = async (pilot: any, kind: MarketPostKind) => {
+    if (!user || !userData || !marketSplit) return;
+    setPublishingId(pilot.pilotoId);
+    try {
+      const draft = createCopy(pilot, marketSplit, kind);
+      await addDoc(collection(db, "market_posts"), {
+        splitId: marketSplit.id,
+        pilotId: pilot.pilotoId,
+        pilotName: pilot.nombre,
+        kind,
+        headline: draft.headline,
+        body: draft.body,
+        candidateTeams: buildCandidateTeams(marketSplit),
+        rating: Number(pilot.rating_piloto ?? 0),
+        points: Number(pilot.puntos_piloto ?? 0),
+        rookie: !!pilot.rookie,
+        createdAt: new Date().toISOString(),
+        createdBy: user.uid,
+        authorName: userData.nombre || "Admin",
+      });
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const removePost = async (postId: string) => {
+    if (!isAdmin) return;
+    await deleteDoc(doc(db, "market_posts", postId));
+  };
+
+  if (!marketSplit) {
+    return (
+      <div className="border border-white/10 bg-white/[0.02] p-6 text-center text-white/30 font-mono text-[10px] uppercase tracking-[0.3em]">
+        No hay split de mercado disponible
+      </div>
+    );
+  }
+
+  return (
+    <section className="space-y-6">
+      <div className="border border-white/10 bg-gradient-to-r from-[#e10600]/15 via-white/[0.03] to-white/[0.02] p-5 md:p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="w-1 h-5 bg-[#e10600]" />
+          <p className="text-[9px] font-mono tracking-[0.35em] uppercase text-[#e10600]">Deadline Market</p>
+        </div>
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-black uppercase tracking-[-0.04em]">Rumores, rookies y humo de paddock</h2>
+            <p className="mt-2 text-sm text-white/55 max-w-2xl">
+              Posts para calentar el mercado del {marketSplit.nombre}. Cada agente libre puede tener su propio rumor y cada rookie, su anuncio de llegada.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.25em] text-white/30">
+            <CalendarClock className="w-4 h-4 text-[#e10600]" /> Split 3 activo
+          </div>
+        </div>
+      </div>
+
+      {seasonSummaries.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {seasonSummaries.map(summary => (
+            <article key={summary.id} className="border border-amber-500/20 bg-amber-500/[0.04] p-5">
+              <div className="flex items-center gap-2 text-amber-300 text-[9px] font-mono uppercase tracking-[0.28em]"><TrendingUp className="w-4 h-4" /> Resumen del mundial · {summary.name}</div>
+              <h3 className="mt-3 text-xl font-black uppercase">El mundial ya tiene dueño</h3>
+              <p className="mt-2 text-sm text-white/60 leading-relaxed">{summary.winner} se corona campeón de pilotos con {summary.points} puntos. {summary.team} domina el mundial de equipos. En clasificación, {summary.poles} lideró las poles{summary.poleCount ? ` con ${summary.poleCount}` : ""}.</p>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {!readOnly && isAdmin && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="border border-white/10 bg-white/[0.02] p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Megaphone className="w-4 h-4 text-[#e10600]" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Agentes libres</span>
+            </div>
+            <div className="space-y-2">
+              {freeAgents.length > 0 ? freeAgents.map((pilot: any) => {
+                const draft = createCopy(pilot, marketSplit, "rumor");
+                return (
+                  <div key={pilot.pilotoId} className="border border-white/8 bg-black/20 p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-black uppercase tracking-tight">{pilot.nombre}</p>
+                      <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto ?? 0} OVR · {pilot.puntos_piloto ?? 0} PTS · {pilot.clausula_actual ?? 0}M</p>
+                    </div>
+                    <button
+                      onClick={() => publishPost(pilot, "rumor")}
+                      disabled={publishingId === pilot.pilotoId}
+                      className="px-3 py-2 bg-[#e10600] text-white text-[10px] font-black uppercase tracking-[0.2em] hover:bg-[#ff241c] transition-colors disabled:opacity-40"
+                    >
+                      {publishingId === pilot.pilotoId ? "Publicando..." : "Publicar rumor"}
+                    </button>
+                    <p className="text-[10px] text-white/35 leading-relaxed md:hidden">{draft.headline}</p>
+                  </div>
+                );
+              }) : (
+                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay agentes libres en Split 3.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="border border-white/10 bg-white/[0.02] p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Rookies drafteados</span>
+            </div>
+            <div className="space-y-2">
+              {rookies.length > 0 ? rookies.map((pilot: any) => (
+                <div key={pilot.pilotoId} className="border border-white/8 bg-black/20 p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="font-black uppercase tracking-tight">{pilot.nombre}</p>
+                    <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto ?? 0} OVR · debutante</p>
+                  </div>
+                  <button
+                    onClick={() => publishPost(pilot, "rookie")}
+                    disabled={publishingId === pilot.pilotoId}
+                    className="px-3 py-2 bg-amber-500/15 text-amber-300 border border-amber-500/20 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-amber-500/25 transition-colors disabled:opacity-40"
+                  >
+                    {publishingId === pilot.pilotoId ? "Publicando..." : "Publicar rookie"}
+                  </button>
+                </div>
+              )) : (
+                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay rookies detectados en Split 3.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-3">
+        {posts.length > 0 ? posts.map(post => (
+          <article key={post.id} className="border border-white/10 bg-white/[0.02] p-5">
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[9px] font-mono uppercase tracking-[0.25em] px-2 py-1 border ${post.kind === "rookie" ? "border-amber-500/25 text-amber-300 bg-amber-500/10" : "border-[#e10600]/25 text-[#e10600] bg-[#e10600]/10"}`}>
+                    {post.kind === "rookie" ? "Rookie draft" : "Rumor de mercado"}
+                  </span>
+                  <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-white/25">{post.authorName}</span>
+                </div>
+                <h3 className="mt-3 text-xl font-black uppercase tracking-[-0.03em]">{post.headline}</h3>
+                <p className="mt-2 text-sm text-white/60 leading-relaxed">{post.body}</p>
+              </div>
+              {isAdmin && !readOnly && (
+                <button onClick={() => removePost(post.id)} className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/35 hover:text-red-300 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Borrar
+                </button>
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-[0.22em] text-white/35">
+              <span className="px-2 py-1 border border-white/10">{post.pilotName}</span>
+              <span className="px-2 py-1 border border-white/10">{post.points ?? 0} pts</span>
+              <span className="px-2 py-1 border border-white/10">{post.rating ?? 0} ovr</span>
+              {post.candidateTeams.slice(0, 3).map(team => (
+                <span key={team.id} className="px-2 py-1 border border-white/10 text-white/50">{team.nombre}</span>
+              ))}
+            </div>
+          </article>
+        )) : (
+          <div className="border border-dashed border-white/10 bg-black/20 p-8 text-center">
+            <ShieldAlert className="w-8 h-8 mx-auto text-white/20" />
+            <p className="mt-3 text-[10px] font-mono uppercase tracking-[0.3em] text-white/25">Todavía no hay posts del deadline</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}

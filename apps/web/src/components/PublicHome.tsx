@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { Sun, Moon, Play, Radio, ChevronRight } from "lucide-react";
+import { Sun, Moon, Play, Radio, Crown } from "lucide-react";
 import { TotalStandings } from "./SharedDashboard";
 import { FomLive } from "./FomLive";
 import { MobileBottomTabs } from "./MobileBottomTabs";
@@ -30,6 +30,23 @@ export function PublicHome() {
   const [activeTab, setActiveTab] = useState<Tab>("clasificacion");
   const [activeSplitId, setActiveSplitId] = useState<string>("");
   const { dark, toggle } = useTheme();
+  const [isLive, setIsLive] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const checkLive = async () => {
+      try {
+        const response = await fetch("https://decapi.me/twitch/uptime/tonicotitular");
+        const text = (await response.text()).trim().toLowerCase();
+        if (mounted) setIsLive(text !== "offline" && !text.includes("error"));
+      } catch {
+        if (mounted) setIsLive(false);
+      }
+    };
+    checkLive();
+    const interval = window.setInterval(checkLive, 60000);
+    return () => { mounted = false; window.clearInterval(interval); };
+  }, []);
 
   const validSplits = useMemo(() => {
     const all = (splits || []).filter(s => s.id !== "global");
@@ -49,6 +66,7 @@ export function PublicHome() {
     ? "general"
     : selectedRealSplitId;
   const currentSplit = validSplits.find(split => split.id === selectedRealSplitId);
+  const isHistoricalSplit = !!currentSplit?.completado && !currentSplit?.activo;
 
   const nextRace = useMemo(() => {
     return [...(currentSplit?.circuitos || [])]
@@ -93,15 +111,15 @@ export function PublicHome() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "clasificacion", label: "Clasificación" },
     { id: "equipos", label: "Equipos" },
-    { id: "tv", label: "FOM" },
+    { id: "tv", label: "TV" },
   ];
 
   return (
-    <div className={`${dark ? "dark broadcast-shell" : ""} min-h-screen bg-[#ededed] text-[#0a0a0a] dark:text-white font-sans overflow-x-hidden relative`}>
+    <div className={`${dark ? "dark broadcast-shell" : ""} min-h-screen bg-[#d6d6d6] text-[#101010] dark:text-white font-sans overflow-x-hidden relative`}>
       {dark && <div className="broadcast-grid absolute inset-x-0 top-0 h-[44rem] pointer-events-none" />}
 
       {/* ── NAV ── */}
-      <header className="fixed top-0 inset-x-0 z-50 min-h-16 md:min-h-16 border-b border-black/10 dark:border-white/10 bg-[#ededed]/95 dark:bg-[#09090b]/95 backdrop-blur-xl flex items-center justify-between px-4 md:px-10 gap-4 safe-top">
+      <header className="fixed top-0 inset-x-0 z-50 min-h-16 md:min-h-16 border-b border-black/10 dark:border-white/10 bg-[#d6d6d6]/95 dark:bg-[#09090b]/95 backdrop-blur-xl flex items-center justify-between px-4 md:px-10 gap-4 safe-top">
         <div className="flex items-center gap-3 shrink-0">
           <span className="grid place-items-center w-9 h-9 bg-[#e10600] text-white font-black italic text-sm">F1</span>
           <span className="font-black tracking-[-0.03em] uppercase text-base">Bugambra</span>
@@ -112,10 +130,10 @@ export function PublicHome() {
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`relative py-5 text-[11px] font-black tracking-[0.12em] uppercase transition-colors ${
+                className={`relative py-5 text-[11px] font-black tracking-[0.12em] uppercase transition-colors ${
                 activeTab === t.id
                   ? "text-[#0a0a0a] dark:text-white after:absolute after:bottom-0 after:inset-x-0 after:h-1 after:bg-[#e10600]"
-                  : "text-[#0a0a0a]/35 dark:text-white/35 hover:text-[#0a0a0a]/70 dark:hover:text-white/70"
+                  : "text-[#111827]/50 dark:text-white/35 hover:text-[#111827]/80 dark:hover:text-white/70"
               }`}
             >
               {t.label}
@@ -146,7 +164,7 @@ export function PublicHome() {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_30%,rgba(225,6,0,0.38),transparent_28%),linear-gradient(115deg,#111114_25%,rgba(17,17,20,0.72)_58%,#2a0909)]" />
           <div className="absolute right-[-7%] top-[4%] text-[16rem] md:text-[25rem] font-black italic leading-none text-white/[0.035] select-none">F1</div>
           <div className="absolute top-5 left-5 md:top-8 md:left-8 flex items-center gap-2 bg-[#e10600] px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em]">
-            <Radio className="w-3.5 h-3.5" /> Temporada en curso
+            <Radio className="w-3.5 h-3.5" /> {isHistoricalSplit ? "Archivo histórico" : "Temporada en curso"}
           </div>
 
           <div className="relative z-10 w-full p-5 sm:p-8 md:p-12 grid md:grid-cols-[1fr_auto] items-end gap-8">
@@ -155,24 +173,25 @@ export function PublicHome() {
                 En portada · {currentSplit?.nombre || "F1 Bugambra"}
               </p>
               <h1 className="text-[3rem] sm:text-6xl md:text-[5.5rem] font-black uppercase leading-[0.84] tracking-[-0.065em]">
-                La competición<br /><span className="text-[#e10600]">empieza aquí</span>
+                {isHistoricalSplit ? <>El legado<br /><span className="text-[#e10600]">ya está escrito</span></> : <>La competición<br /><span className="text-[#e10600]">empieza aquí</span></>}
               </h1>
               <p className="mt-6 max-w-xl text-sm md:text-base text-white/60 leading-relaxed">
-                Clasificación, equipos y señal oficial de la liga en una experiencia creada para seguir cada carrera.
+                {isHistoricalSplit
+                  ? "Resultados, campeones y estadísticas del archivo histórico de la liga."
+                  : "Clasificación, equipos y señal oficial de la liga en una experiencia creada para seguir cada carrera."}
               </p>
               <div className="flex flex-wrap gap-3 mt-7">
-                <button onClick={() => setActiveTab("tv")} className="min-h-12 bg-white text-black hover:bg-[#e10600] hover:text-white px-5 flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.12em] transition-colors">
-                  <Play className="w-4 h-4 fill-current" /> Ver FOM
-                </button>
-                <button onClick={() => setActiveTab("clasificacion")} className="min-h-12 bg-white/10 hover:bg-white/20 border border-white/15 px-5 flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.12em] transition-colors">
-                  Clasificación <ChevronRight className="w-4 h-4" />
-                </button>
+                {isLive && (
+                  <button onClick={() => setActiveTab("tv")} className="min-h-12 bg-[#e10600] text-white hover:bg-[#ff241c] px-5 flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.12em] transition-colors">
+                    <Radio className="w-4 h-4 fill-current" /> Ver en vivo
+                  </button>
+                )}
               </div>
             </div>
 
             <div className="w-full md:w-72 border-t-2 border-[#e10600] bg-black/45 backdrop-blur-sm p-5">
-              <p className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase">Próximo evento</p>
-              <p className="mt-3 text-xl font-black uppercase tracking-tight">{nextRace?.nombre || "Por anunciar"}</p>
+              <p className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
+              <p className="mt-3 text-xl font-black uppercase tracking-tight">{nextRace?.nombre || (isHistoricalSplit ? "Temporada cerrada" : "Por anunciar")}</p>
               <div className="flex justify-between items-end mt-5 pt-4 border-t border-white/10">
                 <span className="text-[10px] uppercase text-white/45">{currentSplit?.nombre || `${validSplits.length} temporadas`}</span>
                 <span className="text-3xl font-black italic text-white/15">{String(nextRace?.numero_carrera ?? "--").padStart(2, "0")}</span>
@@ -365,7 +384,8 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
             {pilotStandings.map((p: any, i: number) => {
               const team = eqMap[p.equipoId];
               const photo = getPilotPhoto(p.pilotoId);
-              const isFirst = i === 0;
+                      const isFirst = i === 0;
+                      const podiumClass = i === 0 ? "text-[#a87900] dark:text-yellow-300" : i === 1 ? "text-[#667085] dark:text-slate-300" : i === 2 ? "text-[#9a4d19] dark:text-orange-300" : "text-[#0a0a0a]/20 dark:text-white/20";
               const gap = leaderPts > 0 && !isFirst ? leaderPts - (p.puntos_piloto || 0) : 0;
 
               return (
@@ -378,9 +398,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                   {isFirst && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-[#e10600]" />}
 
                   <div className="flex items-center">
-                    <span className={`text-base font-black font-mono tabular-nums leading-none ${
-                      isFirst ? "text-[#e10600]" : i < 3 ? "text-[#0a0a0a]/60 dark:text-white/60" : "text-[#0a0a0a]/20 dark:text-white/20"
-                    }`}>
+                    <span className={`text-base font-black font-mono tabular-nums leading-none ${podiumClass}`}>
                       {String(i + 1).padStart(2, "0")}
                     </span>
                   </div>
@@ -400,7 +418,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                     )}
                     <div className="min-w-0">
                       <p className={`font-black text-sm tracking-tight truncate leading-tight ${
-                        isFirst ? "text-[#0a0a0a] dark:text-white" : "text-[#0a0a0a]/80 dark:text-white/80"
+                        i === 0 ? "text-[#a87900] dark:text-yellow-300" : i === 1 ? "text-[#667085] dark:text-slate-300" : i === 2 ? "text-[#9a4d19] dark:text-orange-300" : "text-[#0a0a0a]/80 dark:text-white/80"
                       }`}>
                         {p.nombre}
                       </p>
@@ -422,7 +440,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
 
                   <div className="text-right">
                     <span className={`text-lg font-black tabular-nums leading-none ${
-                      isFirst ? "text-[#0a0a0a] dark:text-white" : "text-[#0a0a0a]/70 dark:text-white/70"
+                      i === 0 ? "text-[#a87900] dark:text-yellow-300" : i === 1 ? "text-[#667085] dark:text-slate-300" : i === 2 ? "text-[#9a4d19] dark:text-orange-300" : "text-[#0a0a0a]/70 dark:text-white/70"
                     }`}>
                       {p.puntos_piloto || 0}
                     </span>
@@ -470,7 +488,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                     isFirst ? "bg-[#0a0a0a]/[0.03] dark:bg-white/[0.03]" : ""
                   }`}
                 >
-                  {isFirst && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-[#e10600]" />}
+                  {isFirst && <Crown className="absolute right-3 top-3 w-4 h-4 text-yellow-400" />}
 
                   <span className={`text-base font-black font-mono tabular-nums ${
                     isFirst ? "text-[#e10600]" : i < 3 ? "text-[#0a0a0a]/60 dark:text-white/60" : "text-[#0a0a0a]/20 dark:text-white/20"

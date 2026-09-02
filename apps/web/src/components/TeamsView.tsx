@@ -8,6 +8,7 @@ interface TeamsViewProps {
   onSelectSplit: (splitId: string) => void;
   currentSplit: any;
   getPilotPhoto: (pilotId: string) => string;
+  darkMode?: boolean;
 }
 
 function ratingAccent(rating: number): string {
@@ -17,7 +18,7 @@ function ratingAccent(rating: number): string {
   return "border-slate-600 bg-slate-800 text-slate-200";
 }
 
-export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto }: TeamsViewProps) {
+export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto, darkMode = false }: TeamsViewProps) {
   const [selectedTeamId, setSelectedTeamId] = useState("");
 
   useEffect(() => {
@@ -44,10 +45,10 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
 
   return (
     <div className="space-y-7">
-      <div className="flex flex-col gap-4 border-b border-black/10 dark:border-white/[0.08] pb-5">
+      <div className={`flex flex-col gap-4 border-b border-black/10 dark:border-white/[0.08] pb-5 ${darkMode ? "border-white/[0.08]" : ""}`}>
         <div>
-          <p className="text-[9px] font-mono uppercase tracking-[0.35em] text-black/35 dark:text-white/35">Archivo de competición</p>
-          <h2 className="mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] text-black dark:text-white">Equipos por temporada</h2>
+          <p className={`text-[9px] font-mono uppercase tracking-[0.35em] ${darkMode ? "text-white/50" : "text-black/35 dark:text-white/35"}`}>Archivo de competición</p>
+          <h2 className={`mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] ${darkMode ? "text-white" : "text-black dark:text-white"}`}>Equipos por temporada</h2>
         </div>
         <div className="flex overflow-x-auto hide-scrollbar border border-black/10 dark:border-white/10 self-start max-w-full">
           {validSplits.map(split => (
@@ -57,7 +58,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
               className={`shrink-0 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] transition-colors ${
                 currentSplitId === split.id
                   ? "bg-[#e10600] text-white"
-                  : "bg-black/[0.03] dark:bg-white/[0.03] text-black/45 dark:text-white/45 hover:text-black dark:hover:text-white"
+                   : darkMode ? "bg-white/[0.06] text-white/75 hover:bg-white/[0.12] hover:text-white" : "bg-black/[0.03] dark:bg-white/[0.03] text-black/65 dark:text-white/70 hover:text-black dark:hover:text-white"
               }`}
             >
               {split.nombre}
@@ -159,7 +160,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                   className={`group relative min-h-40 overflow-hidden border p-5 text-left transition-all ${
                     selected
                       ? "border-[#e10600] bg-[#15161b] text-white shadow-[0_18px_50px_rgba(225,6,0,0.16)]"
-                      : "border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] text-black dark:text-white hover:-translate-y-0.5 hover:border-[#e10600]/50"
+                       : darkMode ? "border-white/10 bg-[#111217] text-white hover:-translate-y-0.5 hover:border-[#e10600]/50" : "border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] text-black dark:text-white hover:-translate-y-0.5 hover:border-[#e10600]/50"
                   }`}
                 >
                   <div className="absolute inset-x-0 top-0 h-1 bg-[#e10600] scale-x-0 origin-left transition-transform group-hover:scale-x-100" />

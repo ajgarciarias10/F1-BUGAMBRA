@@ -4,7 +4,7 @@ import { db } from "../services/firebase";
 import { compressAndConvertImage } from "../utils/imageHelper";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { ShieldAlert, Award, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay } from "lucide-react";
+import { ShieldAlert, Award, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay, Crown } from "lucide-react";
 import { isSplitUnlocked } from "../utils/splitResolver";
 import { POINTS_BY_POSITION } from "../services/economyService";
 import { PilotRivalryPanel } from "./RivalryPanels";
@@ -15,7 +15,7 @@ import { FomLive } from "./FomLive";
 export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBudget: boolean, escuderiaId?: string }) {
   const { userData } = useAuth();
   const { usuarios } = useUsuarios();
-  const { splits: rawSplits } = useSplits();
+  const { splits: rawSplits, loading: loadingSplits } = useSplits();
   const splits = rawSplits;
   const [activeSplitId, setActiveSplitId] = useState<string>("global");
   const [selectedPilotForProfileId, setSelectedPilotForProfileId] = useState<string | null>(null);
@@ -376,6 +376,24 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     return getPilotStats(comparePilotIdB, activeSplitId === "global");
   }, [comparePilotIdB, splits, usuarios, activeSplitId]);
 
+  if (loadingSplits && splits.length === 0) {
+    return (
+      <div className="space-y-6" aria-label="Cargando campeonato">
+        <div className="flex flex-wrap gap-2 border border-white/5 p-2">
+          {[1, 2, 3, 4].map(item => <div key={item} className="h-9 w-24 bg-white/[0.06] animate-pulse" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {[1, 2].map(item => (
+            <div key={item} className="border border-white/10 bg-white/[0.03] p-5 space-y-4">
+              <div className="h-5 w-48 bg-white/[0.08] animate-pulse" />
+              {[1, 2, 3, 4, 5].map(row => <div key={row} className="h-12 bg-white/[0.05] animate-pulse" />)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-32">
       <div className="flex flex-wrap items-center justify-between gap-y-3 w-full p-1.5 rounded-sm border border-white/5">
@@ -613,7 +631,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                       onClick={() => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); }}
                       className="border-b border-white/5 last:border-0 hover:bg-[#e10600]/10 transition-all cursor-pointer group" title="Haz clic para ver la ficha estadística del piloto"
                     >
-                      <td className="py-3 pl-2 font-black italic text-white/30 text-lg w-8">{i + 1}</td>
+                      <td className={`py-3 pl-2 font-black italic text-lg w-8 ${i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white/30"}`}>{i + 1}</td>
                       <td className="py-3 font-bold">
                         <div className="flex items-center gap-3">
                           {pilotPhoto ? (
@@ -624,7 +642,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                             </div>
                           )}
                           <div className="flex flex-col">
-                            <span>{p.name}</span>
+                            <span className={i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white"}>{p.name}</span>
                             <span className="text-[10px] text-white/20 font-mono uppercase">{p.escuderia}</span>
                           </div>
                         </div>
@@ -632,7 +650,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                       <td className="py-3 text-right pr-2 font-bold tabular-nums">
                         {activeSplitId === "global"
                           ? <span className="text-amber-400 text-base font-black">{p.points} 🏆</span>
-                          : p.points}
+                           : <span className={i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white"}>{p.points}</span>}
                       </td>
                   </tr>
                 );
@@ -670,7 +688,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                             {t.nombre ? t.nombre.substring(0, 2).toUpperCase() : '??'}
                           </div>
                         )}
-                        <span className="uppercase tracking-tighter">{t.nombre}</span>
+                         <span className="uppercase tracking-tighter">{t.nombre}</span>
+                         {i === 0 && <Crown className="w-4 h-4 text-yellow-400 shrink-0" />}
                       </td>
                       <td className="py-3 text-right pr-2 font-bold tabular-nums">
                         {activeSplitId === "global"

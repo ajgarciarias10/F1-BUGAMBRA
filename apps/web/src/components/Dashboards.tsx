@@ -5,6 +5,8 @@ import { SharedDashboardView, TotalStandings } from "./SharedDashboard";
 import { ProfileView } from "./ProfileView";
 import { auth } from "../services/firebase";
 import { SuggestionsView } from "./SuggestionsView";
+import { MarketDeadlineView } from "./MarketDeadlineView";
+import { PaddockForum } from "./PaddockForum";
 import { TeamsView } from "./TeamsView";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MobileBottomTabs } from "./MobileBottomTabs";
@@ -177,6 +179,8 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
       <AdminOverlay isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
       <main className="pt-24 md:pt-[7.5rem] max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10 pb-28 md:pb-10">
         {activeTab === "championship" && <SharedDashboardView canViewBudget={canViewBudget} escuderiaId={userData?.escuderia_id} />}
+        {activeTab === "market" && <MarketDeadlineView />}
+        {activeTab === "paddock" && <PaddockForum />}
         {activeTab === "equipos" && (
           <TeamsView
             key={resolvedTeamsSplitId}
@@ -185,6 +189,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
             onSelectSplit={(id: string) => setTeamsSplitId(id)}
             currentSplit={teamsSplit}
             getPilotPhoto={getPilotPhoto}
+            darkMode
           />
         )}
         {activeTab === "profile" && <ProfileView />}
@@ -200,6 +205,8 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
 export function JequeDashboard() {
   const tabs = [
     { id: "championship", label: "Campeonato" },
+    { id: "market", label: "Mercado" },
+    { id: "paddock", label: "Paddock" },
     { id: "equipos",      label: "Equipos" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
@@ -219,6 +226,8 @@ export function JequeDashboard() {
 export function PilotoDashboard() {
   const tabs = [
     { id: "championship", label: "Campeonato" },
+    { id: "market", label: "Mercado" },
+    { id: "paddock", label: "Paddock" },
     { id: "equipos",      label: "Equipos" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
@@ -236,6 +245,8 @@ export function PilotoDashboard() {
 export function UsuarioDashboard() {
   const tabs = [
     { id: "championship", label: "Campeonato" },
+    { id: "market", label: "Mercado" },
+    { id: "paddock", label: "Paddock" },
     { id: "equipos",      label: "Equipos" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },

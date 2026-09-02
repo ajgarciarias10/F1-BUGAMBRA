@@ -14,6 +14,7 @@ import { EconomyAdminPanel } from "./EconomyAdminPanel";
 import { StorageImageUpload } from "./StorageImageUpload";
 import { DatabaseExplorer } from "./DatabaseExplorer";
 import { AdminControlPanel } from "./AdminControlPanel";
+import { useAuth } from "../contexts/AuthContext";
 
 type AdminTab = "championship" | "control" | "suggestions" | "economy" | "db";
 
@@ -74,6 +75,7 @@ const canPilotParticipateInRace = (pilot: any, raceSequence: number) => {
   };
 
 export function AdminDashboard() {
+  const { userData } = useAuth();
   const { usuarios } = useUsuarios();
   const { splits: rawSplits, loading: loadingSplits } = useSplits();
   const splits = rawSplits;
@@ -104,6 +106,7 @@ export function AdminDashboard() {
   const [pilotTeamToAssign, setPilotTeamToAssign] = useState("");
   const [assigningPilot, setAssigningPilot] = useState(false);
   const [endingPilotId, setEndingPilotId] = useState<string | null>(null);
+  const [repairingToni, setRepairingToni] = useState(false);
 
   // ─── MIGRACIONES AUTOMÁTICAS AL MONTAR ───────────────────────────────────────
   // Se ejecutan UNA SOLA VEZ. Cada función tiene su propia guardia interna
@@ -154,7 +157,6 @@ export function AdminDashboard() {
   const assignableUsers = useMemo(() => {
     const rosterIds = new Set((currentRawSplit?.roster || []).map((pilot: any) => pilot.pilotoId));
     return (usuarios || [])
-      .filter((user: any) => user.rol !== "admin" && user.email?.toLowerCase() !== "ajgarciarias@gmail.com")
       .filter((user: any) => !rosterIds.has(user.piloto_id || user.uid))
       .sort((a: any, b: any) => (a.nombre || a.email || "").localeCompare(b.nombre || b.email || ""));
   }, [usuarios, currentRawSplit]);
@@ -302,7 +304,8 @@ export function AdminDashboard() {
         equipoId: teamId,
         rating_piloto: assignmentPreview.rating,
         rating_base: assignmentPreview.rating,
-        rookie: assignmentPreview.rookie,
+         // A pilot with any previous split entry inherits that rating and is never a rookie.
+         rookie: assignmentPreview.rookie && !previousEntry,
         participa_desde: startsAt,
         participa_hasta: null,
         puntos_piloto: 0,
@@ -351,36 +354,43 @@ export function AdminDashboard() {
     setEndingPilotId(pilot.pilotoId);
     setMsg("");
     try {
-      const lastParticipation = getLastCompletedRaceNumber(currentRawSplit);
-      const rosterRef = getRosterDocRef(currentRawSplit.id, pilot.equipoId, pilot.pilotoId);
-      const freeAgentRef = getFreeAgentDocRef(currentRawSplit.id, pilot.pilotoId);
+      let rosterRef = getRosterDocRef(currentRawSplit.id, pilot.equipoId, pilot.pilotoId);
       const matchedUser = usuarios.find((user: any) => user.piloto_id === pilot.pilotoId || user.uid === pilot.pilotoId);
 
-      const sourceSnap = await getDoc(rosterRef);
+      let sourceSnap = await getDoc(rosterRef);
+      // El roster enriquecido puede conservar el equipo antiguo mientras se
+      // propaga una transferencia. Buscar el documento real evita bloquear
+      // el cierre del contrato por una ruta desactualizada.
+      if (!sourceSnap.exists()) {
+        for (const team of currentRawSplit.equipos || []) {
+          const candidateRef = doc(db, `splits/${currentRawSplit.id}/equipos/${team.id}/pilotos`, pilot.pilotoId);
+          const candidateSnap = await getDoc(candidateRef);
+          if (candidateSnap.exists()) {
+            rosterRef = candidateRef;
+            sourceSnap = candidateSnap;
+            break;
+          }
+        }
+      }
+      if (!sourceSnap.exists()) {
+        const flatRef = getFreeAgentDocRef(currentRawSplit.id, pilot.pilotoId);
+        const flatSnap = await getDoc(flatRef);
+        if (flatSnap.exists()) {
+          rosterRef = flatRef;
+          sourceSnap = flatSnap;
+        }
+      }
       if (!sourceSnap.exists()) throw new Error("No se encontró el piloto en el roster actual.");
 
-      const sourceData = sourceSnap.data();
       const batch = writeBatch(db);
-      batch.set(freeAgentRef, {
-        ...sourceData,
-        pilotoId: pilot.pilotoId,
-        nombre: pilot.nombre,
-        equipoId: "agente_libre",
-        participa_hasta: lastParticipation,
-        congelado: false,
-        congelado_en: null,
-        pending_equipoId: null,
-        pending_precio_compra: null,
-        pending_tipo_fichaje: null,
-      }, { merge: true });
-      if (rosterRef.path !== freeAgentRef.path) {
-        batch.delete(rosterRef);
-      }
-      if (matchedUser && matchedUser.rol !== "admin" && matchedUser.rol !== "jeque") {
-        batch.set(doc(db, "usuarios", matchedUser.uid), {
-          rol: "usuario",
-          escuderia_id: "",
-        }, { merge: true });
+      // Finalizar saca al piloto completamente del roster de esta temporada.
+      // No es una transferencia de mercado: vuelve a ser un usuario normal.
+      batch.delete(rosterRef);
+       if (matchedUser && matchedUser.rol !== "jeque") {
+         batch.set(doc(db, "usuarios", matchedUser.uid), {
+           rol: "usuario",
+           escuderia_id: "",
+         }, { merge: true });
       }
       batch.set(doc(collection(db, `splits/${currentRawSplit.id}/transfers`)), {
         detalles: `Admin finalizó la participación de ${pilot.nombre} en ${currentRawSplit.nombre}`,
@@ -388,10 +398,10 @@ export function AdminDashboard() {
         tipo: "admin",
         pilotoId: pilot.pilotoId,
         equipoOrigenId: pilot.equipoId,
-        equipoDestinoId: "agente_libre",
+         equipoDestinoId: null,
       });
       await batch.commit();
-      setMsg(`Participación de ${pilot.nombre} finalizada sin alterar su historial.`);
+       setMsg(`${pilot.nombre} eliminado del equipo y devuelto a usuario.`);
       setTimeout(() => setMsg(""), 4500);
     } catch (err: any) {
       setMsg("Error al finalizar participación: " + err.message);
@@ -643,6 +653,76 @@ export function AdminDashboard() {
     }
   };
 
+  const repairToniPilotData = async () => {
+      const toniUid = "3Cze15XIGyVdKhNrxVbhoHBSHOb2";
+    setRepairingToni(true);
+    setMsg("");
+    try {
+      const userRef = doc(db, "usuarios", toniUid);
+      const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) throw new Error("No se encontró la cuenta de Toni.");
+      const pilotId = userSnap.data().piloto_id || toniUid;
+
+      const splitId = "split_3";
+      const split = splits.find(item => item.id === splitId);
+      const lastParticipation = getLastCompletedRaceNumber(split);
+      const batch = writeBatch(db);
+      let sourceRef: any = null;
+      let pilotData: any = null;
+
+      // El nombre canónico de la cuenta es Toni; reparar todas las temporadas
+      // evita que el nombre heredado "Piloto" siga apareciendo en clasificaciones.
+      const name = "Toni";
+      for (const season of splits) {
+        for (const team of season.equipos || []) {
+          const historicalRef = doc(db, `splits/${season.id}/equipos/${team.id}/pilotos`, pilotId);
+          const historicalSnap = await getDoc(historicalRef);
+          if (historicalSnap.exists()) batch.set(historicalRef, { nombre: name, pilotoId: pilotId }, { merge: true });
+        }
+        const historicalFlatRef = doc(db, `splits/${season.id}/roster`, pilotId);
+        const historicalFlatSnap = await getDoc(historicalFlatRef);
+        if (historicalFlatSnap.exists()) batch.set(historicalFlatRef, { nombre: name, pilotoId: pilotId }, { merge: true });
+      }
+
+      for (const team of split?.equipos || []) {
+        const candidateRef = doc(db, `splits/${splitId}/equipos/${team.id}/pilotos`, pilotId);
+        const candidateSnap = await getDoc(candidateRef);
+        if (candidateSnap.exists()) {
+          sourceRef = candidateRef;
+          pilotData = candidateSnap.data();
+          break;
+        }
+      }
+
+      const flatRef = doc(db, `splits/${splitId}/roster`, pilotId);
+      const flatSnap = await getDoc(flatRef);
+      if (!pilotData && flatSnap.exists()) pilotData = flatSnap.data();
+      if (!pilotData) throw new Error("Toni no está inscrito como piloto en Split 3.");
+
+      batch.set(flatRef, {
+        ...pilotData,
+        pilotoId: pilotId,
+        nombre: name,
+        equipoId: "agente_libre",
+        participa_hasta: lastParticipation,
+        congelado: false,
+        congelado_en: null,
+        pending_equipoId: null,
+        pending_precio_compra: null,
+        pending_tipo_fichaje: null,
+      }, { merge: true });
+      if (sourceRef) batch.delete(sourceRef);
+      batch.set(userRef, { nombre: name, piloto_id: pilotId, rol: "usuario", escuderia_id: "" }, { merge: true });
+      batch.set(doc(db, "pilotos", pilotId), { nombre: name }, { merge: true });
+      await batch.commit();
+      setMsg("Datos de Toni reparados: usuario, piloto y agente libre en Split 3.");
+    } catch (err: any) {
+      setMsg("Error reparando datos de Toni: " + err.message);
+    } finally {
+      setRepairingToni(false);
+    }
+  };
+
   const handleMovePilotOriginal = async (pilotId: string, pilotName: string, fromTeamId: string, toTeamId: string, pilotData?: any) => {
     if (!selectedSplitId || fromTeamId === toTeamId) return;
     try {
@@ -681,9 +761,9 @@ export function AdminDashboard() {
         if (sourceRef.path !== destinationRef.path) {
           batch.delete(sourceRef);
         }
-        if (matchedUser && matchedUser.rol !== "admin" && matchedUser.rol !== "jeque") {
-          batch.set(doc(db, "usuarios", matchedUser.uid), {
-            rol: "usuario",
+         if (matchedUser && matchedUser.rol !== "jeque") {
+           batch.set(doc(db, "usuarios", matchedUser.uid), {
+             rol: "usuario",
             escuderia_id: "",
           }, { merge: true });
         }
@@ -988,7 +1068,26 @@ export function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-slate-100 px-3 md:px-4 pt-3 md:pt-4 pb-10">
       <div className="max-w-7xl mx-auto">
-        <UserHeader title="Panel de Administración" />
+         <div className="flex items-center justify-between gap-3">
+           <UserHeader title="Panel de Administración" />
+           {userData?.piloto_id && (
+             <button
+               onClick={() => { window.location.href = "/piloto"; }}
+               className="shrink-0 px-3 py-2 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 text-[10px] font-black uppercase tracking-wider"
+             >
+               Ir a mi panel de piloto
+             </button>
+           )}
+           {userData?.email?.toLowerCase() === "ajgarciarias@gmail.com" && (
+             <button
+               onClick={repairToniPilotData}
+               disabled={repairingToni}
+               className="shrink-0 px-3 py-2 border border-red-500/30 text-red-300 hover:bg-red-500/10 text-[10px] font-black uppercase tracking-wider disabled:opacity-40"
+             >
+               {repairingToni ? "Reparando..." : "Reparar mis datos"}
+             </button>
+           )}
+         </div>
 
         {/* Navigation Tabs */}
         <div className="sticky top-2 z-40 flex overflow-x-auto border border-white/10 bg-zinc-950/85 backdrop-blur-xl rounded-3xl mb-4 gap-1 p-1 shadow-2xl shadow-black/30">
@@ -1729,7 +1828,9 @@ export function AdminDashboard() {
                   .slice()
                   .sort((a: any, b: any) => (a.equipoId || "").localeCompare(b.equipoId || "") || (a.nombre || "").localeCompare(b.nombre || ""))
                   .map((p: any) => {
-                    const teamNombre = (currentRawSplit?.equipos || []).find((e: any) => e.id === p.equipoId)?.nombre || p.equipoId || "Agente Libre";
+                        const teamNombre = p.equipoId === "agente_libre"
+                          ? "Agente Libre"
+                          : (currentRawSplit?.equipos || []).find((e: any) => e.id === p.equipoId)?.nombre || p.equipoId || "Agente Libre";
                     return (
                       <tr key={p.pilotoId} className="hover:bg-white/[0.02] transition-colors">
                         <td className="py-2 px-3 font-bold text-white/90">{p.nombre}</td>
@@ -1761,7 +1862,7 @@ export function AdminDashboard() {
                           )}
                         </td>
                         <td className="py-2 px-3 text-right">
-                          {p.participa_hasta != null ? (
+                           {p.participa_hasta != null && p.equipoId !== "agente_libre" ? (
                             <span className="text-[9px] font-mono uppercase tracking-wider text-white/25">Hasta C{p.participa_hasta}</span>
                           ) : (
                             <button

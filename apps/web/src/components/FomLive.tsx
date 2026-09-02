@@ -22,7 +22,7 @@ export function FomLive({ compact = false }: { compact?: boolean }) {
               <MonitorPlay className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#e10600]">F1 Bugambra FOM</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#e10600]">F1 Bugambra TV</p>
               <h2 className="text-3xl md:text-5xl font-black tracking-[-0.055em] uppercase text-white leading-none mt-1">
                 Directo oficial
               </h2>
@@ -54,7 +54,7 @@ export function FomLive({ compact = false }: { compact?: boolean }) {
 
         <div className="relative z-10 flex flex-wrap gap-2 p-3 md:px-8 md:py-5">
           <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}`} icon={<Radio className="w-3.5 h-3.5" />} label="Abrir directo" />
-          <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/videos`} icon={<Video className="w-3.5 h-3.5" />} label="Vídeos FOM" />
+          <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/videos`} icon={<Video className="w-3.5 h-3.5" />} label="Vídeos TV" />
           <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/clips`} icon={<MonitorPlay className="w-3.5 h-3.5" />} label="Clips" />
         </div>
       </section>

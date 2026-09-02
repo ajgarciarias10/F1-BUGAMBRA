@@ -4,12 +4,14 @@ import { useSplits, useUsuarios } from "../hooks/useData";
 import { Users, ChevronLeft, Award } from "lucide-react";
 import { TotalStandings } from "./SharedDashboard";
 import { FomLive } from "./FomLive";
+import { MarketDeadlineView } from "./MarketDeadlineView";
+import { PaddockForum } from "./PaddockForum";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 
 export function GuestDashboard() {
   const { splits, loading } = useSplits();
   const { usuarios } = useUsuarios();
-  const [activeTab, setActiveTab] = useState<"tv" | "album" | "acumulado">("tv");
+  const [activeTab, setActiveTab] = useState<"tv" | "market" | "paddock" | "album" | "acumulado">("tv");
 
   const getPilotPhoto = (pilotId: string) => {
     const u = (usuarios || []).find((u: any) => u.uid === pilotId || u.piloto_id === pilotId);
@@ -58,7 +60,9 @@ export function GuestDashboard() {
         {/* Navigation Tabs */}
         <div className="hidden md:flex flex-wrap border-b border-white/10 mb-8 gap-2">
           {([
-            { id: "tv",        label: "FOM" },
+            { id: "tv",        label: "TV" },
+            { id: "market",    label: "Deadline" },
+            { id: "paddock",   label: "Paddock" },
             { id: "album",     label: "🎴 Álbum de Cromos" },
             { id: "acumulado", label: "🏆 Ranking Total" },
           ] as const).map(tab => (
@@ -80,15 +84,19 @@ export function GuestDashboard() {
         </div>
         <MobileBottomTabs
           tabs={[
-            { id: "tv", label: "FOM" },
+            { id: "tv", label: "TV" },
+            { id: "market", label: "Deadline" },
+            { id: "paddock", label: "Paddock" },
             { id: "album", label: "Álbum" },
             { id: "acumulado", label: "Ranking" },
           ]}
           activeTab={activeTab}
-          onTab={(id) => setActiveTab(id as "tv" | "album" | "acumulado")}
+          onTab={(id) => setActiveTab(id as "tv" | "market" | "paddock" | "album" | "acumulado")}
         />
 
         {activeTab === "tv" && <FomLive />}
+        {activeTab === "market" && <MarketDeadlineView readOnly />}
+        {activeTab === "paddock" && <PaddockForum readOnly />}
         {activeTab === "album" && (
           <StickerAlbum splits={splits || []} usuarios={usuarios || []} loading={loading} />
         )}
@@ -128,7 +136,7 @@ export function StickerAlbum({
   const validSplits = splits.filter(
     (s) =>
       s.id !== "global" &&
-      s.equipos?.length > 0 &&
+      ((s.id === "origins" && s.roster?.length > 0) || s.equipos?.length > 0) &&
       s.circuitos?.some((c: any) => c.completado)
   );
 
@@ -159,6 +167,7 @@ export function StickerAlbum({
       {/* Un bloque por cada split/temporada */}
       {validSplits.map((split) => {
         const roster: any[] = split.roster || [];
+        const isOrigins = split.id === "origins" || split.tipo === "individual";
 
         // Campeón de pilotos: máximo puntos_piloto en el roster
         let champPilotId = "";
@@ -182,13 +191,37 @@ export function StickerAlbum({
         });
         if (maxTeamPts <= 0) champTeamId = "";
 
+        if (isOrigins) {
+          const originRanking = [...roster].sort((a, b) => Number(b.puntos_piloto ?? 0) - Number(a.puntos_piloto ?? 0));
+          return (
+            <section key={split.id} className="space-y-5">
+              <div className="flex items-center gap-4">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-xs font-mono font-bold uppercase tracking-[0.3em] text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-1.5 rounded-full">Temporada Origins · Mundial individual</span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+              <div className="border border-amber-500/20 bg-amber-500/[0.04] rounded-2xl p-5">
+                <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-amber-300 mb-4">Clasificación final de Origins</p>
+                <div className="grid gap-2">
+                  {originRanking.map((pilot, index) => (
+                    <div key={pilot.pilotoId} className={`flex items-center justify-between border-b border-white/5 last:border-0 py-3 ${index < 3 ? "text-amber-200" : "text-white/70"}`}>
+                      <span className="font-black uppercase"><span className="inline-block w-8 font-mono text-white/30">{String(index + 1).padStart(2, "0")}</span>{pilot.nombre}</span>
+                      <span className="font-mono font-black">{pilot.puntos_piloto ?? 0} PTS</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          );
+        }
+
         return (
           <div key={split.id} className="space-y-6">
             {/* Cabecera de temporada */}
             <div className="flex items-center gap-4">
               <div className="h-px flex-1 bg-white/10" />
               <span className="text-xs font-mono font-bold uppercase tracking-[0.3em] text-[#e10600] bg-[#e10600]/10 border border-[#e10600]/20 px-4 py-1.5 rounded-full">
-                {split.nombre}
+                Temporada principal · {split.nombre}
               </span>
               <div className="h-px flex-1 bg-white/10" />
             </div>
