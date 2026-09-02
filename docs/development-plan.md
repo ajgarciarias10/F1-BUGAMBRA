@@ -24,4 +24,5 @@
 - Before an act is processed, qualy and race positions must be present for every participating pilot.
 - Duplicate positions are rejected; DNF is the only result without a normal finishing position.
 - Manual rivalries are stored per split and are not regenerated from the roster.
+- Manual rivalry configuration stores only its pilot members; economic rewards are calculated per race from the official positions and rules.
 - Split 3 uses only qualy position, race position, and DNF in its result entry table.
