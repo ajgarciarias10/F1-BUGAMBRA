@@ -18,11 +18,28 @@ const FIELD_OPTIONS = [
   ["puntuacionTotalPiloto", "Puntuación total de piloto"],
   ["puntuacionEquipoCircuito", "Puntuación equipo por circuito"],
   ["puntuacionTotalEquipo", "Puntuación total de equipo"],
-  ["economia", "Economía"],
+  ["presupuestoEquipos", "Presupuesto de equipos"],
+  ["polesEquipos", "Poles por equipo"],
+  ["vueltasRapidasEquipos", "Vueltas rápidas por equipo"],
+  ["sinSancionesEquipos", "Sin sanciones por equipo"],
+  ["participacionesEquipos", "Participaciones por equipo"],
+  ["fichajesSplit", "Fichajes del split"],
+  ["rivalidadesSplit", "Rivalidades del split"],
+  ["premiosSplit", "Premios del split"],
+  ["precioCompraPiloto", "Precio de compra de piloto"],
+  ["mantenerPiloto", "Mantener por piloto"],
+  ["clausulaPiloto", "Cláusula por piloto"],
+  ["tipoCompraPiloto", "Tipo de compra"],
+  ["precioFinalPiloto", "Precio final de piloto"],
 ] as const;
 
+const ECONOMY_FIELD_KEYS = [
+  "presupuestoEquipos", "polesEquipos", "vueltasRapidasEquipos", "sinSancionesEquipos", "participacionesEquipos",
+  "fichajesSplit", "rivalidadesSplit", "premiosSplit", "precioCompraPiloto",
+  "mantenerPiloto", "clausulaPiloto", "tipoCompraPiloto", "precioFinalPiloto",
+];
 const ORIGINS_FIELDS = FIELD_OPTIONS.filter(([value]) =>
-  !["equipoPiloto", "economia"].includes(value)
+  !["equipoPiloto", ...ECONOMY_FIELD_KEYS].includes(value)
 );
 
 const columnName = (index: number) => {
@@ -296,7 +313,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       oldRoster.docs.forEach(snapshot => batch.delete(snapshot.ref));
       oldTeams.docs.forEach(snapshot => batch.delete(snapshot.ref));
       batch.set(doc(db, "temporadas", "temporada_1"), { nombre: "Temporada 1", orden: 1, activa: false, splits: ["split_1", "split_2"] }, { merge: true });
-      batch.set(doc(db, "splits", seasonId), { nombre: seasonId === "split_1" ? "Split 1" : "Split 2", temporadaId: "temporada_1", tipo: "equipos", orden: seasonId === "split_1" ? 1 : 2, activo: false, completado: true, fichajes_abiertos: false, source_url: url }, { merge: true });
+      batch.set(doc(db, "splits", seasonId), { nombre: seasonId === "split_1" ? "Split 1" : "Split 2", temporadaId: "temporada_1", tipo: "equipos", orden: seasonId === "split_1" ? 1 : 2, activo: false, completado: true, fichajes_abiertos: false, source_url: url, economia_mapeo: Object.fromEntries(Object.entries(mappings).filter(([key]) => ECONOMY_FIELD_KEYS.includes(key))) }, { merge: true });
       teamNames.forEach((name, index) => batch.set(doc(db, `splits/${seasonId}/equipos`, teamIds[index]), { nombre: name, puntos_constructores: teamTotals[index] || 0, presupuesto: 0, puntos_carreras: teamScoreMatrix[index]?.slice(0, circuitNames.length) || [] }));
       pilotNames.forEach((name, pilotIndex) => { const pilotData = { pilotoId: pilotIds[pilotIndex], nombre: name, equipoId: resolvedTeamIds[pilotIndex], puntos_piloto: pilotTotals[pilotIndex] || 0, puntos_equipos: 0, precio_compra: 0 }; batch.set(doc(db, "pilotos", pilotIds[pilotIndex]), { nombre: name }, { merge: true }); batch.set(doc(db, `splits/${seasonId}/roster`, pilotIds[pilotIndex]), pilotData); batch.set(doc(db, `splits/${seasonId}/equipos/${resolvedTeamIds[pilotIndex]}/pilotos`, pilotIds[pilotIndex]), pilotData); });
       circuitNames.forEach((name, circuitIndex) => batch.set(doc(db, `splits/${seasonId}/circuitos`, circuitIds[circuitIndex]), { nombre: name, numero_carrera: circuitIndex + 1, completado: true, acta_cerrada: true, resultados: pilotNames.map((pilotName, pilotIndex) => ({ pilotoId: pilotIds[pilotIndex], pilotoNombre: pilotName, equipoId: resolvedTeamIds[pilotIndex], puntos: number(scoreMatrix[pilotIndex][circuitIndex], `${pilotName} en ${name}`) })) }));
@@ -353,7 +370,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         <div className="flex gap-1 overflow-x-auto p-2 border-b border-white/10 bg-black/20">{sheets.map(sheet => <button key={sheet.properties.sheetId} onClick={() => selectSheet(sheet)} className={`shrink-0 px-3 py-2 text-[10px] uppercase font-black ${activeSheetId === sheet.properties.sheetId ? "bg-emerald-600 text-white" : "text-white/45 hover:bg-white/5"}`}>{sheet.properties.title}</button>)}</div>
         <div className="p-3 border-b border-white/10 flex flex-wrap items-center gap-2">
           <MousePointer2 className="w-4 h-4 text-emerald-300" />
-          <span className="text-[10px] uppercase tracking-wider text-white/45">Selecciona un rango para:</span>
+          <span className="text-[10px] uppercase tracking-wider text-white/45">{seasonId === "origins" ? "Selecciona un rango para:" : "Selecciona un rango de datos o economía para:"}</span>
           <select value={field} onChange={event => setField(event.target.value as typeof field)} className="bg-black/40 border border-white/10 px-2 py-1.5 text-[10px] text-white">{visibleFieldOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <span className="text-[10px] font-mono text-emerald-300">{selectedRange?.range || "sin selección"}</span>
           <button onClick={saveSelection} disabled={!selectedRange} className="ml-auto inline-flex items-center gap-1.5 border border-emerald-500/30 text-emerald-300 px-3 py-1.5 text-[10px] uppercase font-black disabled:opacity-30"><Save className="w-3.5 h-3.5" /> Guardar rango</button>
