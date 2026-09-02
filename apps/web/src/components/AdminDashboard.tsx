@@ -56,12 +56,22 @@ const canPilotParticipateInRace = (pilot: any, raceSequence: number) => {
   return raceSequence >= startsAt && (endsAt == null || raceSequence <= endsAt);
 };
 
-const getLastCompletedRaceNumber = (split: any) => Math.max(
-  0,
-  ...(split?.circuitos || [])
-    .filter((race: any) => race.completado)
-    .map((race: any) => Number(race.numero_carrera ?? 0)),
-);
+  const getLastCompletedRaceNumber = (split: any) => Math.max(
+    0,
+    ...(split?.circuitos || [])
+      .filter((race: any) => race.completado)
+      .map((race: any) => Number(race.numero_carrera ?? 0)),
+  );
+
+  const getRosterDocRef = (splitId: string, teamId: string, pilotId: string) => {
+    return teamId && teamId !== "agente_libre"
+      ? doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotId)
+      : doc(db, `splits/${splitId}/roster`, pilotId);
+  };
+
+  const getFreeAgentDocRef = (splitId: string, pilotId: string) => {
+    return doc(db, `splits/${splitId}/roster`, pilotId);
+  };
 
 export function AdminDashboard() {
   const { usuarios } = useUsuarios();
@@ -342,14 +352,30 @@ export function AdminDashboard() {
     setMsg("");
     try {
       const lastParticipation = getLastCompletedRaceNumber(currentRawSplit);
-      const isIndividual = currentRawSplit.tipo === "individual" || pilot.equipoId === "individual";
-      const rosterRef = isIndividual
-        ? doc(db, `splits/${currentRawSplit.id}/roster`, pilot.pilotoId)
-        : doc(db, `splits/${currentRawSplit.id}/equipos/${pilot.equipoId}/pilotos`, pilot.pilotoId);
+      const rosterRef = getRosterDocRef(currentRawSplit.id, pilot.equipoId, pilot.pilotoId);
+      const freeAgentRef = getFreeAgentDocRef(currentRawSplit.id, pilot.pilotoId);
       const matchedUser = usuarios.find((user: any) => user.piloto_id === pilot.pilotoId || user.uid === pilot.pilotoId);
 
+      const sourceSnap = await getDoc(rosterRef);
+      if (!sourceSnap.exists()) throw new Error("No se encontró el piloto en el roster actual.");
+
+      const sourceData = sourceSnap.data();
       const batch = writeBatch(db);
-      batch.update(rosterRef, { participa_hasta: lastParticipation });
+      batch.set(freeAgentRef, {
+        ...sourceData,
+        pilotoId: pilot.pilotoId,
+        nombre: pilot.nombre,
+        equipoId: "agente_libre",
+        participa_hasta: lastParticipation,
+        congelado: false,
+        congelado_en: null,
+        pending_equipoId: null,
+        pending_precio_compra: null,
+        pending_tipo_fichaje: null,
+      }, { merge: true });
+      if (rosterRef.path !== freeAgentRef.path) {
+        batch.delete(rosterRef);
+      }
       if (matchedUser && matchedUser.rol !== "admin" && matchedUser.rol !== "jeque") {
         batch.set(doc(db, "usuarios", matchedUser.uid), {
           rol: "usuario",
@@ -624,15 +650,37 @@ export function AdminDashboard() {
       const currentSplit = splits.find(s => s.id === selectedSplitId);
       const existingEntry = currentSplit?.roster.find(r => r.pilotoId === pilotId);
       const precioCompra = Number(existingEntry?.precio_compra ?? pData.precio_compra ?? pData.raw?.precio_compra ?? 10);
-      const sourceRef = fromTeamId && fromTeamId !== "agente_libre"
-        ? doc(db, `splits/${selectedSplitId}/equipos/${fromTeamId}/pilotos`, pilotId)
-        : doc(db, `splits/${selectedSplitId}/roster`, pilotId);
+      const sourceRef = getRosterDocRef(selectedSplitId, fromTeamId, pilotId);
+      const destinationRef = toTeamId === "agente_libre"
+        ? getFreeAgentDocRef(selectedSplitId, pilotId)
+        : doc(db, `splits/${selectedSplitId}/equipos/${toTeamId}/pilotos`, pilotId);
       const matchedUser = usuarios.find(u => u.uid === pilotId || (u.piloto_id && u.piloto_id === pilotId));
       const auditRef = doc(collection(db, `splits/${selectedSplitId}/transfers`));
 
+      const sourceSnap = await getDoc(sourceRef);
+      if (!sourceSnap.exists()) {
+        throw new Error("No se encontró la participación de origen del piloto.");
+      }
+
+      const sourceData = sourceSnap.data();
+
       if (toTeamId === "agente_libre") {
         const batch = writeBatch(db);
-        batch.update(sourceRef, { participa_hasta: getLastCompletedRaceNumber(currentSplit) });
+        batch.set(destinationRef, {
+          ...sourceData,
+          pilotoId: pilotId,
+          nombre: pilotName || pData.nombre || sourceData.nombre || "Piloto",
+          equipoId: "agente_libre",
+          participa_hasta: getLastCompletedRaceNumber(currentSplit),
+          congelado: false,
+          congelado_en: null,
+          pending_equipoId: null,
+          pending_precio_compra: null,
+          pending_tipo_fichaje: null,
+        }, { merge: true });
+        if (sourceRef.path !== destinationRef.path) {
+          batch.delete(sourceRef);
+        }
         if (matchedUser && matchedUser.rol !== "admin" && matchedUser.rol !== "jeque") {
           batch.set(doc(db, "usuarios", matchedUser.uid), {
             rol: "usuario",
@@ -649,18 +697,12 @@ export function AdminDashboard() {
         });
         await batch.commit();
       } else {
-        const destinationRef = doc(db, `splits/${selectedSplitId}/equipos/${toTeamId}/pilotos`, pilotId);
         await runTransaction(db, async transaction => {
-          const sourceSnapshot = await transaction.get(sourceRef);
-          if (!sourceSnapshot.exists()) {
-            throw new Error("No se encontró la participación de origen del piloto.");
-          }
-
           transaction.update(doc(db, `splits/${selectedSplitId}/equipos`, toTeamId), {
             presupuesto: increment(-precioCompra),
           });
           transaction.set(destinationRef, {
-            ...sourceSnapshot.data(),
+            ...sourceData,
             pilotoId: pilotId,
             equipoId: toTeamId,
           });
