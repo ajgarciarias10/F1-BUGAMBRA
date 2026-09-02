@@ -181,6 +181,19 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         const bounds = rangeBounds(entry.range);
         return source.slice(bounds.top, bounds.bottom + 1).map(row => row.slice(bounds.left, bounds.right + 1).map(cell => cell.value.trim()));
       });
+      const readMatrixEntries = (key: string) => {
+        const matrices = (mappings[key] || []).map(entry => {
+          const source = sheetGrids[entry.sheetId];
+          if (!source) throw new Error(`La hoja del rango ${entry.range} no está cargada. Vuelve a conectar el documento.`);
+          const bounds = rangeBounds(entry.range);
+          return source.slice(bounds.top, bounds.bottom + 1).map(row => row.slice(bounds.left, bounds.right + 1).map(cell => cell.value.trim()));
+        });
+        if (matrices.length <= 1) return matrices[0] || [];
+        if (matrices.every(matrix => matrix.length === matrices[0].length)) {
+          return matrices[0].map((row, rowIndex) => matrices.reduce((combined, matrix) => [...combined, ...(matrix[rowIndex] || [])], [] as string[]));
+        }
+        return matrices.flat();
+      };
       const clean = (value: string) => value.replace(/\s+/g, " ").trim();
       const pilotNames = readEntries("pilotos").flat().map(clean).filter(Boolean);
       const circuitNames = readEntries("circuitos").flat().map(clean).filter(Boolean);
@@ -188,13 +201,14 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       if (!pilotNames.length || !circuitNames.length || !duoNames.length) throw new Error("Los rangos seleccionados no contienen pilotos, circuitos o dúos reconocibles.");
       const pilotIds = pilotNames.map(name => `piloto_${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`);
       const circuitIds = circuitNames.map(name => name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
-      const scoreMatrix = readEntries("puntuacionPilotoCircuito");
-      if (scoreMatrix.length !== pilotNames.length || scoreMatrix.some(row => row.length < circuitNames.length)) throw new Error("La matriz de puntuaciones no coincide con el número de pilotos y circuitos seleccionados.");
+      const scoreMatrix = readMatrixEntries("puntuacionPilotoCircuito");
+      const scoreColumns = Math.max(0, ...scoreMatrix.map(row => row.length));
+      if (scoreMatrix.length !== pilotNames.length || scoreColumns < circuitNames.length) throw new Error(`La matriz de pilotos tiene ${scoreMatrix.length} filas x ${scoreColumns} columnas, pero se esperaban ${pilotNames.length} filas x ${circuitNames.length} columnas.`);
       const number = (value: string, label: string) => { const parsed = Number(value.replace(",", ".")); if (!Number.isFinite(parsed)) throw new Error(`${label} no es un número válido.`); return parsed; };
       const totalEntries = mappings.puntuacionTotalPiloto?.length ? readEntries("puntuacionTotalPiloto").flat().filter(Boolean) : [];
       const pilotTotals = pilotNames.map((_, index) => totalEntries[index] ? number(totalEntries[index], `Total del piloto ${pilotNames[index]}`) : scoreMatrix[index].slice(0, circuitNames.length).reduce((sum, value, circuitIndex) => sum + number(value, `Puntuación ${pilotNames[index]} C${circuitIndex + 1}`), 0));
       const teamTotals = mappings.puntuacionTotalEquipo?.length ? readEntries("puntuacionTotalEquipo").flat().filter(Boolean).map((value, index) => number(value, `Total del dúo ${duoNames[index]}`)) : [];
-      const teamScoreMatrix = mappings.puntuacionEquipoCircuito?.length ? readEntries("puntuacionEquipoCircuito") : [];
+      const teamScoreMatrix = mappings.puntuacionEquipoCircuito?.length ? readMatrixEntries("puntuacionEquipoCircuito") : [];
       if (teamScoreMatrix.length && (teamScoreMatrix.length !== duoNames.length || teamScoreMatrix.some(row => row.length < circuitNames.length))) throw new Error("La matriz de puntuaciones de dúos no coincide con los equipos y circuitos seleccionados.");
       const batch = writeBatch(db);
       const [oldPilots, oldCircuits] = await Promise.all([getDocs(collection(db, "splits/origins/roster")), getDocs(collection(db, "splits/origins/circuitos"))]);
