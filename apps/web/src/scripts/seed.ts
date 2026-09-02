@@ -50,11 +50,11 @@ const SPLITS_CONFIG = [
     video_intro: "https://youtu.be/5OLFg1W5LzU", circuitos: [],
   },
   {
-    id: "split_1", nombre: "Split 1", orden: 1, tipo: "equipos" as const, video_intro: "",
+    id: "split_1", nombre: "Split 1", orden: 1, tipo: "equipos" as const, video_intro: "https://www.youtube.com/watch?v=PCj87_WObys",
     circuitos: ["Australia", "China", "Japón", "Arabia Saudí", "Miami", "Baréin"],
   },
   {
-    id: "split_2", nombre: "Split 2", orden: 2, tipo: "equipos" as const, video_intro: "",
+    id: "split_2", nombre: "Split 2", orden: 2, tipo: "equipos" as const, video_intro: "https://www.youtube.com/watch?v=I3Ou8CxbU1I",
     circuitos: ["Canadá", "Mónaco", "Barcelona", "Austria", "Gran Bretaña", "Bélgica"],
   },
   {
