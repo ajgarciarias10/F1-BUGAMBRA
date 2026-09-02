@@ -19,11 +19,12 @@ import { SeasonReviewPanel } from "./SeasonReviewPanel";
 import { AdminUsersPanel } from "./AdminUsersPanel";
 import { AdminTeamManager } from "./AdminTeamManager";
 
-type AdminTab = "season-review" | "teams" | "users" | "suggestions" | "tools";
+type AdminTab = "season-review" | "teams" | "results" | "users" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
   { id: "season-review", label: "Revisión temporadas" },
   { id: "teams", label: "Administración de equipos" },
+  { id: "results", label: "Circuitos y resultados" },
   { id: "users", label: "Administración de usuarios" },
   { id: "suggestions", label: "Buzón de mejoras", pulse: true },
   { id: "tools", label: "Herramientas técnicas" },
@@ -1368,8 +1369,8 @@ export function AdminDashboard() {
                   <th className="pb-2 font-normal">Race</th>
                   <th className="pb-2 text-center font-normal">DNF</th>
                   <th className="pb-2 text-center font-normal">SANC</th>
-                  <th className="pb-2 text-center font-normal">ADEL</th>
-                  <th className="pb-2 text-center font-normal">DOTD</th>
+                  {selectedSplitId !== "split_3" && <th className="pb-2 text-center font-normal">ADEL</th>}
+                  {selectedSplitId !== "split_3" && <th className="pb-2 text-center font-normal">DOTD</th>}
                   <th className="pb-2 text-center font-normal">MVP</th>
                   <th className="pb-2 text-center font-normal">V.R</th>
                 </tr>
@@ -1436,7 +1437,7 @@ export function AdminDashboard() {
                           }}
                         />
                       </td>
-                      <td className="py-2.5 text-center">
+                      {selectedSplitId !== "split_3" && <td className="py-2.5 text-center">
                         <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada}
                           checked={results[p.pilotoId]?.isDnfOwnError || false}
@@ -1477,12 +1478,12 @@ export function AdminDashboard() {
                             }
                           }}
                         />
-                      </td>
-                      <td className="py-2.5 text-center">
+                      </td>}
+                      {selectedSplitId !== "split_3" && <td className="py-2.5 text-center">
                         <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada || isPilotDnf}
                           checked={isPilotDnf ? false : !(results[p.pilotoId]?.isClean ?? true)} onChange={e => handleUpdate(p.pilotoId, "isClean", !e.target.checked)} />
-                      </td>
+                      </td>}
                       <td className="py-2.5 text-center">
                         <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada || isPilotDnf}
