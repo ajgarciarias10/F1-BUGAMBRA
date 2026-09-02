@@ -947,15 +947,18 @@ export function AdminDashboard() {
     setLoading(true);
     setMsg("");
     try {
-      const finalResults: RaceResult[] = splitPilots.map((p: any, idx: number) => {
+      const finalResults: RaceResult[] = splitPilots.map((p: any) => {
         const item = results[p.pilotoId] || {};
         const isDnf = !!item.isDnfOwnError;
 
         const enteredQualy = typeof item.qualyPos === "number" ? item.qualyPos : parseInt(item.qualyPos as any);
-        const qPos = isDnf ? 99 : ((!isNaN(enteredQualy) && enteredQualy > 0) ? enteredQualy : (idx + 1));
+        const qPos = isDnf ? 99 : enteredQualy;
 
         const enteredRace = typeof item.racePos === "number" ? item.racePos : parseInt(item.racePos as any);
-        const rPos = isDnf ? 99 : ((!isNaN(enteredRace) && enteredRace > 0) ? enteredRace : (idx + 1));
+        if (!isDnf && (isNaN(enteredQualy) || enteredQualy <= 0 || isNaN(enteredRace) || enteredRace <= 0)) {
+          throw new Error(`Faltan las posiciones de qualy o carrera de ${p.nombre}.`);
+        }
+        const rPos = isDnf ? 99 : enteredRace;
 
         return {
           pilotoId: p.pilotoId,
@@ -963,11 +966,6 @@ export function AdminDashboard() {
           qualyPos: qPos,
           racePos: rPos,
           isDnfOwnError: isDnf,
-          isClean: item.isClean ?? true,
-          overtakesBoost: !isDnf && !!item.overtakesBoost,
-          isDotd: !isDnf && !!item.isDotd,
-          isMvp: !isDnf && !!item.isMvp,
-          fastestLap: !isDnf && !!item.fastestLap
         } as RaceResult;
       });
 
@@ -1368,11 +1366,6 @@ export function AdminDashboard() {
                   <th className="pb-2 font-normal">Qualy</th>
                   <th className="pb-2 font-normal">Race</th>
                   <th className="pb-2 text-center font-normal">DNF</th>
-                  <th className="pb-2 text-center font-normal">SANC</th>
-                  {selectedSplitId !== "split_3" && <th className="pb-2 text-center font-normal">ADEL</th>}
-                  {selectedSplitId !== "split_3" && <th className="pb-2 text-center font-normal">DOTD</th>}
-                  <th className="pb-2 text-center font-normal">MVP</th>
-                  <th className="pb-2 text-center font-normal">V.R</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -1437,7 +1430,7 @@ export function AdminDashboard() {
                           }}
                         />
                       </td>
-                      {selectedSplitId !== "split_3" && <td className="py-2.5 text-center">
+                      <td className="py-2.5 text-center">
                         <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
                           disabled={isActaCerrada}
                           checked={results[p.pilotoId]?.isDnfOwnError || false}
@@ -1449,14 +1442,9 @@ export function AdminDashboard() {
                                 [p.pilotoId]: {
                                   ...prev[p.pilotoId],
                                   pilotoId: p.pilotoId,
-                                  isDnfOwnError: true,
-                                  racePos: 99,
-                                  qualyPos: 99,
-                                  isClean: true,
-                                  overtakesBoost: false,
-                                  isDotd: false,
-                                  isMvp: false,
-                                  fastestLap: false
+                                   isDnfOwnError: true,
+                                   racePos: 99,
+                                   qualyPos: 99
                                 }
                               }));
                             } else {
@@ -1464,45 +1452,15 @@ export function AdminDashboard() {
                                 ...prev,
                                 [p.pilotoId]: {
                                   ...prev[p.pilotoId],
-                                  pilotoId: p.pilotoId,
-                                  isDnfOwnError: false,
-                                  racePos: undefined,
-                                  qualyPos: undefined,
-                                  isClean: true,
-                                  overtakesBoost: false,
-                                  isDotd: false,
-                                  isMvp: false,
-                                  fastestLap: false
+                                   pilotoId: p.pilotoId,
+                                   isDnfOwnError: false,
+                                   racePos: undefined,
+                                   qualyPos: undefined
                                 }
                               }));
                             }
-                          }}
-                        />
-                      </td>}
-                      {selectedSplitId !== "split_3" && <td className="py-2.5 text-center">
-                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
-                          disabled={isActaCerrada || isPilotDnf}
-                          checked={isPilotDnf ? false : !(results[p.pilotoId]?.isClean ?? true)} onChange={e => handleUpdate(p.pilotoId, "isClean", !e.target.checked)} />
-                      </td>}
-                      <td className="py-2.5 text-center">
-                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
-                          disabled={isActaCerrada || isPilotDnf}
-                          checked={isPilotDnf ? false : (results[p.pilotoId]?.overtakesBoost || false)} onChange={e => handleUpdate(p.pilotoId, "overtakesBoost", e.target.checked)} />
-                      </td>
-                      <td className="py-2.5 text-center">
-                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
-                          disabled={isActaCerrada || isPilotDnf}
-                          checked={isPilotDnf ? false : (results[p.pilotoId]?.isDotd || false)} onChange={e => handleUpdate(p.pilotoId, "isDotd", e.target.checked)} />
-                      </td>
-                      <td className="py-2.5 text-center">
-                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
-                          disabled={isActaCerrada || isPilotDnf}
-                          checked={isPilotDnf ? false : (results[p.pilotoId]?.isMvp || false)} onChange={e => handleUpdate(p.pilotoId, "isMvp", e.target.checked)} />
-                      </td>
-                      <td className="py-2.5 text-center">
-                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-[#e10600] accent-[#e10600] disabled:opacity-40"
-                          disabled={isActaCerrada || isPilotDnf}
-                          checked={isPilotDnf ? false : (results[p.pilotoId]?.fastestLap || false)} onChange={e => handleUpdate(p.pilotoId, "fastestLap", e.target.checked)} />
+                         }}
+                       />
                       </td>
                     </tr>
                   );
