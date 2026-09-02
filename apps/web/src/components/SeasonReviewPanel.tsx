@@ -18,10 +18,7 @@ const FIELD_OPTIONS = [
   ["puntuacionTotalPiloto", "Puntuación total de piloto"],
   ["puntuacionEquipoCircuito", "Puntuación equipo por circuito"],
   ["puntuacionTotalEquipo", "Puntuación total de equipo"],
-  ["presupuestoEquipos", "Presupuesto de equipos"],
   ["polesEquipos", "Poles por equipo"],
-  ["vueltasRapidasEquipos", "Vueltas rápidas por equipo"],
-  ["sinSancionesEquipos", "Sin sanciones por equipo"],
   ["participacionesEquipos", "Participaciones por equipo"],
   ["fichajesSplit", "Fichajes del split"],
   ["rivalidadesSplit", "Rivalidades del split"],
@@ -34,7 +31,7 @@ const FIELD_OPTIONS = [
 ] as const;
 
 const ECONOMY_FIELD_KEYS = [
-  "presupuestoEquipos", "polesEquipos", "vueltasRapidasEquipos", "sinSancionesEquipos", "participacionesEquipos",
+  "polesEquipos", "participacionesEquipos",
   "fichajesSplit", "rivalidadesSplit", "premiosSplit", "precioCompraPiloto",
   "mantenerPiloto", "clausulaPiloto", "tipoCompraPiloto", "precioFinalPiloto",
 ];
@@ -314,7 +311,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       oldTeams.docs.forEach(snapshot => batch.delete(snapshot.ref));
       batch.set(doc(db, "temporadas", "temporada_1"), { nombre: "Temporada 1", orden: 1, activa: false, splits: ["split_1", "split_2"] }, { merge: true });
       batch.set(doc(db, "splits", seasonId), { nombre: seasonId === "split_1" ? "Split 1" : "Split 2", temporadaId: "temporada_1", tipo: "equipos", orden: seasonId === "split_1" ? 1 : 2, activo: false, completado: true, fichajes_abiertos: false, source_url: url, economia_mapeo: Object.fromEntries(Object.entries(mappings).filter(([key]) => ECONOMY_FIELD_KEYS.includes(key))) }, { merge: true });
-      teamNames.forEach((name, index) => batch.set(doc(db, `splits/${seasonId}/equipos`, teamIds[index]), { nombre: name, puntos_constructores: teamTotals[index] || 0, presupuesto: 0, puntos_carreras: teamScoreMatrix[index]?.slice(0, circuitNames.length) || [] }));
+      teamNames.forEach((name, index) => batch.set(doc(db, `splits/${seasonId}/equipos`, teamIds[index]), { nombre: name, puntos_constructores: teamTotals[index] || 0, presupuesto: 100, presupuesto_inicial: 100, puntos_carreras: teamScoreMatrix[index]?.slice(0, circuitNames.length) || [] }));
       pilotNames.forEach((name, pilotIndex) => { const pilotData = { pilotoId: pilotIds[pilotIndex], nombre: name, equipoId: resolvedTeamIds[pilotIndex], puntos_piloto: pilotTotals[pilotIndex] || 0, puntos_equipos: 0, precio_compra: 0 }; batch.set(doc(db, "pilotos", pilotIds[pilotIndex]), { nombre: name }, { merge: true }); batch.set(doc(db, `splits/${seasonId}/roster`, pilotIds[pilotIndex]), pilotData); batch.set(doc(db, `splits/${seasonId}/equipos/${resolvedTeamIds[pilotIndex]}/pilotos`, pilotIds[pilotIndex]), pilotData); });
       circuitNames.forEach((name, circuitIndex) => batch.set(doc(db, `splits/${seasonId}/circuitos`, circuitIds[circuitIndex]), { nombre: name, numero_carrera: circuitIndex + 1, completado: true, acta_cerrada: true, resultados: pilotNames.map((pilotName, pilotIndex) => ({ pilotoId: pilotIds[pilotIndex], pilotoNombre: pilotName, equipoId: resolvedTeamIds[pilotIndex], puntos: number(scoreMatrix[pilotIndex][circuitIndex], `${pilotName} en ${name}`) })) }));
       await batch.commit();
