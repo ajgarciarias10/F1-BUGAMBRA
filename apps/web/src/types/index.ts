@@ -74,6 +74,8 @@ export interface RosterEntry {
   pending_equipoId?: string;          // transfer pending to next split
   pending_precio_compra?: number;    // purchase price to apply next split
   pending_tipo_fichaje?: TipoFichaje;
+  estado_siguiente_split?: "mantener" | "clausula" | "subasta" | "agente_libre";
+  precio_inicio_siguiente_split?: number; // written manually after the split closes
   // Congelación: si true, mantener/clausula no decaen con el procesado de carrera
   congelado?: boolean;
   congelado_en?: string; // circuitoId donde se congeló
