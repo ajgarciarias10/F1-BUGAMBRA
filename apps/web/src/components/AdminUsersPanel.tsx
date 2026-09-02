@@ -1,64 +1,14 @@
 import { useState } from "react";
 import { Check, Loader2, UserRound } from "lucide-react";
-import { collection, doc, getDocs, getFirestore, setDoc, writeBatch } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { usePilotos, useUsuarios } from "../hooks/useData";
-import { auth, db } from "../services/firebase";
-
-const LEGACY_DATABASE_ID = "ai-studio-4147307b-9726-4502-a41f-213e9107e179";
-const EXCLUDED_ADMIN_EMAIL = "admin@f1bugambra.com";
+import { db } from "../services/firebase";
 
 export function AdminUsersPanel() {
   const { usuarios } = useUsuarios();
   const { pilotos } = usePilotos();
   const [savingUid, setSavingUid] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [migrating, setMigrating] = useState(false);
-
-  const migrateLegacyUsers = async () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser?.email) {
-      setMessage("Error: no hay una sesión autenticada para ejecutar la migración.");
-      return;
-    }
-    if (!window.confirm("Se copiarán los usuarios de la base antigua a development, excluyendo admin@f1bugambra.com y las asociaciones deportivas. ¿Continuar?")) return;
-    setMigrating(true);
-    setMessage("");
-    try {
-      const legacyDb = getFirestore(auth.app, LEGACY_DATABASE_ID);
-      const legacyUsers = await getDocs(collection(legacyDb, "usuarios"));
-      const batch = writeBatch(db);
-      let copied = 0;
-      legacyUsers.docs.forEach(snapshot => {
-        const data = snapshot.data();
-        const email = String(data.email || "").trim().toLowerCase();
-        if (email === EXCLUDED_ADMIN_EMAIL) return;
-        const role = snapshot.id === currentUser.uid ? "admin" : (data.rol === "admin" ? "usuario" : (data.rol || "usuario"));
-        batch.set(doc(db, "usuarios", snapshot.id), {
-          uid: snapshot.id,
-          email: email || null,
-          nombre: String(data.nombre || data.displayName || "Usuario"),
-          rol: role,
-          piloto_id: null,
-          escuderia_id: "",
-        }, { merge: true });
-        copied++;
-      });
-      batch.set(doc(db, "usuarios", currentUser.uid), {
-        uid: currentUser.uid,
-        email: currentUser.email.toLowerCase(),
-        nombre: currentUser.displayName || "Admin",
-        rol: "admin",
-        piloto_id: null,
-        escuderia_id: "",
-      }, { merge: true });
-      await batch.commit();
-      setMessage(`Migración completada: ${copied} usuarios copiados. admin@f1bugambra.com quedó excluido.`);
-    } catch (error: any) {
-      setMessage(`Error en la migración: ${error.message}`);
-    } finally {
-      setMigrating(false);
-    }
-  };
 
   const updateUser = async (uid: string, pilotoId: string, rol: string) => {
     setSavingUid(uid);
@@ -86,7 +36,6 @@ export function AdminUsersPanel() {
           <div><h2 className="font-black uppercase tracking-tight text-lg">Administración de usuarios</h2><p className="text-xs text-white/45 mt-1">Gestiona únicamente la identidad, el correo y la asociación con un piloto.</p></div>
         </div>
         {message && <p className={`mt-4 text-xs ${message.startsWith("Error") ? "text-red-300" : "text-emerald-300"}`}>{message}</p>}
-        <button onClick={migrateLegacyUsers} disabled={migrating} className="mt-5 inline-flex items-center gap-2 border border-amber-500/30 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-40">{migrating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserRound className="w-3.5 h-3.5" />} Migrar usuarios de la base anterior</button>
       </div>
       <div className="border border-white/10 bg-white/[0.02] overflow-x-auto">
         <table className="w-full min-w-[700px] text-left text-xs"><thead className="border-b border-white/10 bg-white/[0.03] text-[9px] uppercase tracking-wider text-white/40"><tr><th className="p-3">Usuario</th><th className="p-3">UID</th><th className="p-3">Piloto asociado</th><th className="p-3">Rol</th><th className="p-3" /></tr></thead><tbody>{usuarios.map(user => {

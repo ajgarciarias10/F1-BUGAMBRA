@@ -108,7 +108,6 @@ export function AdminDashboard() {
   const [pilotTeamToAssign, setPilotTeamToAssign] = useState("");
   const [assigningPilot, setAssigningPilot] = useState(false);
   const [endingPilotId, setEndingPilotId] = useState<string | null>(null);
-  const [repairingToni, setRepairingToni] = useState(false);
 
   // ─── MIGRACIONES AUTOMÁTICAS AL MONTAR ───────────────────────────────────────
   // Se ejecutan UNA SOLA VEZ. Cada función tiene su propia guardia interna
@@ -655,76 +654,6 @@ export function AdminDashboard() {
     }
   };
 
-  const repairToniPilotData = async () => {
-      const toniUid = "3Cze15XIGyVdKhNrxVbhoHBSHOb2";
-    setRepairingToni(true);
-    setMsg("");
-    try {
-      const userRef = doc(db, "usuarios", toniUid);
-      const userSnap = await getDoc(userRef);
-      if (!userSnap.exists()) throw new Error("No se encontró la cuenta de Toni.");
-      const pilotId = userSnap.data().piloto_id || toniUid;
-
-      const splitId = "split_3";
-      const split = splits.find(item => item.id === splitId);
-      const lastParticipation = getLastCompletedRaceNumber(split);
-      const batch = writeBatch(db);
-      let sourceRef: any = null;
-      let pilotData: any = null;
-
-      // El nombre canónico de la cuenta es Toni; reparar todas las temporadas
-      // evita que el nombre heredado "Piloto" siga apareciendo en clasificaciones.
-      const name = "Toni";
-      for (const season of splits) {
-        for (const team of season.equipos || []) {
-          const historicalRef = doc(db, `splits/${season.id}/equipos/${team.id}/pilotos`, pilotId);
-          const historicalSnap = await getDoc(historicalRef);
-          if (historicalSnap.exists()) batch.set(historicalRef, { nombre: name, pilotoId: pilotId }, { merge: true });
-        }
-        const historicalFlatRef = doc(db, `splits/${season.id}/roster`, pilotId);
-        const historicalFlatSnap = await getDoc(historicalFlatRef);
-        if (historicalFlatSnap.exists()) batch.set(historicalFlatRef, { nombre: name, pilotoId: pilotId }, { merge: true });
-      }
-
-      for (const team of split?.equipos || []) {
-        const candidateRef = doc(db, `splits/${splitId}/equipos/${team.id}/pilotos`, pilotId);
-        const candidateSnap = await getDoc(candidateRef);
-        if (candidateSnap.exists()) {
-          sourceRef = candidateRef;
-          pilotData = candidateSnap.data();
-          break;
-        }
-      }
-
-      const flatRef = doc(db, `splits/${splitId}/roster`, pilotId);
-      const flatSnap = await getDoc(flatRef);
-      if (!pilotData && flatSnap.exists()) pilotData = flatSnap.data();
-      if (!pilotData) throw new Error("Toni no está inscrito como piloto en Split 3.");
-
-      batch.set(flatRef, {
-        ...pilotData,
-        pilotoId: pilotId,
-        nombre: name,
-        equipoId: "agente_libre",
-        participa_hasta: lastParticipation,
-        congelado: false,
-        congelado_en: null,
-        pending_equipoId: null,
-        pending_precio_compra: null,
-        pending_tipo_fichaje: null,
-      }, { merge: true });
-      if (sourceRef) batch.delete(sourceRef);
-      batch.set(userRef, { nombre: name, piloto_id: pilotId, rol: "usuario", escuderia_id: "" }, { merge: true });
-      batch.set(doc(db, "pilotos", pilotId), { nombre: name }, { merge: true });
-      await batch.commit();
-      setMsg("Datos de Toni reparados: usuario, piloto y agente libre en Split 3.");
-    } catch (err: any) {
-      setMsg("Error reparando datos de Toni: " + err.message);
-    } finally {
-      setRepairingToni(false);
-    }
-  };
-
   const handleMovePilotOriginal = async (pilotId: string, pilotName: string, fromTeamId: string, toTeamId: string, pilotData?: any) => {
     if (!selectedSplitId || fromTeamId === toTeamId) return;
     try {
@@ -1078,15 +1007,6 @@ export function AdminDashboard() {
                className="shrink-0 px-3 py-2 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 text-[10px] font-black uppercase tracking-wider"
              >
                Ir a mi panel de piloto
-             </button>
-           )}
-           {userData?.email?.toLowerCase() === "ajgarciarias@gmail.com" && (
-             <button
-               onClick={repairToniPilotData}
-               disabled={repairingToni}
-               className="shrink-0 px-3 py-2 border border-red-500/30 text-red-300 hover:bg-red-500/10 text-[10px] font-black uppercase tracking-wider disabled:opacity-40"
-             >
-               {repairingToni ? "Reparando..." : "Reparar mis datos"}
              </button>
            )}
          </div>
