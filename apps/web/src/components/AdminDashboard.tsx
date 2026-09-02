@@ -15,12 +15,14 @@ import { StorageImageUpload } from "./StorageImageUpload";
 import { DatabaseExplorer } from "./DatabaseExplorer";
 import { AdminControlPanel } from "./AdminControlPanel";
 import { useAuth } from "../contexts/AuthContext";
+import { SeasonReviewPanel } from "./SeasonReviewPanel";
 
-type AdminTab = "championship" | "control" | "suggestions" | "economy" | "db";
+type AdminTab = "championship" | "control" | "suggestions" | "economy" | "db" | "season-review";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
   { id: "championship", label: "Carreras y mercado" },
-  { id: "control", label: "Excel/Postgres" },
+  { id: "season-review", label: "Revisión temporadas" },
+  { id: "control", label: "Herramientas antiguas" },
   { id: "suggestions", label: "Buzón de mejoras", pulse: true },
   { id: "economy", label: "Economía" },
   { id: "db", label: "Base de datos" },
@@ -1106,7 +1108,9 @@ export function AdminDashboard() {
           ))}
         </div>
 
-        {adminTab === "suggestions" ? (
+        {adminTab === "season-review" ? (
+          <SeasonReviewPanel splits={splits} />
+        ) : adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
         ) : adminTab === "control" ? (
           <AdminControlPanel />
