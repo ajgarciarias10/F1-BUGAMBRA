@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { GoogleAuthProvider, linkWithPopup, reauthenticateWithPopup } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, setDoc, writeBatch } from "firebase/firestore";
-import { Check, FileSpreadsheet, Loader2, MousePointer2, Save, ShieldCheck } from "lucide-react";
+import { Check, FileSpreadsheet, Loader2, MousePointer2, Save, ShieldCheck, X } from "lucide-react";
 import { auth, db } from "../services/firebase";
 
 type Sheet = { properties: { sheetId: number; title: string; gridProperties?: { rowCount?: number; columnCount?: number } }; data?: Array<{ rowData?: Array<{ values?: Array<{ formattedValue?: string; effectiveValue?: Record<string, unknown> }> }> }> };
@@ -50,6 +50,12 @@ const rangeBounds = (range: string) => {
   const first = parseCell(start);
   const last = parseCell(end);
   return { top: Math.min(first.row, last.row), bottom: Math.max(first.row, last.row), left: Math.min(first.column, last.column), right: Math.max(first.column, last.column) };
+};
+
+const rangesOverlap = (first: string, second: string) => {
+  const a = rangeBounds(first);
+  const b = rangeBounds(second);
+  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
 };
 
 export function SeasonReviewPanel({ splits }: { splits: any[] }) {
@@ -203,6 +209,9 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       const circuitIds = circuitNames.map(name => name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
       const scoreMatrix = readMatrixEntries("puntuacionPilotoCircuito");
       const scoreColumns = Math.max(0, ...scoreMatrix.map(row => row.length));
+      const scoreEntries = mappings.puntuacionPilotoCircuito || [];
+      const overlappingScores = scoreEntries.flatMap((entry, index) => scoreEntries.slice(index + 1).filter(other => entry.sheetId === other.sheetId && rangesOverlap(entry.range, other.range)).map(other => `${entry.range} y ${other.range}`));
+      if (overlappingScores.length) throw new Error(`Hay rangos de puntuación solapados: ${overlappingScores.join(", ")}. Conserva solo la matriz sin el total ni los encabezados.`);
       const incompleteRows = scoreMatrix.map((row, index) => row.length < circuitNames.length ? index + 1 : 0).filter(Boolean);
       if (scoreMatrix.length !== pilotNames.length || scoreColumns < circuitNames.length || incompleteRows.length > 0) {
         const rowShape = scoreMatrix.map(row => row.length).join(", ");
@@ -248,6 +257,16 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
     if (nextField) setField(nextField[0]);
   };
 
+  const removeMapping = async (key: string, index: number) => {
+    const nextEntries = (mappings[key] || []).filter((_, entryIndex) => entryIndex !== index);
+    const nextMappings = { ...mappings };
+    if (nextEntries.length) nextMappings[key] = nextEntries;
+    else delete nextMappings[key];
+    setMappings(nextMappings);
+    await setDoc(doc(db, "admin_excel_mappings", seasonId), { seasonId, spreadsheetUrl: url, mappings: nextMappings, updatedAt: new Date().toISOString() }, { merge: true });
+    setMessage("Rango eliminado del mapeo.");
+  };
+
   return (
     <section className="space-y-5">
       <div className="border border-white/10 bg-white/[0.03] p-5 rounded-sm">
@@ -281,7 +300,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         </div>
       </div>}
 
-      {Object.keys(mappings).length > 0 && <div className="border border-white/10 p-4"><h3 className="text-xs font-black uppercase tracking-wider mb-3">Mapeo guardado</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-2">{Object.entries(mappings).map(([key, values]) => <div key={key} className="bg-white/[0.03] px-3 py-2 text-[10px]"><div className="flex items-center justify-between mb-1"><span className="text-white/60">{FIELD_OPTIONS.find(item => item[0] === key)?.[1]}</span><span className="text-white/35">{values.length} rango{values.length === 1 ? "" : "s"}</span></div><div className="space-y-1">{values.map(value => <div key={`${value.sheetId}-${value.range}`} className="flex items-center justify-between gap-2"><span className="font-mono text-emerald-300">{value.range} <Check className="inline w-3 h-3" /></span><span className="text-white/35 font-mono truncate">{value.preview.join(" / ") || "Rango vacío"}</span></div>)}</div></div>)}</div></div>}
+      {Object.keys(mappings).length > 0 && <div className="border border-white/10 p-4"><h3 className="text-xs font-black uppercase tracking-wider mb-3">Mapeo guardado</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-2">{Object.entries(mappings).map(([key, values]) => <div key={key} className="bg-white/[0.03] px-3 py-2 text-[10px]"><div className="flex items-center justify-between mb-1"><span className="text-white/60">{FIELD_OPTIONS.find(item => item[0] === key)?.[1]}</span><span className="text-white/35">{values.length} rango{values.length === 1 ? "" : "s"}</span></div><div className="space-y-1">{values.map((value, index) => <div key={`${value.sheetId}-${value.range}`} className="flex items-center justify-between gap-2"><span className="font-mono text-emerald-300">{value.range} <Check className="inline w-3 h-3" /></span><span className="text-white/35 font-mono truncate">{value.preview.join(" / ") || "Rango vacío"}</span><button onClick={() => removeMapping(key, index)} className="shrink-0 text-white/30 hover:text-red-300" title="Eliminar rango"><X className="w-3.5 h-3.5" /></button></div>)}</div></div>)}</div></div>}
     </section>
   );
 }
