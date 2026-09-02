@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { GoogleAuthProvider, linkWithPopup, reauthenticateWithPopup } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, writeBatch } from "firebase/firestore";
 import { Check, FileSpreadsheet, Loader2, MousePointer2, Save, ShieldCheck } from "lucide-react";
 import { auth, db } from "../services/firebase";
 
@@ -38,10 +38,25 @@ const columnName = (index: number) => {
 
 const parseSpreadsheetId = (url: string) => url.match(/\/spreadsheets\/d\/([^/]+)/)?.[1] || "";
 
+const parseCell = (value: string) => {
+  const match = value.match(/^([A-Z]+)(\d+)$/i);
+  if (!match) throw new Error(`Celda inválida: ${value}`);
+  const column = match[1].toUpperCase().split("").reduce((total, character) => total * 26 + character.charCodeAt(0) - 64, 0) - 1;
+  return { row: Number(match[2]) - 1, column };
+};
+
+const rangeBounds = (range: string) => {
+  const [start, end = start] = range.split(":");
+  const first = parseCell(start);
+  const last = parseCell(end);
+  return { top: Math.min(first.row, last.row), bottom: Math.max(first.row, last.row), left: Math.min(first.column, last.column), right: Math.max(first.column, last.column) };
+};
+
 export function SeasonReviewPanel({ splits }: { splits: any[] }) {
   const [url, setUrl] = useState("https://docs.google.com/spreadsheets/d/1htpqPEtKNDxAadBAP_OlxX1JlzFG4LwiLxtOyxQo3Zc/edit");
   const [seasonId, setSeasonId] = useState(splits.find(split => split.id === "origins")?.id || splits[0]?.id || "origins");
   const [sheets, setSheets] = useState<Sheet[]>([]);
+  const [sheetGrids, setSheetGrids] = useState<Record<number, Cell[][]>>({});
   const [activeSheetId, setActiveSheetId] = useState<number | null>(null);
   const [grid, setGrid] = useState<Cell[][]>([]);
   const [token, setToken] = useState("");
@@ -51,6 +66,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [importing, setImporting] = useState(false);
   const visibleFieldOptions = seasonId === "origins" ? ORIGINS_FIELDS : FIELD_OPTIONS;
 
   useEffect(() => {
@@ -147,7 +163,56 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
     })));
     setActiveSheetId(sheet.properties.sheetId);
     setGrid(nextGrid);
+    setSheetGrids(current => ({ ...current, [sheet.properties.sheetId]: nextGrid }));
     setSelection(null);
+  };
+
+  const importOrigins = async () => {
+    setImporting(true);
+    setMessage("");
+    try {
+      if (seasonId !== "origins") throw new Error("La importación de Origins solo puede ejecutarse con la temporada Origins seleccionada.");
+      const requiredFields = ["pilotos", "circuitos", "equipos", "puntuacionPilotoCircuito", "puntuacionTotalPiloto", "puntuacionTotalEquipo"];
+      const missing = requiredFields.filter(key => !mappings[key]?.length);
+      if (missing.length) throw new Error(`Faltan rangos obligatorios: ${missing.join(", ")}.`);
+      const readEntries = (key: string) => (mappings[key] || []).flatMap(entry => {
+        const source = sheetGrids[entry.sheetId];
+        if (!source) throw new Error(`La hoja del rango ${entry.range} no está cargada. Vuelve a conectar el documento.`);
+        const bounds = rangeBounds(entry.range);
+        return source.slice(bounds.top, bounds.bottom + 1).map(row => row.slice(bounds.left, bounds.right + 1).map(cell => cell.value.trim()));
+      });
+      const clean = (value: string) => value.replace(/\s+/g, " ").trim();
+      const pilotNames = readEntries("pilotos").flat().map(clean).filter(Boolean);
+      const circuitNames = readEntries("circuitos").flat().map(clean).filter(Boolean);
+      const duoNames = readEntries("equipos").flat().map(clean).filter(Boolean);
+      if (!pilotNames.length || !circuitNames.length || !duoNames.length) throw new Error("Los rangos seleccionados no contienen pilotos, circuitos o dúos reconocibles.");
+      const pilotIds = pilotNames.map(name => `piloto_${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`);
+      const circuitIds = circuitNames.map(name => name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+      const scoreMatrix = readEntries("puntuacionPilotoCircuito");
+      if (scoreMatrix.length !== pilotNames.length || scoreMatrix.some(row => row.length < circuitNames.length)) throw new Error("La matriz de puntuaciones no coincide con el número de pilotos y circuitos seleccionados.");
+      const number = (value: string, label: string) => { const parsed = Number(value.replace(",", ".")); if (!Number.isFinite(parsed)) throw new Error(`${label} no es un número válido.`); return parsed; };
+      const totalEntries = mappings.puntuacionTotalPiloto?.length ? readEntries("puntuacionTotalPiloto").flat().filter(Boolean) : [];
+      const pilotTotals = pilotNames.map((_, index) => totalEntries[index] ? number(totalEntries[index], `Total del piloto ${pilotNames[index]}`) : scoreMatrix[index].slice(0, circuitNames.length).reduce((sum, value, circuitIndex) => sum + number(value, `Puntuación ${pilotNames[index]} C${circuitIndex + 1}`), 0));
+      const teamTotals = mappings.puntuacionTotalEquipo?.length ? readEntries("puntuacionTotalEquipo").flat().filter(Boolean).map((value, index) => number(value, `Total del dúo ${duoNames[index]}`)) : [];
+      const teamScoreMatrix = mappings.puntuacionEquipoCircuito?.length ? readEntries("puntuacionEquipoCircuito") : [];
+      if (teamScoreMatrix.length && (teamScoreMatrix.length !== duoNames.length || teamScoreMatrix.some(row => row.length < circuitNames.length))) throw new Error("La matriz de puntuaciones de dúos no coincide con los equipos y circuitos seleccionados.");
+      const batch = writeBatch(db);
+      const [oldPilots, oldCircuits] = await Promise.all([getDocs(collection(db, "splits/origins/roster")), getDocs(collection(db, "splits/origins/circuitos"))]);
+      oldPilots.docs.forEach(snapshot => batch.delete(snapshot.ref));
+      oldCircuits.docs.forEach(snapshot => batch.delete(snapshot.ref));
+      pilotNames.forEach((name, pilotIndex) => {
+        batch.set(doc(db, "pilotos", pilotIds[pilotIndex]), { nombre: name }, { merge: true });
+        batch.set(doc(db, "splits/origins/roster", pilotIds[pilotIndex]), { pilotoId: pilotIds[pilotIndex], nombre: name, equipoId: "individual", puntos_piloto: pilotTotals[pilotIndex], puntos_equipos: 0 }, { merge: true });
+      });
+      circuitNames.forEach((name, circuitIndex) => batch.set(doc(db, "splits/origins/circuitos", circuitIds[circuitIndex]), { nombre: name, numero_carrera: circuitIndex + 1, completado: true, acta_cerrada: true, economia_procesada: false, resultados: pilotNames.map((pilotName, pilotIndex) => ({ pilotoId: pilotIds[pilotIndex], pilotoNombre: pilotName, puntos: number(scoreMatrix[pilotIndex][circuitIndex], `${pilotName} en ${name}`) })) }));
+      batch.set(doc(db, "splits", "origins"), { nombre: "Origins", orden: 0, tipo: "individual", activo: false, completado: true, fichajes_abiertos: false, source_url: url, duos: duoNames.map((name, index) => ({ id: `duo_${index + 1}`, nombre: name, puntos: teamTotals[index] ?? 0, puntos_carreras: teamScoreMatrix[index]?.slice(0, circuitNames.length).map((value, circuitIndex) => number(value, `${name} en C${circuitIndex + 1}`)) || [] })) }, { merge: true });
+      await batch.commit();
+      setMessage(`Origins cargado correctamente: ${pilotNames.length} pilotos, ${circuitNames.length} circuitos y ${duoNames.length} dúos. La clasificación se actualizará al recargar.`);
+    } catch (error: any) {
+      setMessage(`Error de importación: ${error.message || "datos no válidos"}`);
+    } finally {
+      setImporting(false);
+    }
   };
 
   const saveSelection = async () => {
@@ -180,7 +245,8 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
           <input value={url} onChange={event => setUrl(event.target.value)} className="bg-black/30 border border-white/10 px-3 py-2 text-xs text-white" placeholder="Enlace de Google Sheets" />
           <button onClick={loadSpreadsheet} disabled={busy} className="inline-flex items-center justify-center gap-2 bg-[#e10600] px-4 py-2 text-[10px] font-black uppercase tracking-wider disabled:opacity-50">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />} Conectar en lectura</button>
         </div>
-        {message && <p className="mt-3 text-xs text-emerald-300">{message}</p>}
+        {message && <p className={`mt-3 text-xs ${message.startsWith("Error") ? "text-red-300" : "text-emerald-300"}`}>{message}</p>}
+        {sheets.length > 0 && seasonId === "origins" && <button onClick={importOrigins} disabled={importing} className="mt-4 inline-flex items-center gap-2 border border-amber-500/40 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-50"><Save className="w-4 h-4" />{importing ? "Validando e importando..." : "Cargar Origins en Firestore"}</button>}
       </div>
 
       {sheets.length > 0 && <div className="border border-white/10 bg-white/[0.02] rounded-sm overflow-hidden">
