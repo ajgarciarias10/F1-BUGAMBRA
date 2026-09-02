@@ -74,6 +74,12 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
   const [dragging, setDragging] = useState(false);
   const [importing, setImporting] = useState(false);
   const visibleFieldOptions = seasonId === "origins" ? ORIGINS_FIELDS : FIELD_OPTIONS;
+  const reviewSeasons = [
+    { id: "origins", label: "Origins" },
+    { id: "split_1", label: "Temporada 1 · Split 1" },
+    { id: "split_2", label: "Temporada 1 · Split 2" },
+    ...splits.filter(split => !["origins", "split_1", "split_2"].includes(split.id)).map(split => ({ id: split.id, label: split.nombre })),
+  ];
 
   useEffect(() => {
     if (!visibleFieldOptions.some(([value]) => value === field)) {
@@ -242,6 +248,63 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
     }
   };
 
+  const importTeamSplit = async () => {
+    setImporting(true);
+    setMessage("");
+    try {
+      if (seasonId === "origins") throw new Error("Selecciona un split de equipos.");
+      const requiredFields = ["pilotos", "circuitos", "equipos", "equipoPiloto", "puntuacionPilotoCircuito", "puntuacionTotalPiloto", "puntuacionTotalEquipo"];
+      const missing = requiredFields.filter(key => !mappings[key]?.length);
+      if (missing.length) throw new Error(`Faltan rangos obligatorios: ${missing.join(", ")}.`);
+      const readEntries = (key: string) => (mappings[key] || []).flatMap(entry => {
+        const source = sheetGrids[entry.sheetId];
+        if (!source) throw new Error(`La hoja del rango ${entry.range} no está cargada. Vuelve a conectar el documento.`);
+        const bounds = rangeBounds(entry.range);
+        return source.slice(bounds.top, bounds.bottom + 1).map(row => row.slice(bounds.left, bounds.right + 1).map(cell => cell.value.trim()));
+      });
+      const readMatrix = (key: string) => {
+        const matrices = (mappings[key] || []).map(entry => {
+          const source = sheetGrids[entry.sheetId];
+          if (!source) throw new Error(`La hoja del rango ${entry.range} no está cargada. Vuelve a conectar el documento.`);
+          const bounds = rangeBounds(entry.range);
+          return source.slice(bounds.top, bounds.bottom + 1).map(row => row.slice(bounds.left, bounds.right + 1).map(cell => cell.value.trim()));
+        });
+        if (matrices.length <= 1) return matrices[0] || [];
+        if (matrices.every(matrix => matrix.length === matrices[0].length)) return matrices[0].map((row, index) => matrices.reduce((result, matrix) => [...result, ...(matrix[index] || [])], [] as string[]));
+        return matrices.flat();
+      };
+      const clean = (value: string) => value.replace(/\s+/g, " ").trim();
+      const id = (value: string, prefix: string) => `${prefix}_${clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+      const pilotNames = readEntries("pilotos").flat().map(clean).filter(Boolean);
+      const circuitNames = readEntries("circuitos").flat().map(clean).filter(Boolean);
+      const teamNames = readEntries("equipos").flat().map(clean).filter(Boolean);
+      const pilotTeams = readEntries("equipoPiloto").flat().map(clean).filter(Boolean);
+      const scoreMatrix = readMatrix("puntuacionPilotoCircuito");
+      if (pilotTeams.length !== pilotNames.length) throw new Error(`Equipo de cada piloto: hay ${pilotTeams.length} valores para ${pilotNames.length} pilotos.`);
+      if (scoreMatrix.length !== pilotNames.length || scoreMatrix.some(row => row.length !== circuitNames.length)) throw new Error(`La matriz debe tener ${pilotNames.length} filas de ${circuitNames.length} columnas.`);
+      const number = (value: string, label: string) => { const parsed = Number(value.replace(",", ".")); if (!Number.isFinite(parsed)) throw new Error(`${label} no es un número válido.`); return parsed; };
+      const pilotTotals = readEntries("puntuacionTotalPiloto").flat().filter(Boolean).map((value, index) => number(value, `Total de ${pilotNames[index]}`));
+      const teamTotals = readEntries("puntuacionTotalEquipo").flat().filter(Boolean).map((value, index) => number(value, `Total de ${teamNames[index]}`));
+      const teamScoreMatrix = mappings.puntuacionEquipoCircuito?.length ? readMatrix("puntuacionEquipoCircuito") : [];
+      const teamIdByName = new Map(teamNames.map((name, index) => [clean(name).toLowerCase(), id(name, "equipo")]));
+      const pilotIds = pilotNames.map(name => id(name, "piloto"));
+      const circuitIds = circuitNames.map(name => id(name, "circuito"));
+      const teamIds = teamNames.map(name => teamIdByName.get(clean(name).toLowerCase())!);
+      const resolvedTeamIds = pilotTeams.map((team, index) => teamIdByName.get(clean(team).toLowerCase()) || (() => { throw new Error(`No se encontró el equipo "${team}" del piloto ${pilotNames[index]}.`); })());
+      const batch = writeBatch(db);
+      const [oldRoster, oldTeams] = await Promise.all([getDocs(collection(db, `splits/${seasonId}/roster`)), getDocs(collection(db, `splits/${seasonId}/equipos`))]);
+      oldRoster.docs.forEach(snapshot => batch.delete(snapshot.ref));
+      oldTeams.docs.forEach(snapshot => batch.delete(snapshot.ref));
+      batch.set(doc(db, "temporadas", "temporada_1"), { nombre: "Temporada 1", orden: 1, activa: false, splits: ["split_1", "split_2"] }, { merge: true });
+      batch.set(doc(db, "splits", seasonId), { nombre: seasonId === "split_1" ? "Split 1" : "Split 2", temporadaId: "temporada_1", tipo: "equipos", orden: seasonId === "split_1" ? 1 : 2, activo: false, completado: true, fichajes_abiertos: false, source_url: url }, { merge: true });
+      teamNames.forEach((name, index) => batch.set(doc(db, `splits/${seasonId}/equipos`, teamIds[index]), { nombre: name, puntos_constructores: teamTotals[index] || 0, presupuesto: 0, puntos_carreras: teamScoreMatrix[index]?.slice(0, circuitNames.length) || [] }));
+      pilotNames.forEach((name, pilotIndex) => { const pilotData = { pilotoId: pilotIds[pilotIndex], nombre: name, equipoId: resolvedTeamIds[pilotIndex], puntos_piloto: pilotTotals[pilotIndex] || 0, puntos_equipos: 0, precio_compra: 0 }; batch.set(doc(db, "pilotos", pilotIds[pilotIndex]), { nombre: name }, { merge: true }); batch.set(doc(db, `splits/${seasonId}/roster`, pilotIds[pilotIndex]), pilotData); batch.set(doc(db, `splits/${seasonId}/equipos/${resolvedTeamIds[pilotIndex]}/pilotos`, pilotIds[pilotIndex]), pilotData); });
+      circuitNames.forEach((name, circuitIndex) => batch.set(doc(db, `splits/${seasonId}/circuitos`, circuitIds[circuitIndex]), { nombre: name, numero_carrera: circuitIndex + 1, completado: true, acta_cerrada: true, resultados: pilotNames.map((pilotName, pilotIndex) => ({ pilotoId: pilotIds[pilotIndex], pilotoNombre: pilotName, equipoId: resolvedTeamIds[pilotIndex], puntos: number(scoreMatrix[pilotIndex][circuitIndex], `${pilotName} en ${name}`) })) }));
+      await batch.commit();
+      setMessage(`${seasonId === "split_1" ? "Split 1" : "Split 2"} cargado correctamente: ${pilotNames.length} pilotos, ${teamNames.length} equipos y ${circuitNames.length} circuitos.`);
+    } catch (error: any) { setMessage(`Error de importación: ${error.message || "datos no válidos"}`); } finally { setImporting(false); }
+  };
+
   const saveSelection = async () => {
     if (!selectedRange || activeSheetId == null) return;
     const entry: MappingEntry = { sheetId: activeSheetId, range: selectedRange.range, preview: selectedRange.values.slice(0, 3).map(row => row.join(" | ")) };
@@ -277,13 +340,13 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         <div className="grid grid-cols-1 lg:grid-cols-[180px_1fr_auto] gap-3">
           <select value={seasonId} onChange={event => setSeasonId(event.target.value)} className="bg-black/30 border border-white/10 px-3 py-2 text-xs text-white">
             <option value="origins">Origins</option>
-            {splits.filter(split => split.id !== "origins").map(split => <option key={split.id} value={split.id}>{split.nombre}</option>)}
+            {reviewSeasons.slice(1).map(season => <option key={season.id} value={season.id}>{season.label}</option>)}
           </select>
           <input value={url} onChange={event => setUrl(event.target.value)} className="bg-black/30 border border-white/10 px-3 py-2 text-xs text-white" placeholder="Enlace de Google Sheets" />
           <button onClick={loadSpreadsheet} disabled={busy} className="inline-flex items-center justify-center gap-2 bg-[#e10600] px-4 py-2 text-[10px] font-black uppercase tracking-wider disabled:opacity-50">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />} Conectar en lectura</button>
         </div>
         {message && <p className={`mt-3 text-xs ${message.startsWith("Error") ? "text-red-300" : "text-emerald-300"}`}>{message}</p>}
-        {sheets.length > 0 && seasonId === "origins" && <button onClick={importOrigins} disabled={importing} className="mt-4 inline-flex items-center gap-2 border border-amber-500/40 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-50"><Save className="w-4 h-4" />{importing ? "Validando e importando..." : "Cargar Origins en Firestore"}</button>}
+        {sheets.length > 0 && <button onClick={seasonId === "origins" ? importOrigins : importTeamSplit} disabled={importing} className="mt-4 inline-flex items-center gap-2 border border-amber-500/40 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-50"><Save className="w-4 h-4" />{importing ? "Validando e importando..." : `Cargar ${seasonId === "origins" ? "Origins" : seasonId === "split_1" ? "Split 1" : "Split 2"} en Firestore`}</button>}
       </div>
 
       {sheets.length > 0 && <div className="border border-white/10 bg-white/[0.02] rounded-sm overflow-hidden">
