@@ -1182,24 +1182,28 @@ export function AdminDashboard() {
                       }
                     }}
                   >
-                    {splits.filter(s => s.id === selectedSplitId && isSplitUnlocked(s.id, splits)).map(s => (
-                      <React.Fragment key={s.id}>
-                        <optgroup label={`${s.nombre} · Pendientes`}>
-                          {s.circuitos.filter((c: any) => !c.completado).map((c: any) => (
-                            <option key={`${s.id}-${c.id}`} value={`${s.id}|${c.id}`}>
-                              {c.nombre}
-                            </option>
-                          ))}
-                        </optgroup>
-                        <optgroup label={`${s.nombre} · Finalizados`}>
-                          {s.circuitos.filter((c: any) => c.completado).map((c: any) => (
-                            <option key={`${s.id}-${c.id}`} value={`${s.id}|${c.id}`}>
-                              ✓ {c.nombre}
-                            </option>
-                          ))}
-                        </optgroup>
-                      </React.Fragment>
-                    ))}
+                     {splits.filter(s => s.id === selectedSplitId && isSplitUnlocked(s.id, splits)).map(s => (
+                       <React.Fragment key={s.id}>
+                         {s.circuitos.some((c: any) => !c.completado) && (
+                           <optgroup label={`${s.nombre} · Pendientes`}>
+                             {s.circuitos.filter((c: any) => !c.completado).map((c: any) => (
+                               <option key={`${s.id}-${c.id}`} value={`${s.id}|${c.id}`}>
+                                 {c.nombre}
+                               </option>
+                             ))}
+                           </optgroup>
+                         )}
+                         {s.circuitos.some((c: any) => c.completado) && (
+                           <optgroup label={`${s.nombre} · Finalizados`}>
+                             {s.circuitos.filter((c: any) => c.completado).map((c: any) => (
+                               <option key={`${s.id}-${c.id}`} value={`${s.id}|${c.id}`}>
+                                 ✓ {c.nombre}
+                               </option>
+                             ))}
+                           </optgroup>
+                         )}
+                       </React.Fragment>
+                     ))}
                     <optgroup label="── Cambiar Split ──">
                       {splits.filter(s => s.id !== selectedSplitId && isSplitUnlocked(s.id, splits)).map(s => (
                         <option key={s.id} value={`${s.id}|`}>
