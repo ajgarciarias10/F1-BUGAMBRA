@@ -235,6 +235,7 @@ function useSplitsSource() {
             fichajes_abiertos: splitDoc.data().fichajes_abiertos ?? false,
             activo: splitDoc.data().activo ?? false,
             completado: splitDoc.data().completado ?? false,
+            temporada_iniciada: splitDoc.data().temporada_iniciada ?? false,
             tipo: splitDoc.data().tipo ?? "equipos",
             duos: splitDoc.data().duos ?? [],
             rivalries: splitDoc.data().rivalries,

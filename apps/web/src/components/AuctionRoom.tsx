@@ -3,8 +3,9 @@ import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore"
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  SALA_VACIA, adjudicarSubasta, cerrarSala, configurarSala, leerEquiposDeSubasta,
-  pujar, sacarPilotoASubasta, puedePujar,
+  SALA_VACIA, adjudicarSubasta, cerrarSala, comenzarTemporada, configurarSala,
+  deshacerAdjudicacionSimulada, leerEquiposDeSubasta, prorrogarSubasta, pujar,
+  sacarPilotoASubasta, puedePujar,
   type EquipoEnSubasta, type SalaSubasta, type TipoOperacion,
 } from "../services/auctionService";
 import { ChevronLeft, ChevronRight, Gavel, Loader2, Timer, Trophy, Users } from "lucide-react";
@@ -39,6 +40,18 @@ const ANIMACIONES = `
 function segundosRestantes(terminaEn: number | null): number {
   if (terminaEn == null) return 0;
   return Math.max(0, (terminaEn - Date.now()) / 1000);
+}
+
+function parsearImporte(value: string): number {
+  return Number(value.replace(",", "."));
+}
+
+function formatearNumero(value: number): string {
+  return value.toFixed(1).replace(".", ",");
+}
+
+function formatearMillones(value: number): string {
+  return `${formatearNumero(value)}M`;
 }
 
 // Cuenta atrás hasta la apertura, partida en bloques para que se lea de un vistazo.
@@ -79,7 +92,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const [flashProrroga, setFlashProrroga] = useState(false);
   const [ahora, setAhora] = useState(() => Date.now());
   const [panelAbierto, setPanelAbierto] = useState(false);
-  const [oferta, setOferta] = useState(0);
+  const [oferta, setOferta] = useState("0.0");
   const [latidoCifra, setLatidoCifra] = useState(0);
 
   const split = useMemo(() => splits.find((s: any) => s.id === splitId), [splits, splitId]);
@@ -132,7 +145,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
   // Al agotarse el tiempo adjudica el admin, que es quien tiene permisos para mover dinero.
   useEffect(() => {
-    if (!esAdmin || sala.estado !== "en_curso" || restante > 0 || sala.termina_en == null) return;
+    if (!esAdmin || sala.estado !== "en_curso" || sala.termina_en == null || sala.termina_en > Date.now()) return;
     setOcupado(true);
     adjudicarSubasta(splitId)
       .then(resultado => setAviso(resultado.message))
@@ -141,7 +154,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
   // La oferta del panel arranca siempre justo por encima de lo que hay sobre la mesa.
   useEffect(() => {
-    setOferta(sala.puja_actual != null ? Math.round((sala.puja_actual + 0.5) * 10) / 10 : 1);
+    setOferta(formatearNumero(sala.puja_actual != null ? Math.round((sala.puja_actual + 0.5) * 10) / 10 : 1));
     if (sala.puja_actual != null) setLatidoCifra(n => n + 1);
   }, [sala.puja_actual, sala.pilotoId]);
 
@@ -167,7 +180,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
   const miEquipo = miEquipoId ? equipos.find(equipo => equipo.id === miEquipoId) || null : null;
   const puedoAbrir = !!miEquipo && !miEquipo.completo && sala.estado === "esperando_apertura";
-  const puedoPujar = !!miEquipo && !miEquipo.completo && sala.estado === "en_curso" && sala.puja_equipo_id !== miEquipoId;
+  const puedoPujar = !!miEquipo && !miEquipo.completo && sala.estado === "en_curso";
   const soyPujadorMax = !!miEquipoId && sala.puja_equipo_id === miEquipoId;
 
   const duracionTotal = Math.max(1, sala.duracion_segundos);
@@ -219,6 +232,51 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     lanzarPuja(Math.round((base + paso) * 10) / 10);
   };
 
+  const concederProrroga = async () => {
+    setOcupado(true);
+    try {
+      const resultado = await prorrogarSubasta(splitId);
+      setAviso(resultado.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const adjudicarAhora = async () => {
+    const detalle = sala.estado === "en_curso" && restante > 0
+      ? ` Quedan ${restante.toFixed(1)} segundos.`
+      : "";
+    if (!window.confirm(`¿Adjudicar la subasta ahora?${detalle}`)) return;
+    setOcupado(true);
+    try {
+      const resultado = await adjudicarSubasta(splitId, true);
+      setAviso(resultado.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const deshacerSimulacion = async () => {
+    setOcupado(true);
+    try {
+      const resultado = await deshacerAdjudicacionSimulada(splitId);
+      setAviso(resultado.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const iniciarTemporada = async () => {
+    if (!window.confirm(`¿Comenzar ${split?.nombre || splitId}? Se cerrará el mercado y se desactivarán los demás splits.`)) return;
+    setOcupado(true);
+    try {
+      const resultado = await comenzarTemporada(splitId);
+      setAviso(resultado.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const adjudicacion = sala.adjudicacion;
@@ -226,22 +284,25 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const puedoOfertar = puedoAbrir || puedoPujar;
   const minimo = sala.puja_actual != null ? Math.round((sala.puja_actual + 0.1) * 10) / 10 : null;
   const saldo = miEquipo?.presupuesto ?? 0;
-  const ofertaValida = Number.isFinite(oferta) && (minimo == null || oferta >= minimo) && oferta <= saldo;
+  const ofertaNumero = parsearImporte(oferta);
+  const ofertaValida = oferta.trim() !== "" && oferta !== "-" && Number.isFinite(ofertaNumero)
+    && (minimo == null || ofertaNumero >= minimo) && ofertaNumero <= saldo;
 
   const ajustarOferta = (paso: number) => setOferta(actual => {
-    const siguiente = Math.round((actual + paso) * 10) / 10;
-    return minimo == null ? siguiente : Math.max(minimo, siguiente);
+    const actualNumero = parsearImporte(actual);
+    const siguiente = Math.round(((Number.isFinite(actualNumero) ? actualNumero : 0) + paso) * 10) / 10;
+    return formatearNumero(minimo == null ? siguiente : Math.max(minimo, siguiente));
   });
 
   const confirmarOferta = async () => {
-    await lanzarPuja(oferta);
+    await lanzarPuja(ofertaNumero);
     setPanelAbierto(false);
   };
 
   const pasarAlSiguiente = async () => {
     setOcupado(true);
     try {
-      await cerrarSala(splitId);
+      await cerrarSala(splitId, false);
       setPilotoElegido("");
       setAviso("Sala preparada para el siguiente piloto.");
     } finally {
@@ -274,8 +335,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
           </div>
           <p className="text-xs text-white/45 mt-1 max-w-2xl">
             No hay precio de salida ni turnos: cualquier jeque puede poner la primera cifra y activar el
-            reloj. Desde ahí todos pueden pujar, incluida la escudería que tenía al piloto. Una oferta en
-            los últimos {sala.prorroga_segundos}s prorroga el reloj.
+            reloj. Desde ahí todos pueden seguir pujando, incluso quien lleve la máxima. Solo el
+            administrador puede conceder una prórroga de {sala.prorroga_segundos}s.
           </p>
         </div>
       </div>
@@ -296,7 +357,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
           <div className="flex flex-wrap items-end gap-3">
             <label className="space-y-1">
               <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Modo</span>
-              <select value={sala.modo} onChange={e => configurarSala(splitId, { modo: e.target.value as any })}
+              <select value={sala.modo} disabled={sala.simulacion_reversiones.length > 0}
+                onChange={e => configurarSala(splitId, { modo: e.target.value as any })}
                 className="bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]">
                 <option value="simulacro">Simulacro</option>
                 <option value="real">Real</option>
@@ -358,11 +420,27 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gavel className="w-3.5 h-3.5" />}
               Sacar a subasta
             </button>
-            <button onClick={async () => { setOcupado(true); setAviso((await adjudicarSubasta(splitId)).message); setOcupado(false); }}
+            <button onClick={adjudicarAhora}
               disabled={ocupado || sala.estado === "inactiva" || sala.estado === "adjudicada"}
               className="border border-emerald-400/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 disabled:opacity-30">
               Adjudicar ya
             </button>
+            <button onClick={concederProrroga}
+              disabled={ocupado || sala.estado !== "en_curso" || sala.prorroga_segundos <= 0}
+              className="border border-amber-300/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-30">
+              Dar prórroga +{sala.prorroga_segundos}s
+            </button>
+            <button onClick={iniciarTemporada}
+              disabled={ocupado || !!split?.temporada_iniciada || sala.estado === "en_curso" || sala.estado === "esperando_apertura" || sala.simulacion_reversiones.length > 0}
+              className="border border-sky-300/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-30">
+              {split?.temporada_iniciada ? "Temporada iniciada" : `Comenzar ${split?.nombre || "temporada"}`}
+            </button>
+            {sala.simulacion_reversiones.length > 0 && (
+              <button onClick={deshacerSimulacion} disabled={ocupado}
+                className="border border-sky-300/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-30">
+                Deshacer simulacro ({sala.simulacion_reversiones.length})
+              </button>
+            )}
             <button onClick={async () => { setOcupado(true); await cerrarSala(splitId); setAviso("Sala vaciada."); setOcupado(false); }}
               disabled={ocupado}
               className="border border-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white/40 disabled:opacity-30">
@@ -456,7 +534,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   </span>
                   <span className="flex items-center gap-2 font-black tabular-nums text-lg">
                     <ChevronLeft className="w-4 h-4 opacity-60" />
-                    {puedoOfertar ? `${oferta}M` : "—"}
+                    {puedoOfertar && ofertaValida ? formatearMillones(ofertaNumero) : "—"}
                     <ChevronRight className="w-4 h-4 opacity-60" />
                   </span>
                 </button>
@@ -466,9 +544,9 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   <button key={paso} onClick={() => subidaRapida(paso)} disabled={ocupado}
                     style={{ animation: `subasta-fila 0.35s ease-out ${0.06 * (indice + 1)}s both` }}
                     className={`${filaOpcion} bg-white/[0.02] hover:bg-white/[0.06] disabled:opacity-30`}>
-                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">Subir {paso}M</span>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">Subir {formatearMillones(paso)}</span>
                     <span className="font-black tabular-nums text-white/80">
-                      {Math.round(((sala.puja_actual ?? 0) + paso) * 10) / 10}M
+                      {formatearMillones(Math.round(((sala.puja_actual ?? 0) + paso) * 10) / 10)}
                     </span>
                   </button>
                 ))}
@@ -476,7 +554,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 {soyPujadorMax && (
                   <div className={`${filaOpcion} bg-emerald-500/10`}>
                     <span className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-400">Vas ganando</span>
-                    <span className="font-black tabular-nums text-emerald-400">{sala.puja_actual}M</span>
+                    <span className="font-black tabular-nums text-emerald-400">{formatearMillones(sala.puja_actual!)}</span>
                   </div>
                 )}
 
@@ -494,9 +572,9 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 {([
                   ["Piloto", sala.pilotoNombre ?? "—"],
                   ["Venía de", sala.equipo_anterior_nombre ?? "agente libre"],
-                  ["Oferta actual", sala.puja_actual == null ? "—" : `${sala.puja_actual}M`],
+                  ["Oferta actual", sala.puja_actual == null ? "—" : formatearMillones(sala.puja_actual)],
                   ["Máxima puja de", sala.puja_equipo_nombre ?? "—"],
-                  ["Tu saldo", miEquipo ? `${saldo.toFixed(1)}M` : "—"],
+                  ["Tu saldo", miEquipo ? formatearMillones(saldo) : "—"],
                   ["Tiempo restante", sala.estado === "en_curso" ? `${restante.toFixed(1)}s` : "—"],
                 ] as const).map(([etiqueta, valor], indice) => (
                   <div key={etiqueta}
@@ -547,7 +625,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               {flashProrroga && (
                 <p className="text-center text-[11px] font-black uppercase tracking-[0.3em] text-amber-300"
                   style={{ animation: "subasta-flash 1.8s ease-out" }}>
-                  ¡Prórroga! El reloj vuelve a {sala.prorroga_segundos}s
+                  ¡Prórroga concedida! +{sala.prorroga_segundos}s
                 </p>
               )}
             </div>
@@ -569,20 +647,29 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   <p className="mt-1 text-4xl md:text-5xl font-black uppercase tracking-[-0.03em] text-amber-300">
                     {adjudicacion.equipoNombre}
                   </p>
-                  <p className="mt-2 text-lg font-black tabular-nums">{adjudicacion.precio}M</p>
+                  <p className="mt-2 text-lg font-black tabular-nums">{formatearMillones(adjudicacion.precio)}</p>
                   {adjudicacion.modo === "simulacro" && (
                     <p className="mt-3 text-[9px] font-mono uppercase tracking-[0.25em] text-sky-300/70">
-                      Simulacro · no se ha movido dinero
+                      Simulacro aplicado · piloto y presupuesto temporales
                     </p>
                   )}
                 </>
               )}
               {esAdmin && (
-                <button onClick={pasarAlSiguiente} disabled={ocupado}
-                  className="mt-5 inline-flex items-center gap-2 border border-white/20 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/65 hover:border-white/50 hover:text-white disabled:opacity-30">
-                  {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                  Siguiente piloto
-                </button>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  {sala.simulacion_reversiones.length > 0 && (
+                    <button onClick={deshacerSimulacion} disabled={ocupado}
+                      className="inline-flex items-center gap-2 border border-sky-300/40 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-sky-300 hover:border-sky-300 disabled:opacity-30">
+                      {ocupado && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Deshacer adjudicación
+                    </button>
+                  )}
+                  <button onClick={pasarAlSiguiente} disabled={ocupado}
+                    className="inline-flex items-center gap-2 border border-white/20 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/65 hover:border-white/50 hover:text-white disabled:opacity-30">
+                    {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    Siguiente piloto
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -599,9 +686,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                     {puja.equipoNombre}
                   </span>
                   <span className="flex items-center gap-2">
-                    {puja.prorroga && <span className="text-amber-300/60 text-[8px] uppercase tracking-wider">prórroga</span>}
                     <span className={indice === 0 ? "text-white font-black tabular-nums" : "text-white/40 tabular-nums"}>
-                      {puja.importe}M
+                      {formatearMillones(puja.importe)}
                     </span>
                   </span>
                 </div>
@@ -631,7 +717,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               <div className="text-center">
                 <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">{sala.pilotoNombre}</p>
                 <p className="mt-1 text-[10px] font-mono text-white/25">
-                  {sala.puja_actual == null ? "Nadie ha pujado todavía" : `Va ganando ${sala.puja_equipo_nombre} con ${sala.puja_actual}M`}
+                  {sala.puja_actual == null ? "Nadie ha pujado todavía" : `Va ganando ${sala.puja_equipo_nombre} con ${formatearMillones(sala.puja_actual)}`}
                 </p>
               </div>
 
@@ -641,8 +727,13 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <div className="text-center min-w-[7rem]">
-                  <input type="number" step="0.1" value={oferta}
-                    onChange={e => setOferta(e.target.value === "" ? 0 : Number(e.target.value))}
+                  <input type="text" inputMode="decimal" value={oferta}
+                    onChange={e => {
+                      if (/^-?\d*(?:[.,]\d?)?$/.test(e.target.value)) setOferta(e.target.value);
+                    }}
+                    onBlur={() => {
+                      if (Number.isFinite(ofertaNumero)) setOferta(formatearNumero(ofertaNumero));
+                    }}
                     className={`block w-28 bg-transparent text-center text-4xl font-black tabular-nums leading-none outline-none ${ofertaValida ? "text-white" : "text-[#e10600]"}`} />
                   <span className="block mt-1 text-[8px] font-mono uppercase tracking-[0.3em] text-white/25">millones</span>
                 </div>
@@ -662,26 +753,26 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               </div>
 
               <div className="border-t border-white/[0.06] pt-4 space-y-1.5 text-[10px] font-mono">
-                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Mínimo</span><span className="text-white/60 tabular-nums">{minimo == null ? "Libre" : `${minimo}M`}</span></div>
-                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Tu saldo</span><span className="text-white/60 tabular-nums">{saldo.toFixed(1)}M</span></div>
+                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Mínimo</span><span className="text-white/60 tabular-nums">{minimo == null ? "Libre" : formatearMillones(minimo)}</span></div>
+                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Tu saldo</span><span className="text-white/60 tabular-nums">{formatearMillones(saldo)}</span></div>
                 <div className="flex justify-between">
                   <span className="text-white/30 uppercase tracking-[0.14em]">Te quedarían</span>
-                  <span className={`tabular-nums font-black ${saldo - oferta < 0 ? "text-[#e10600]" : "text-emerald-400"}`}>
-                    {(saldo - oferta).toFixed(1)}M
+                  <span className={`tabular-nums font-black ${saldo - ofertaNumero < 0 ? "text-[#e10600]" : "text-emerald-400"}`}>
+                    {Number.isFinite(ofertaNumero) ? formatearMillones(saldo - ofertaNumero) : "—"}
                   </span>
                 </div>
               </div>
 
               {!ofertaValida && (
                 <p className="text-[10px] font-mono text-[#e10600] text-center">
-                  {minimo != null && oferta < minimo ? `Hay que superar los ${sala.puja_actual}M.` : "No te llega el presupuesto."}
+                  {minimo != null && ofertaNumero < minimo ? `Hay que superar los ${formatearMillones(sala.puja_actual!)}.` : "Introduce una oferta válida dentro de tu presupuesto."}
                 </p>
               )}
 
               <button onClick={confirmarOferta} disabled={!ofertaValida || ocupado}
                 className="w-full flex items-center justify-center gap-2 bg-[#e10600] py-3 text-[11px] font-black uppercase tracking-[0.2em] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#ff1a09] transition-colors">
                 {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gavel className="w-4 h-4" />}
-                Confirmar {oferta}M
+                Confirmar {ofertaValida ? formatearMillones(ofertaNumero) : "oferta"}
               </button>
             </div>
           </div>
@@ -701,7 +792,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 : "border-white/[0.08] text-white/45"
               }`}>
               <span className="font-bold uppercase tracking-wider">{equipo.nombre}</span>
-              <span className="ml-2 tabular-nums">{equipo.presupuesto.toFixed(1)}M</span>
+              <span className="ml-2 tabular-nums">{formatearMillones(equipo.presupuesto)}</span>
               <span className="ml-2 inline-flex items-center gap-1 text-white/25">
                 <Users className="w-2.5 h-2.5" />{equipo.plantilla}/{sala.plazas_por_equipo}
               </span>

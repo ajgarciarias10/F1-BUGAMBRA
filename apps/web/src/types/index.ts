@@ -29,6 +29,7 @@ export interface Split {
   fichajes_abiertos: boolean;
   activo?: boolean;
   completado?: boolean;
+  temporada_iniciada?: boolean;
   tipo?: "equipos" | "individual";
   duos?: Array<{
     id: string;

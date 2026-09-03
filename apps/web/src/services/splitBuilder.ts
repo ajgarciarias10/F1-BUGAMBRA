@@ -313,6 +313,7 @@ export async function crearSplit(
       completado: false,
       activo: config.activo,
       fichajes_abiertos: config.fichajesAbiertos,
+      temporada_iniciada: false,
     }, { merge: true });
 
     await batch.commit();
