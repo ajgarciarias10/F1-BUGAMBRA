@@ -80,6 +80,117 @@ export async function leerCierreDeSplit(
   };
 }
 
+// ─── APERTURA DERIVADA ───────────────────────────────────────────────────────
+// La apertura de un bloque no se teclea: es el cierre del anterior menos lo que costó el
+// mercado. Y el registro de ese mercado es el propio roster del bloque nuevo, porque cada
+// ficha guarda el precio al que se fichó. Así la cuenta se puede repetir después de cada
+// movimiento sin llevar la cuenta a mano y sin que sumar dos veces cambie el resultado.
+
+export interface AperturaDerivada {
+  equipoId: string;
+  nombre: string;
+  cierreAnterior: number;
+  conciliado: boolean;
+  /** Lo que el equipo pagó (o cobró, si el precio era negativo) en el mercado del bloque. */
+  mercado: number;
+  apertura: number;
+  aperturaActual: number | null;
+  desvio: number;
+  detalle: string[];
+}
+
+export async function derivarAperturas(
+  splitId: string,
+  splitAnteriorId: string,
+): Promise<{ filas: AperturaDerivada[]; avisos: string[] }> {
+  const anterior = await leerCierreDeSplit(splitAnteriorId);
+  const cierres = new Map(anterior.equipos.map(e => [e.id, e]));
+  const avisos: string[] = [];
+
+  // El precio de compra del roster es el registro del mercado entre bloques. Un piloto
+  // fichado con el bloque ya empezado también lo lleva, pero su coste ya se descontó del
+  // presupuesto vivo: derivarlo entonces se lo cobraría dos veces.
+  const circuitosSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
+  const corridas = circuitosSnap.docs.filter(d => (d.data() as any).completado).length;
+  if (corridas > 0) {
+    avisos.push(`${splitId} ya tiene ${corridas} carrera(s) disputada(s): si has fichado con el bloque empezado, ese fichaje se cobraría dos veces.`);
+  }
+
+  const equiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
+  const filas: AperturaDerivada[] = [];
+
+  for (const equipoDoc of equiposSnap.docs) {
+    if (equipoDoc.id === "agente_libre") continue;
+    const data = equipoDoc.data() as any;
+    const nombre = data.nombre || equipoDoc.id;
+    const cierre = cierres.get(equipoDoc.id);
+    if (!cierre) {
+      avisos.push(`${nombre}: no existe en ${splitAnteriorId}, su apertura se queda como está.`);
+      continue;
+    }
+    if (!cierre.conciliado) {
+      avisos.push(`${nombre}: ${splitAnteriorId} no tiene cierre conciliado, se usa su presupuesto vivo (${cierre.saldoCierre}M).`);
+    }
+
+    const pilotosSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`));
+    const detalle: string[] = [];
+    let mercado = 0;
+    for (const pilotoDoc of pilotosSnap.docs) {
+      const ficha = pilotoDoc.data() as any;
+      const precio = Number(ficha.precio_compra ?? 0);
+      if (precio === 0) continue;
+      // Un piloto de precio negativo se cobra en vez de pagarse.
+      mercado = r1(mercado + (precio < 0 ? Math.abs(precio) : -precio));
+      detalle.push(`${ficha.nombre || pilotoDoc.id} ${precio < 0 ? "+" : "−"}${Math.abs(precio)}M`);
+    }
+
+    const apertura = r1(cierre.saldoCierre + mercado);
+    const aperturaActual = typeof data.presupuesto_inicial === "number" ? data.presupuesto_inicial : null;
+    filas.push({
+      equipoId: equipoDoc.id,
+      nombre,
+      cierreAnterior: cierre.saldoCierre,
+      conciliado: cierre.conciliado,
+      mercado,
+      apertura,
+      aperturaActual,
+      desvio: aperturaActual == null ? 0 : r1(apertura - aperturaActual),
+      detalle,
+    });
+  }
+
+  return { filas: filas.sort((a, b) => a.nombre.localeCompare(b.nombre)), avisos };
+}
+
+// Escribe las aperturas derivadas. El presupuesto vivo se mueve lo mismo que la apertura,
+// no se iguala a ella: lo gastado y lo ingresado dentro del bloque tiene que sobrevivir.
+export async function aplicarAperturas(
+  splitId: string,
+  filas: AperturaDerivada[],
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const cambios = filas.filter(fila => fila.aperturaActual == null || fila.desvio !== 0);
+    if (cambios.length === 0) return { ok: true, message: "Las aperturas ya estaban derivadas: no hay nada que cambiar." };
+
+    const batch = writeBatch(db);
+    for (const fila of cambios) {
+      const equipoRef = doc(db, `splits/${splitId}/equipos`, fila.equipoId);
+      const snap = await getDoc(equipoRef);
+      const data = snap.data() as any;
+      const vivo = Number(data?.presupuesto ?? 0);
+      const iniActual = typeof data?.presupuesto_inicial === "number" ? data.presupuesto_inicial : null;
+      batch.update(equipoRef, {
+        presupuesto_inicial: fila.apertura,
+        presupuesto: iniActual == null ? fila.apertura : r1(vivo + fila.apertura - iniActual),
+      });
+    }
+    await batch.commit();
+    return { ok: true, message: `Aperturas derivadas en ${cambios.length} escudería(s).` };
+  } catch (error: any) {
+    return { ok: false, message: `Error al aplicar las aperturas: ${error.message}` };
+  }
+}
+
 // Cuántas carreras se han disputado ya, para numerar el calendario del bloque nuevo.
 export async function contarCarrerasPrevias(splitIds: string[]): Promise<number> {
   let total = 0;

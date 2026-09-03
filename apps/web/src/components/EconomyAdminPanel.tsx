@@ -9,6 +9,7 @@ import {
   M_PUNTOS_FACTOR, M_POLE, M_VUELTA_RAPIDA, M_SIN_SANCIONADOS, M_PARTICIPACION,
   M_SOLO_POR_CARRERA,
 } from "../services/economyService";
+import { aplicarAperturas, derivarAperturas, type AperturaDerivada } from "../services/splitBuilder";
 import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -132,6 +133,12 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const [pendingPrecioCompra, setPendingPrecioCompra] = useState("");
   const [confirmingFichaje, setConfirmingFichaje] = useState(false);
 
+  // Apertura derivada del bloque anterior
+  const [aperturas, setAperturas] = useState<AperturaDerivada[] | null>(null);
+  const [avisosApertura, setAvisosApertura] = useState<string[]>([]);
+  const [derivando, setDerivando] = useState(false);
+  const [mensajeApertura, setMensajeApertura] = useState("");
+
   // Alta manual de pilotos en el split (liga nueva, debutantes, incorporaciones fuera de mercado)
   const [globalPilots, setGlobalPilots] = useState<Array<{ id: string; nombre: string }>>([]);
   const [altaModalOpen, setAltaModalOpen] = useState(false);
@@ -143,6 +150,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   useEffect(() => {
     if (selectedSplitId) loadData(selectedSplitId);
+    setAperturas(null);
+    setAvisosApertura([]);
+    setMensajeApertura("");
   }, [selectedSplitId]);
 
   useEffect(() => {
@@ -686,6 +696,46 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     }
   }
 
+  // ─── APERTURA DERIVADA DEL BLOQUE ANTERIOR ───────────────────────────────────
+
+  // El bloque anterior es el inmediatamente por debajo en orden: la apertura de este split
+  // sale de su cierre menos lo que costó el mercado, sin teclear ninguna cifra.
+  const splitAnteriorId: string | null = (() => {
+    const idx = activeSplits.findIndex((split: any) => split.id === selectedSplitId);
+    return idx > 0 ? activeSplits[idx - 1].id : null;
+  })();
+
+  async function previsualizarAperturas() {
+    if (!splitAnteriorId) return;
+    setDerivando(true);
+    setMensajeApertura("");
+    try {
+      const { filas, avisos } = await derivarAperturas(selectedSplitId, splitAnteriorId);
+      setAperturas(filas);
+      setAvisosApertura(avisos);
+    } catch (error: any) {
+      setMensajeApertura(`Error al derivar: ${error.message}`);
+    } finally {
+      setDerivando(false);
+    }
+  }
+
+  async function confirmarAperturas() {
+    if (!aperturas) return;
+    setDerivando(true);
+    try {
+      const resultado = await aplicarAperturas(selectedSplitId, aperturas);
+      setMensajeApertura(resultado.message);
+      if (resultado.ok) {
+        setAperturas(null);
+        setAvisosApertura([]);
+        await loadData(selectedSplitId);
+      }
+    } finally {
+      setDerivando(false);
+    }
+  }
+
   // ─── SISTEMA DE FICHAJES ─────────────────────────────────────────────────────
 
   function handleFichar(pilot: PilotRow) {
@@ -893,10 +943,90 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
       {/* ── TABLA EQUIPOS ── */}
       <div>
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-4 mb-4 flex-wrap">
           <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20">Resumen de Escuderías</p>
           <span className="text-[9px] font-mono text-white/15">· clic en inicial para establecer</span>
+          {splitAnteriorId && (
+            <button onClick={previsualizarAperturas} disabled={derivando}
+              className="ml-auto flex items-center gap-1.5 border border-white/10 px-2.5 py-1 text-[9px] font-mono uppercase tracking-widest text-white/40 hover:text-emerald-300 hover:border-emerald-300/30 transition-colors disabled:opacity-40">
+              {derivando ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              Derivar apertura desde {splitAnteriorId}
+            </button>
+          )}
         </div>
+
+        {mensajeApertura && (
+          <p className="mb-3 border border-white/10 px-3 py-2 text-[10px] font-mono text-white/50">{mensajeApertura}</p>
+        )}
+
+        {/* Previsualización: nada se escribe hasta confirmar. */}
+        {aperturas && (
+          <div className="mb-4 border border-emerald-300/25 bg-emerald-300/[0.03]">
+            <div className="px-4 py-3 border-b border-white/[0.06]">
+              <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-300/70">
+                Apertura derivada de {splitAnteriorId}
+              </p>
+              <p className="mt-1 text-[10px] font-mono text-white/35">
+                Cierre del bloque anterior menos lo que costó el mercado, tomado del precio de compra de cada ficha.
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[0.2em] text-white/25">
+                    <th className="py-2 px-4 text-left font-normal">Escudería</th>
+                    <th className="py-2 px-4 text-right font-normal">Cierre {splitAnteriorId}</th>
+                    <th className="py-2 px-4 text-right font-normal">Mercado</th>
+                    <th className="py-2 px-4 text-right font-normal">Apertura</th>
+                    <th className="py-2 px-4 text-right font-normal">Actual</th>
+                    <th className="py-2 px-4 text-right font-normal">Desvío</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {aperturas.map(fila => (
+                    <tr key={fila.equipoId}>
+                      <td className="py-2.5 px-4">
+                        <span className="font-black text-white text-sm tracking-tight">{fila.nombre}</span>
+                        {fila.detalle.length > 0 && (
+                          <span className="block text-[9px] font-mono text-white/25">{fila.detalle.join(" · ")}</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono tabular-nums text-white/50">{r1(fila.cierreAnterior)}M</td>
+                      <td className={`py-2.5 px-4 text-right font-mono tabular-nums ${fila.mercado < 0 ? "text-[#e10600]" : "text-emerald-400/70"}`}>
+                        {fila.mercado > 0 ? "+" : ""}{r1(fila.mercado)}M
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono font-black tabular-nums text-white">{r1(fila.apertura)}M</td>
+                      <td className="py-2.5 px-4 text-right font-mono tabular-nums text-white/35">
+                        {fila.aperturaActual == null ? "—" : `${r1(fila.aperturaActual)}M`}
+                      </td>
+                      <td className={`py-2.5 px-4 text-right font-mono tabular-nums ${fila.desvio === 0 ? "text-white/20" : "text-amber-300"}`}>
+                        {fila.desvio === 0 ? "—" : `${fila.desvio > 0 ? "+" : ""}${r1(fila.desvio)}M`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {avisosApertura.length > 0 && (
+              <ul className="px-4 py-3 border-t border-white/[0.06] space-y-1">
+                {avisosApertura.map((aviso, i) => (
+                  <li key={i} className="text-[10px] font-mono text-amber-300/70">⚠ {aviso}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-2 px-4 py-3 border-t border-white/[0.06]">
+              <button onClick={() => { setAperturas(null); setAvisosApertura([]); }} disabled={derivando}
+                className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest text-white/40 hover:text-white/70 border border-white/10 transition-colors disabled:opacity-40">
+                Descartar
+              </button>
+              <button onClick={confirmarAperturas} disabled={derivando}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest bg-emerald-500 hover:bg-emerald-400 text-black transition-colors disabled:opacity-40">
+                {derivando && <Loader2 className="w-3 h-3 animate-spin" />}
+                Aplicar aperturas
+              </button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto border border-white/[0.06]">
           <table className="w-full text-xs border-collapse">
             <thead>

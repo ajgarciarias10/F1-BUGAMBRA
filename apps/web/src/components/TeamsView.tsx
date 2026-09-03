@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Play, Shield, Users } from "lucide-react";
+import { ChevronRight, Crown, Play, Shield, Users } from "lucide-react";
+import { useUsuarios } from "../hooks/useData";
 import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
 
 interface TeamsViewProps {
@@ -20,6 +21,18 @@ function ratingAccent(rating: number): string {
 
 export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto, darkMode = false }: TeamsViewProps) {
   const [selectedTeamId, setSelectedTeamId] = useState("");
+  const { usuarios } = useUsuarios();
+
+  // El jeque se asigna a la escudería, no al split: los ids de equipo se mantienen entre
+  // bloques, así que el mismo mapa sirve para cualquier split del archivo.
+  const jequesPorEquipo = useMemo(() => {
+    const result: Record<string, Array<{ nombre: string; foto_url?: string }>> = {};
+    for (const usuario of usuarios) {
+      if (usuario.rol !== "jeque" || !usuario.escuderia_id) continue;
+      (result[usuario.escuderia_id] ??= []).push({ nombre: usuario.nombre, foto_url: usuario.foto_url });
+    }
+    return result;
+  }, [usuarios]);
 
   useEffect(() => {
     setSelectedTeamId("");
@@ -36,6 +49,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
   }, [currentSplit]);
 
   const selectedTeam = (currentSplit?.equipos || []).find((team: any) => team.id === selectedTeamId);
+  const selectedJeques = selectedTeam ? jequesPorEquipo[selectedTeam.id] || [] : [];
   const selectedPilots = selectedTeam ? pilotsByTeam[selectedTeam.id] || [] : [];
   const selectedAverage = selectedPilots.length
     ? Math.round(selectedPilots.reduce((sum, pilot) => sum + (Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70), 0) / selectedPilots.length)
@@ -152,6 +166,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                 ? Math.round(pilots.reduce((sum, pilot) => sum + (Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70), 0) / pilots.length)
                 : 0;
               const selected = team.id === selectedTeamId;
+              const jeques = jequesPorEquipo[team.id] || [];
               return (
                 <button
                   key={team.id}
@@ -175,6 +190,18 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                       <div className="min-w-0">
                         <h3 className="text-lg font-black uppercase tracking-[-0.03em] truncate">{team.nombre}</h3>
                         <span className="text-[9px] font-mono uppercase tracking-[0.2em] opacity-40">{pilots.length} pilotos</span>
+                        {jeques.length > 0 && (
+                          <span className="mt-1.5 flex flex-col gap-0.5 min-w-0">
+                            {jeques.map((jeque, i) => (
+                              <span key={i} className="flex items-center gap-1.5 min-w-0">
+                                {jeque.foto_url
+                                  ? <img src={jeque.foto_url} alt="" className="w-4 h-4 shrink-0 object-cover" />
+                                  : <Crown className="w-3 h-3 shrink-0 opacity-40" />}
+                                <span className="truncate text-[9px] font-mono uppercase tracking-[0.16em] opacity-55">{jeque.nombre}</span>
+                              </span>
+                            ))}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <ChevronRight className={`w-5 h-5 shrink-0 transition-transform ${selected ? "rotate-90 text-[#e10600]" : "opacity-25"}`} />
@@ -206,6 +233,18 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                   <div>
                     <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-[#e10600]">Alineación · {currentSplit.nombre}</span>
                     <h3 className="text-xl font-black uppercase tracking-[-0.03em]">{selectedTeam.nombre}</h3>
+                    {selectedJeques.length > 0 && (
+                      <span className="mt-1.5 flex flex-col gap-1">
+                        {selectedJeques.map((jeque, i) => (
+                          <span key={i} className="flex items-center gap-1.5">
+                            {jeque.foto_url
+                              ? <img src={jeque.foto_url} alt="" className="w-5 h-5 shrink-0 object-cover" />
+                              : <Crown className="w-3.5 h-3.5 shrink-0 text-white/35" />}
+                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-white/50">Jeque · {jeque.nombre}</span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-6">

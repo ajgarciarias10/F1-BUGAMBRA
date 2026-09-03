@@ -70,6 +70,26 @@ export function usePilotos() {
   return { pilotos };
 }
 
+// El escudo se sube una vez por escudería y se guarda en su equipo de ese split, así que un
+// bloque recién abierto se queda sin fotos hasta que alguien las vuelva a subir. Heredamos el
+// del split más reciente que sí lo tenga: los ids de escudería se mantienen entre splits.
+function heredarEscudos(splits: SplitView[]): SplitView[] {
+  const escudos = new Map<string, string>();
+  for (const split of splits) {
+    for (const equipo of split.equipos) {
+      if (equipo.logo_url) escudos.set(equipo.id, equipo.logo_url);
+    }
+  }
+  if (escudos.size === 0) return splits;
+
+  return splits.map(split => ({
+    ...split,
+    equipos: split.equipos.map(equipo =>
+      equipo.logo_url ? equipo : { ...equipo, logo_url: escudos.get(equipo.id) }
+    ),
+  }));
+}
+
 // ─── SPLITS (con circuitos, equipos y roster enriquecido) ────────────────────
 
 function useSplitsSource() {
@@ -282,7 +302,7 @@ function useSplitsSource() {
         });
         if (active) {
           hasLoaded.current = true;
-          setSplits(result);
+          setSplits(heredarEscudos(result));
           setLoading(false);
           setListenersReady(true);
         }
