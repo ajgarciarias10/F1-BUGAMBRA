@@ -84,6 +84,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const [pujas, setPujas] = useState<Puja[]>([]);
   const [equipos, setEquipos] = useState<EquipoEnSubasta[]>([]);
   const [restante, setRestante] = useState(0);
+  const [techo, setTecho] = useState(0);
   const [aviso, setAviso] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [pilotoElegido, setPilotoElegido] = useState("");
@@ -137,11 +138,15 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   }, [sala.modo, sala.apertura_programada]);
 
   useEffect(() => {
-    if (sala.estado !== "en_curso") { setRestante(0); return; }
-    setRestante(segundosRestantes(sala.termina_en));
+    if (sala.estado !== "en_curso") { setRestante(0); setTecho(0); return; }
+    const inicial = segundosRestantes(sala.termina_en);
+    setRestante(inicial);
+    // El techo de la barra sube con cada prórroga y no baja mientras corre el reloj: si se
+    // recalculara con el tiempo restante, la barra se quedaría clavada al 100%.
+    setTecho(actual => Math.max(actual, inicial, sala.duracion_segundos));
     const id = setInterval(() => setRestante(segundosRestantes(sala.termina_en)), 100);
     return () => clearInterval(id);
-  }, [sala.estado, sala.termina_en]);
+  }, [sala.estado, sala.termina_en, sala.duracion_segundos]);
 
   // Al agotarse el tiempo adjudica el admin, que es quien tiene permisos para mover dinero.
   useEffect(() => {
@@ -158,7 +163,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     if (sala.puja_actual != null) setLatidoCifra(n => n + 1);
   }, [sala.puja_actual, sala.pilotoId]);
 
-  // Aviso de prórroga cuando alguien puja en el tramo final.
+  // Aviso de prórroga: la suma cada puja, y también el admin a mano.
   useEffect(() => {
     const prorrogas = sala.prorrogada ?? 0;
     if (prorrogas > prorrogasVistas.current) {
@@ -184,7 +189,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const soyPujadorMax = !!miEquipoId && sala.puja_equipo_id === miEquipoId;
 
   const duracionTotal = Math.max(1, sala.duracion_segundos);
-  const referencia = sala.prorrogada > 0 ? Math.max(1, sala.prorroga_segundos) : duracionTotal;
+  // Las prórrogas se acumulan, así que la barra se mide contra el reloj más largo visto.
+  const referencia = Math.max(1, techo, duracionTotal);
   const porcentaje = Math.max(0, Math.min(100, (restante / referencia) * 100));
   const agonia = sala.estado === "en_curso" && restante <= 10;
 
@@ -335,8 +341,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
           </div>
           <p className="text-xs text-white/45 mt-1 max-w-2xl">
             No hay precio de salida ni turnos: cualquier jeque puede poner la primera cifra y activar el
-            reloj. Desde ahí todos pueden seguir pujando, incluso quien lleve la máxima. Solo el
-            administrador puede conceder una prórroga de {sala.prorroga_segundos}s.
+            reloj. Desde ahí todos pueden seguir pujando, incluso quien lleve la máxima, y cada
+            puja suma {sala.prorroga_segundos}s al reloj.
           </p>
         </div>
       </div>
@@ -625,7 +631,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               {flashProrroga && (
                 <p className="text-center text-[11px] font-black uppercase tracking-[0.3em] text-amber-300"
                   style={{ animation: "subasta-flash 1.8s ease-out" }}>
-                  ¡Prórroga concedida! +{sala.prorroga_segundos}s
+                  ¡Prórroga! +{sala.prorroga_segundos}s al reloj
                 </p>
               )}
             </div>
@@ -683,6 +689,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   style={indice === 0 ? { animation: "subasta-entra 0.35s ease-out" } : undefined}>
                   <span className="text-white/50">
                     {puja.apertura && <span className="text-amber-300/70 mr-1.5">abre</span>}
+                    {puja.prorroga && <span className="text-amber-300/50 mr-1.5">+{sala.prorroga_segundos}s</span>}
                     {puja.equipoNombre}
                   </span>
                   <span className="flex items-center gap-2">

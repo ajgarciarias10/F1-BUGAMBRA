@@ -11,8 +11,8 @@ import {
 // ─── SUBASTA EN VIVO ─────────────────────────────────────────────────────────
 // El día de mercado no hay precio de salida: cualquier jeque elegible puede poner la
 // primera cifra. A partir de ahí puja quien quiera, el equipo que tenía al piloto incluido,
-// y quien no se lo lleve lo pierde. El reloj empieza con la primera puja y solo el admin
-// puede conceder una prórroga manual.
+// y quien no se lo lleve lo pierde. El reloj empieza con la primera puja y cada puja
+// posterior le suma la prórroga configurada; el admin puede además concederla a mano.
 //
 // El modo simulacro aplica temporalmente dinero y roster para probar el recorrido completo,
 // pero conserva una copia que permite deshacer la adjudicación sin dejar datos de prueba.
@@ -144,15 +144,15 @@ export async function prorrogarSubasta(
     return await runTransaction(db, async transaction => {
       const salaSnap = await transaction.get(salaRef(splitId));
       if (!salaSnap.exists()) return { ok: false, message: "No hay subasta abierta." };
-      const sala = salaSnap.data() as SalaSubasta;
-      if (sala.estado !== "en_curso" || sala.termina_en == null) {
+      const sala = { ...SALA_VACIA, ...(salaSnap.data() as Partial<SalaSubasta>) };
+      if (sala.estado !== "en_curso" || !Number.isFinite(sala.termina_en)) {
         return { ok: false, message: "La prórroga solo puede darse durante una puja activa." };
       }
-      const segundos = Math.max(0, sala.prorroga_segundos);
+      const segundos = Number.isFinite(sala.prorroga_segundos) ? Math.max(0, sala.prorroga_segundos) : 0;
       if (segundos === 0) return { ok: false, message: "Configura una prórroga mayor que cero." };
 
       transaction.update(salaRef(splitId), {
-        termina_en: Math.max(Date.now(), sala.termina_en) + segundos * 1000,
+        termina_en: Math.max(Date.now(), sala.termina_en!) + segundos * 1000,
         prorrogada: (sala.prorrogada ?? 0) + 1,
         actualizado_en: serverTimestamp(),
       });
@@ -257,9 +257,11 @@ export async function pujar(
 
       const ahora = Date.now();
       const abriendo = sala.estado === "esperando_apertura";
+      // Cada puja suma prórroga al reloj: nadie gana solo por pulsar el último.
+      const prorroga = !abriendo && sala.termina_en != null && sala.prorroga_segundos > 0;
       const terminaEn = abriendo
         ? ahora + sala.duracion_segundos * 1000
-        : sala.termina_en;
+        : prorroga ? Math.max(ahora, sala.termina_en!) + sala.prorroga_segundos * 1000 : sala.termina_en;
 
       transaction.update(salaRef(splitId), {
         estado: "en_curso" as EstadoSubasta,
@@ -267,17 +269,24 @@ export async function pujar(
         puja_equipo_id: equipo.id,
         puja_equipo_nombre: equipo.nombre,
         termina_en: terminaEn,
+        prorrogada: (sala.prorrogada ?? 0) + (prorroga ? 1 : 0),
         actualizado_en: serverTimestamp(),
       });
 
-      return { ok: true, message: abriendo ? `Apertura en ${cifra}M.` : `Puja de ${cifra}M.`, abriendo };
+      return {
+        ok: true,
+        message: abriendo
+          ? `Apertura en ${cifra}M.`
+          : `Puja de ${cifra}M.${prorroga ? ` +${sala.prorroga_segundos}s.` : ""}`,
+        prorroga, abriendo,
+      };
     });
 
     if (resultado.ok) {
       await addDoc(pujasRef(splitId), {
         equipoId: equipo.id, equipoNombre: equipo.nombre, importe: cifra,
         apertura: !!(resultado as any).abriendo,
-        prorroga: false,
+        prorroga: !!(resultado as any).prorroga,
         creado_en: serverTimestamp(),
         instante: Date.now(),
       });
