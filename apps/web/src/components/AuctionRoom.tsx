@@ -4,7 +4,7 @@ import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import {
   SALA_VACIA, adjudicarSubasta, cerrarSala, configurarSala, leerEquiposDeSubasta,
-  pujar, sacarPilotoASubasta, puedePujar,
+  pasarTurnoApertura, pujar, sacarPilotoASubasta, puedePujar,
   type EquipoEnSubasta, type SalaSubasta, type TipoOperacion,
 } from "../services/auctionService";
 import { ChevronLeft, ChevronRight, Gavel, Loader2, Timer, Trophy, Users } from "lucide-react";
@@ -75,6 +75,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const [ocupado, setOcupado] = useState(false);
   const [pilotoElegido, setPilotoElegido] = useState("");
   const [tipoElegido, setTipoElegido] = useState<TipoOperacion>("subasta");
+  const [abridorElegido, setAbridorElegido] = useState("");
   const prorrogasVistas = useRef(0);
   const [flashProrroga, setFlashProrroga] = useState(false);
   const [ahora, setAhora] = useState(() => Date.now());
@@ -209,7 +210,12 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     const piloto = candidatos.find(c => c.id === pilotoElegido);
     if (!piloto) { setAviso("Elige un piloto."); return; }
     setOcupado(true);
-    const resultado = await sacarPilotoASubasta(splitId, piloto, tipoElegido);
+    const resultado = await sacarPilotoASubasta(
+      splitId,
+      piloto,
+      tipoElegido,
+      sala.modo === "simulacro" ? abridorElegido || undefined : undefined,
+    );
     setAviso(resultado.message);
     setOcupado(false);
   };
@@ -219,21 +225,46 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     lanzarPuja(Math.round((base + paso) * 10) / 10);
   };
 
+  const pasarTurno = async () => {
+    if (!miEquipo) return;
+    setOcupado(true);
+    try {
+      const resultado = await pasarTurnoApertura(splitId, miEquipo.id);
+      setAviso(resultado.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const adjudicacion = sala.adjudicacion;
   const enAtril = sala.estado === "esperando_apertura" || sala.estado === "en_curso";
   const puedoOfertar = puedoAbrir || puedoPujar;
-  const minimo = sala.puja_actual != null ? Math.round((sala.puja_actual + 0.1) * 10) / 10 : 0.1;
+  const minimo = sala.puja_actual != null ? Math.round((sala.puja_actual + 0.1) * 10) / 10 : null;
   const saldo = miEquipo?.presupuesto ?? 0;
-  const ofertaValida = oferta >= minimo && oferta <= saldo;
+  const ofertaValida = Number.isFinite(oferta) && (minimo == null || oferta >= minimo) && oferta <= saldo;
 
-  const ajustarOferta = (paso: number) =>
-    setOferta(actual => Math.max(minimo, Math.round((actual + paso) * 10) / 10));
+  const ajustarOferta = (paso: number) => setOferta(actual => {
+    const siguiente = Math.round((actual + paso) * 10) / 10;
+    return minimo == null ? siguiente : Math.max(minimo, siguiente);
+  });
 
   const confirmarOferta = async () => {
     await lanzarPuja(oferta);
     setPanelAbierto(false);
+  };
+
+  const pasarAlSiguiente = async () => {
+    setOcupado(true);
+    try {
+      await cerrarSala(splitId);
+      setPilotoElegido("");
+      setAbridorElegido("");
+      setAviso("Sala preparada para el siguiente piloto.");
+    } finally {
+      setOcupado(false);
+    }
   };
 
   // Ficha del roster para pintar la carta con sus stats reales.
@@ -340,10 +371,22 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 <option value="mantener">Mantener</option>
               </select>
             </label>
+            {sala.modo === "simulacro" && (
+              <label className="space-y-1 flex-1 min-w-[180px]">
+                <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Jeque / escudería que abre</span>
+                <select value={abridorElegido} onChange={e => setAbridorElegido(e.target.value)}
+                  className="w-full bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-sky-400">
+                  <option value="">Aleatorio</option>
+                  {equipos.filter(equipo => !equipo.completo).map(equipo => (
+                    <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button onClick={sacarPiloto} disabled={ocupado || !pilotoElegido}
               className="inline-flex items-center gap-2 border border-[#e10600]/50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#e10600] disabled:opacity-30">
               {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gavel className="w-3.5 h-3.5" />}
-              Sortear apertura
+              {sala.modo === "simulacro" && abridorElegido ? "Asignar apertura" : "Sortear apertura"}
             </button>
             <button onClick={async () => { setOcupado(true); setAviso((await adjudicarSubasta(splitId)).message); setOcupado(false); }}
               disabled={ocupado || sala.estado === "inactiva" || sala.estado === "adjudicada"}
@@ -447,6 +490,14 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                     <ChevronRight className="w-4 h-4 opacity-60" />
                   </span>
                 </button>
+
+                {puedoAbrir && (
+                  <button onClick={pasarTurno} disabled={ocupado || equipos.filter(equipo => !equipo.completo).length < 2}
+                    className={`${filaOpcion} bg-white/[0.02] hover:bg-white/[0.06] disabled:opacity-30`}>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">Pasar turno</span>
+                    <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-white/30">Siguiente jeque</span>
+                  </button>
+                )}
 
                 {/* Subidas rápidas */}
                 {puedoPujar && [0.5, 1, 5].map((paso, indice) => (
@@ -565,6 +616,13 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   )}
                 </>
               )}
+              {esAdmin && (
+                <button onClick={pasarAlSiguiente} disabled={ocupado}
+                  className="mt-5 inline-flex items-center gap-2 border border-white/20 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/65 hover:border-white/50 hover:text-white disabled:opacity-30">
+                  {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                  Siguiente piloto
+                </button>
+              )}
             </div>
           )}
 
@@ -622,9 +680,9 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <div className="text-center min-w-[7rem]">
-                  <span className={`block text-4xl font-black tabular-nums leading-none ${ofertaValida ? "text-white" : "text-[#e10600]"}`}>
-                    {oferta}
-                  </span>
+                  <input type="number" step="0.1" value={oferta}
+                    onChange={e => setOferta(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className={`block w-28 bg-transparent text-center text-4xl font-black tabular-nums leading-none outline-none ${ofertaValida ? "text-white" : "text-[#e10600]"}`} />
                   <span className="block mt-1 text-[8px] font-mono uppercase tracking-[0.3em] text-white/25">millones</span>
                 </div>
                 <button onClick={() => ajustarOferta(0.5)}
@@ -643,7 +701,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               </div>
 
               <div className="border-t border-white/[0.06] pt-4 space-y-1.5 text-[10px] font-mono">
-                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Mínimo</span><span className="text-white/60 tabular-nums">{minimo}M</span></div>
+                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Mínimo</span><span className="text-white/60 tabular-nums">{minimo == null ? "Libre" : `${minimo}M`}</span></div>
                 <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Tu saldo</span><span className="text-white/60 tabular-nums">{saldo.toFixed(1)}M</span></div>
                 <div className="flex justify-between">
                   <span className="text-white/30 uppercase tracking-[0.14em]">Te quedarían</span>
@@ -655,7 +713,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
               {!ofertaValida && (
                 <p className="text-[10px] font-mono text-[#e10600] text-center">
-                  {oferta < minimo ? `Hay que superar los ${sala.puja_actual}M.` : "No te llega el presupuesto."}
+                  {minimo != null && oferta < minimo ? `Hay que superar los ${sala.puja_actual}M.` : "No te llega el presupuesto."}
                 </p>
               )}
 

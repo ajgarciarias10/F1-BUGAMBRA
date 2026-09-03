@@ -174,9 +174,16 @@ service cloud.firestore {
         allow create, delete: if isAdmin();
         allow update: if isSignedIn() && (
           isAdmin() ||
-          (isJeque() && incoming().diff(existing()).affectedKeys()
-            .hasOnly(['estado', 'puja_actual', 'puja_equipo_id', 'puja_equipo_nombre',
-                      'termina_en', 'prorrogada', 'actualizado_en']))
+          (isJeque() && (
+            incoming().diff(existing()).affectedKeys()
+              .hasOnly(['estado', 'puja_actual', 'puja_equipo_id', 'puja_equipo_nombre',
+                        'termina_en', 'prorrogada', 'actualizado_en']) ||
+            (existing().estado == 'esperando_apertura' &&
+             existing().abridor_equipo_id == get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.escuderia_id &&
+             incoming().estado == existing().estado &&
+             incoming().diff(existing()).affectedKeys()
+               .hasOnly(['abridor_equipo_id', 'abridor_equipo_nombre', 'actualizado_en']))
+          ))
         );
 
         // El historial de pujas es solo añadir: nadie reescribe lo que ya pujó.
