@@ -6,6 +6,7 @@ export interface Usuario {
   nombre: string;
   rol: "admin" | "usuario" | "jeque" | "piloto" | "invitado";
   piloto_id: string | null; // FK → pilotos/{id}
+  escuderia_id?: string | null;
   foto_url?: string;
   rating_piloto?: number;
 }

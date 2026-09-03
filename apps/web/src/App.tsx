@@ -1,10 +1,16 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router";
+import React, { Suspense, lazy } from "react";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { LoginRegister } from "./components/LoginRegister";
-import { AdminDashboard } from "./components/AdminDashboard";
-import { JequeDashboard, PilotoDashboard, UsuarioDashboard } from "./components/Dashboards";
+import { DataProvider } from "./hooks/useData";
 import { PublicHome } from "./components/PublicHome";
+
+const LoginRegister = lazy(() => import("./components/LoginRegister").then(module => ({ default: module.LoginRegister })));
+const AdminDashboard = lazy(() => import("./components/AdminDashboard").then(module => ({ default: module.AdminDashboard })));
+const JequeDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.JequeDashboard })));
+const PilotoDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.PilotoDashboard })));
+const UsuarioDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.UsuarioDashboard })));
+
+const routeFallback = <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-white/40 text-xs tracking-[0.3em] uppercase font-mono">Cargando</div>;
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, userData, loading } = useAuth();
@@ -15,19 +21,27 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   return <>{children}</>;
 }
 
+function DataRoutes() {
+  return <DataProvider><Outlet /></DataProvider>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<PublicHome />} />
-          <Route path="/login" element={<LoginRegister />} />
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/jeque" element={<ProtectedRoute allowedRoles={["jeque"]}><JequeDashboard /></ProtectedRoute>} />
-          <Route path="/piloto" element={<ProtectedRoute allowedRoles={["piloto", "admin"]}><PilotoDashboard /></ProtectedRoute>} />
-          <Route path="/usuario" element={<ProtectedRoute allowedRoles={["usuario", "invitado"]}><UsuarioDashboard /></ProtectedRoute>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={routeFallback}>
+          <Routes>
+            <Route path="/login" element={<LoginRegister />} />
+            <Route element={<DataRoutes />}>
+              <Route path="/" element={<PublicHome />} />
+              <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/jeque" element={<ProtectedRoute allowedRoles={["jeque"]}><JequeDashboard /></ProtectedRoute>} />
+              <Route path="/piloto" element={<ProtectedRoute allowedRoles={["piloto", "admin"]}><PilotoDashboard /></ProtectedRoute>} />
+              <Route path="/usuario" element={<ProtectedRoute allowedRoles={["usuario", "invitado"]}><UsuarioDashboard /></ProtectedRoute>} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   );

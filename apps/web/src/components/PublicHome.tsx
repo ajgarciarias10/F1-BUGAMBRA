@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Sun, Moon, Play, Radio, Crown } from "lucide-react";
-import { TotalStandings } from "./SharedDashboard";
+import { TotalStandings } from "./TotalStandings";
 import { FomLive } from "./FomLive";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 import { TeamsView } from "./TeamsView";
@@ -297,6 +297,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
           <div className="aspect-video w-full bg-black">
             <iframe
               className="w-full h-full"
+              loading="lazy"
               src={getYoutubeEmbedUrl(videoIntroUrl)}
               title={`Vídeo de ${currentSplit?.nombre}`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"

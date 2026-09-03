@@ -4,7 +4,7 @@ import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import {
   SALA_VACIA, adjudicarSubasta, cerrarSala, configurarSala, leerEquiposDeSubasta,
-  pasarTurnoApertura, pujar, sacarPilotoASubasta, puedePujar,
+  pujar, sacarPilotoASubasta, puedePujar,
   type EquipoEnSubasta, type SalaSubasta, type TipoOperacion,
 } from "../services/auctionService";
 import { ChevronLeft, ChevronRight, Gavel, Loader2, Timer, Trophy, Users } from "lucide-react";
@@ -75,7 +75,6 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const [ocupado, setOcupado] = useState(false);
   const [pilotoElegido, setPilotoElegido] = useState("");
   const [tipoElegido, setTipoElegido] = useState<TipoOperacion>("subasta");
-  const [abridorElegido, setAbridorElegido] = useState("");
   const prorrogasVistas = useRef(0);
   const [flashProrroga, setFlashProrroga] = useState(false);
   const [ahora, setAhora] = useState(() => Date.now());
@@ -167,8 +166,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const inminente = !mercadoAbierto && faltaParaAbrir <= 60_000;
 
   const miEquipo = miEquipoId ? equipos.find(equipo => equipo.id === miEquipoId) || null : null;
-  const puedoAbrir = !!miEquipo && sala.estado === "esperando_apertura" && sala.abridor_equipo_id === miEquipoId;
-  const puedoPujar = !!miEquipo && sala.estado === "en_curso" && sala.puja_equipo_id !== miEquipoId;
+  const puedoAbrir = !!miEquipo && !miEquipo.completo && sala.estado === "esperando_apertura";
+  const puedoPujar = !!miEquipo && !miEquipo.completo && sala.estado === "en_curso" && sala.puja_equipo_id !== miEquipoId;
   const soyPujadorMax = !!miEquipoId && sala.puja_equipo_id === miEquipoId;
 
   const duracionTotal = Math.max(1, sala.duracion_segundos);
@@ -210,12 +209,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     const piloto = candidatos.find(c => c.id === pilotoElegido);
     if (!piloto) { setAviso("Elige un piloto."); return; }
     setOcupado(true);
-    const resultado = await sacarPilotoASubasta(
-      splitId,
-      piloto,
-      tipoElegido,
-      sala.modo === "simulacro" ? abridorElegido || undefined : undefined,
-    );
+    const resultado = await sacarPilotoASubasta(splitId, piloto, tipoElegido);
     setAviso(resultado.message);
     setOcupado(false);
   };
@@ -223,17 +217,6 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const subidaRapida = (paso: number) => {
     const base = sala.puja_actual ?? 0;
     lanzarPuja(Math.round((base + paso) * 10) / 10);
-  };
-
-  const pasarTurno = async () => {
-    if (!miEquipo) return;
-    setOcupado(true);
-    try {
-      const resultado = await pasarTurnoApertura(splitId, miEquipo.id);
-      setAviso(resultado.message);
-    } finally {
-      setOcupado(false);
-    }
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -260,7 +243,6 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     try {
       await cerrarSala(splitId);
       setPilotoElegido("");
-      setAbridorElegido("");
       setAviso("Sala preparada para el siguiente piloto.");
     } finally {
       setOcupado(false);
@@ -291,9 +273,9 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
             </span>
           </div>
           <p className="text-xs text-white/45 mt-1 max-w-2xl">
-            No hay precio de salida: se sortea quién abre y ese jeque pone la primera cifra. Puja quien
-            quiera, incluida la escudería que lo tenía, y quien no se lo lleve lo pierde. Una puja en los
-            últimos {sala.prorroga_segundos}s prorroga el reloj.
+            No hay precio de salida ni turnos: cualquier jeque puede poner la primera cifra y activar el
+            reloj. Desde ahí todos pueden pujar, incluida la escudería que tenía al piloto. Una oferta en
+            los últimos {sala.prorroga_segundos}s prorroga el reloj.
           </p>
         </div>
       </div>
@@ -371,22 +353,10 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 <option value="mantener">Mantener</option>
               </select>
             </label>
-            {sala.modo === "simulacro" && (
-              <label className="space-y-1 flex-1 min-w-[180px]">
-                <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Jeque / escudería que abre</span>
-                <select value={abridorElegido} onChange={e => setAbridorElegido(e.target.value)}
-                  className="w-full bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-sky-400">
-                  <option value="">Aleatorio</option>
-                  {equipos.filter(equipo => !equipo.completo).map(equipo => (
-                    <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
-                  ))}
-                </select>
-              </label>
-            )}
             <button onClick={sacarPiloto} disabled={ocupado || !pilotoElegido}
               className="inline-flex items-center gap-2 border border-[#e10600]/50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#e10600] disabled:opacity-30">
               {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gavel className="w-3.5 h-3.5" />}
-              {sala.modo === "simulacro" && abridorElegido ? "Asignar apertura" : "Sortear apertura"}
+              Sacar a subasta
             </button>
             <button onClick={async () => { setOcupado(true); setAviso((await adjudicarSubasta(splitId)).message); setOcupado(false); }}
               disabled={ocupado || sala.estado === "inactiva" || sala.estado === "adjudicada"}
@@ -491,14 +461,6 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   </span>
                 </button>
 
-                {puedoAbrir && (
-                  <button onClick={pasarTurno} disabled={ocupado || equipos.filter(equipo => !equipo.completo).length < 2}
-                    className={`${filaOpcion} bg-white/[0.02] hover:bg-white/[0.06] disabled:opacity-30`}>
-                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">Pasar turno</span>
-                    <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-white/30">Siguiente jeque</span>
-                  </button>
-                )}
-
                 {/* Subidas rápidas */}
                 {puedoPujar && [0.5, 1, 5].map((paso, indice) => (
                   <button key={paso} onClick={() => subidaRapida(paso)} disabled={ocupado}
@@ -532,7 +494,6 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 {([
                   ["Piloto", sala.pilotoNombre ?? "—"],
                   ["Venía de", sala.equipo_anterior_nombre ?? "agente libre"],
-                  ["Abre", sala.abridor_equipo_nombre ?? "—"],
                   ["Oferta actual", sala.puja_actual == null ? "—" : `${sala.puja_actual}M`],
                   ["Máxima puja de", sala.puja_equipo_nombre ?? "—"],
                   ["Tu saldo", miEquipo ? `${saldo.toFixed(1)}M` : "—"],

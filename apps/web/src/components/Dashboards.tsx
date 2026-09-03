@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { SharedDashboardView } from "./SharedDashboard";
@@ -11,8 +11,9 @@ import { PaddockForum } from "./PaddockForum";
 import { TeamsView } from "./TeamsView";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MobileBottomTabs } from "./MobileBottomTabs";
-import { AdminDashboard } from "./AdminDashboard";
 import { Shield, ChevronLeft } from "lucide-react";
+
+const AdminDashboard = lazy(() => import("./AdminDashboard").then(module => ({ default: module.AdminDashboard })));
 
 // ── ADMIN OVERLAY ──────────────────────────────────────────────────────────────
 // Overlay que permite a usuarios con rol admin acceder al panel de admin
@@ -55,7 +56,9 @@ function AdminOverlay({ isOpen, onClose }: AdminOverlayProps) {
         </div>
       </header>
       <div className="flex-1 overflow-auto pt-4 pb-28">
-        <AdminDashboard />
+        <Suspense fallback={<div className="py-24 text-center text-xs font-mono uppercase tracking-[0.3em] text-white/30">Cargando administración...</div>}>
+          <AdminDashboard />
+        </Suspense>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { Users, ChevronLeft, Award } from "lucide-react";
-import { TotalStandings } from "./SharedDashboard";
+import { TotalStandings } from "./TotalStandings";
 import { FomLive } from "./FomLive";
 import { MarketDeadlineView } from "./MarketDeadlineView";
 import { PaddockForum } from "./PaddockForum";

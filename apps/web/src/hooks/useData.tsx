@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { collection, collectionGroup, onSnapshot, getDocs } from "firebase/firestore";
 import { db } from "../services/firebase";
 import type { Usuario, Piloto, SplitView, Circuito, Equipo, PilotInRoster, RosterEntry } from "../types";
@@ -38,7 +38,7 @@ const normalizeRaceResults = (results: any[]) => {
 
 // ─── USUARIOS ─────────────────────────────────────────────────────────────────
 
-export function useUsuarios() {
+function useUsuariosSource() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
 
   useEffect(() => {
@@ -72,43 +72,58 @@ export function usePilotos() {
 
 // ─── SPLITS (con circuitos, equipos y roster enriquecido) ────────────────────
 
-export function useSplits() {
+function useSplitsSource() {
   const [splits, setSplits] = useState<SplitView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listenersReady, setListenersReady] = useState(false);
   const [trigger, setTrigger] = useState(0);
+  const hasLoaded = useRef(false);
 
-  // Listeners: cualquier cambio en splits, equipos, roster o circuitos
-  // dispara un re-fetch completo del árbol
+  // Los listeners se conectan después del recorrido inicial. Su snapshot inicial ya está
+  // cubierto por fetchAll y los cambios consecutivos se agrupan en una sola recarga.
   useEffect(() => {
-    const bump = () => setTrigger(t => t + 1);
+    if (!listenersReady) return;
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+    const bump = () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => setTrigger(t => t + 1), 300);
+    };
     const errHandler = (err: Error) => console.warn("useSplits listener error:", err);
+    const listen = (target: Parameters<typeof onSnapshot>[0]) => {
+      let initial = true;
+      return onSnapshot(target as any, () => {
+        if (initial) { initial = false; return; }
+        bump();
+      }, errHandler);
+    };
 
     const unsubs = [
-      onSnapshot(collection(db, "splits"), bump, errHandler),
-      onSnapshot(collectionGroup(db, "equipos"), bump, errHandler),
-      onSnapshot(collectionGroup(db, "pilotos"), bump, errHandler),
-      onSnapshot(collectionGroup(db, "roster"), bump, errHandler),
-      onSnapshot(collectionGroup(db, "circuitos"), bump, errHandler),
+      listen(collection(db, "splits")),
+      listen(collectionGroup(db, "equipos")),
+      listen(collectionGroup(db, "pilotos")),
+      listen(collectionGroup(db, "roster")),
+      listen(collectionGroup(db, "circuitos")),
     ];
-    return () => unsubs.forEach(u => u());
-  }, []);
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      unsubs.forEach(u => u());
+    };
+  }, [listenersReady]);
 
   useEffect(() => {
     let active = true;
 
     async function fetchAll() {
       try {
-        const splitsSnap = await getDocs(collection(db, "splits"));
-
-        // Intentar leer pilotos globales; si falla por permisos se usa mapa vacío
+        const [splitsSnap, pilotosSnap] = await Promise.all([
+          getDocs(collection(db, "splits")),
+          getDocs(collection(db, "pilotos")).catch(() => null),
+        ]);
         const pilotMap: Record<string, Piloto> = {};
-        try {
-          const pilotosSnap = await getDocs(collection(db, "pilotos"));
+        if (pilotosSnap) {
           pilotosSnap.docs.forEach(d => {
             pilotMap[d.id] = { id: d.id, ...d.data() } as Piloto;
           });
-        } catch {
-          // Sin reglas públicas aún: nombres se obtendrán del modelo antiguo
         }
 
         const sortedDocs = [...splitsSnap.docs].sort((a, b) => {
@@ -118,9 +133,7 @@ export function useSplits() {
           return a.id.localeCompare(b.id);
         });
 
-        const result: SplitView[] = [];
-
-        for (const splitDoc of sortedDocs) {
+        const loadSplit = async (splitDoc: typeof sortedDocs[number]): Promise<SplitView> => {
           const sid = splitDoc.id;
 
           const [circSnap, equipSnap, flatRosterSnap] = await Promise.all([
@@ -155,13 +168,20 @@ export function useSplits() {
             })) as Equipo[];
 
           // Leer pilotos desde splits/{sid}/equipos/{equipoId}/pilotos
-          const rosterByPilot = new Map<string, PilotInRoster>();
-          for (const equipoDoc of equipSnap.docs) {
+          const teamRosters = await Promise.all(equipSnap.docs.map(async equipoDoc => {
             try {
               const pilotosSnap = await getDocs(
                 collection(db, `splits/${sid}/equipos/${equipoDoc.id}/pilotos`)
               );
-              for (const pd of pilotosSnap.docs) {
+              return pilotosSnap.docs.map(pd => ({ equipoDoc, pd }));
+            } catch {
+              return [];
+            }
+          }));
+
+          const rosterByPilot = new Map<string, PilotInRoster>();
+          for (const teamRoster of teamRosters) {
+            for (const { equipoDoc, pd } of teamRoster) {
                 const entry = pd.data() as RosterEntry;
                 const piloto = pilotMap[pd.id];
                 const normalizedEntry: PilotInRoster = {
@@ -183,9 +203,6 @@ export function useSplits() {
                 if (!existing || (existingEnded && !candidateEnded)) {
                   rosterByPilot.set(pd.id, normalizedEntry);
                 }
-              }
-            } catch {
-              // Equipo individual inaccesible, continuar
             }
           }
 
@@ -211,7 +228,7 @@ export function useSplits() {
 
           const roster = [...rosterByPilot.values()];
 
-          result.push({
+          return {
             id: sid,
             nombre: splitDoc.data().nombre ?? sid,
             orden: splitDoc.data().orden ?? 0,
@@ -226,16 +243,54 @@ export function useSplits() {
             equipos,
             roster,
             isStarted: circuitos.some(c => c.completado),
-          });
+          };
+        };
+
+        if (sortedDocs.length === 0) {
+          if (active) {
+            hasLoaded.current = true;
+            setSplits([]);
+            setLoading(false);
+            setListenersReady(true);
+          }
+          return;
         }
 
+        const activeDoc = sortedDocs.find(d => d.data().activo)
+          || sortedDocs.find(d => d.id === "split_3")
+          || sortedDocs.find(d => d.data().orden === 3)
+          || sortedDocs[sortedDocs.length - 1];
+        const initialLoad = !hasLoaded.current;
+        const activeSplit = await loadSplit(activeDoc);
+        if (active && initialLoad) {
+          hasLoaded.current = true;
+          setSplits([activeSplit]);
+          setLoading(false);
+        }
+
+        const otherResults = await Promise.allSettled(
+          sortedDocs.filter(d => d.id !== activeDoc.id).map(loadSplit)
+        );
+        const loadedById = new Map<string, SplitView>([[activeSplit.id, activeSplit]]);
+        otherResults.forEach(result => {
+          if (result.status === "fulfilled") loadedById.set(result.value.id, result.value);
+        });
+        const result = sortedDocs.flatMap(d => {
+          const split = loadedById.get(d.id);
+          return split ? [split] : [];
+        });
         if (active) {
+          hasLoaded.current = true;
           setSplits(result);
           setLoading(false);
+          setListenersReady(true);
         }
       } catch (err) {
         console.error("useSplits fetchAll error:", err);
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setListenersReady(true);
+        }
       }
     }
 
@@ -244,4 +299,34 @@ export function useSplits() {
   }, [trigger]);
 
   return { splits, loading };
+}
+
+interface DataContextValue {
+  splits: SplitView[];
+  loadingSplits: boolean;
+  usuarios: Usuario[];
+}
+
+const DataContext = createContext<DataContextValue | null>(null);
+
+export function DataProvider({ children }: { children: ReactNode }) {
+  const { splits, loading: loadingSplits } = useSplitsSource();
+  const { usuarios } = useUsuariosSource();
+  return (
+    <DataContext.Provider value={{ splits, loadingSplits, usuarios }}>
+      {children}
+    </DataContext.Provider>
+  );
+}
+
+export function useSplits() {
+  const data = useContext(DataContext);
+  if (!data) throw new Error("useSplits debe usarse dentro de DataProvider");
+  return { splits: data.splits, loading: data.loadingSplits };
+}
+
+export function useUsuarios() {
+  const data = useContext(DataContext);
+  if (!data) throw new Error("useUsuarios debe usarse dentro de DataProvider");
+  return { usuarios: data.usuarios };
 }

@@ -6,10 +6,10 @@ import { db } from "./firebase";
 import { CLAUSULA_LA_COBRA_EL_VENDEDOR, ficharPiloto } from "./economyService";
 
 // ─── SUBASTA EN VIVO ─────────────────────────────────────────────────────────
-// El día de mercado no hay precio de salida: se sortea quién abre y ese jeque pone la
+// El día de mercado no hay precio de salida: cualquier jeque elegible puede poner la
 // primera cifra. A partir de ahí puja quien quiera, el equipo que tenía al piloto incluido,
-// y quien no se lo lleve lo pierde. El reloj lo fija el admin; una puja en los últimos
-// segundos lo prorroga para que nadie gane por esperar al final.
+// y quien no se lo lleve lo pierde. El reloj empieza con la primera puja; una oferta en los
+// últimos segundos lo prorroga para que nadie gane por esperar al final.
 //
 // El modo simulacro deja el mismo recorrido pero no toca dinero ni rosters: sirve para
 // probarlo con gente antes de aplicarlo a la liga de verdad.
@@ -128,14 +128,13 @@ async function limpiarPujas(splitId: string): Promise<void> {
   await Promise.all(pujasSnap.docs.map(d => deleteDoc(d.ref)));
 }
 
-// Saca un piloto a subasta y sortea quién abre. El sorteo es entre las escuderías que
-// pueden pujar: sortear a una completa dejaría la puja muerta antes de empezar.
+// Saca un piloto a subasta. La sala espera hasta que cualquier escudería elegible haga
+// la primera oferta; en ese momento comienza el reloj compartido.
 export async function sacarPilotoASubasta(
   splitId: string,
   piloto: { id: string; nombre: string; ovr?: number | null; equipoAnteriorId?: string | null; equipoAnteriorNombre?: string | null },
   tipo: TipoOperacion,
-  abridorEquipoId?: string,
-): Promise<{ ok: boolean; message: string; abridor?: EquipoEnSubasta }> {
+): Promise<{ ok: boolean; message: string }> {
   const salaSnap = await getDoc(salaRef(splitId));
   const sala = { ...SALA_VACIA, ...(salaSnap.data() as Partial<SalaSubasta> | undefined) };
 
@@ -151,13 +150,6 @@ export async function sacarPilotoASubasta(
     return { ok: false, message: "Todas las escuderías tienen la plantilla completa." };
   }
 
-  const abridorManual = sala.modo === "simulacro" && abridorEquipoId
-    ? elegibles.find(equipo => equipo.id === abridorEquipoId)
-    : undefined;
-  if (sala.modo === "simulacro" && abridorEquipoId && !abridorManual) {
-    return { ok: false, message: "El jeque elegido no puede participar en esta subasta." };
-  }
-  const abridor = abridorManual ?? elegibles[Math.floor(Math.random() * elegibles.length)];
   await limpiarPujas(splitId);
   await setDoc(salaRef(splitId), {
     ...sala,
@@ -168,59 +160,15 @@ export async function sacarPilotoASubasta(
     tipo_operacion: tipo,
     equipo_anterior_id: piloto.equipoAnteriorId ?? null,
     equipo_anterior_nombre: piloto.equipoAnteriorNombre ?? null,
-    abridor_equipo_id: abridor.id,
-    abridor_equipo_nombre: abridor.nombre,
+    abridor_equipo_id: null,
+    abridor_equipo_nombre: null,
     puja_actual: null, puja_equipo_id: null, puja_equipo_nombre: null,
     termina_en: null, prorrogada: 0,
     adjudicacion: null,
     actualizado_en: serverTimestamp(),
   });
 
-  return { ok: true, message: `Abre ${abridor.nombre}.`, abridor };
-}
-
-export async function pasarTurnoApertura(
-  splitId: string,
-  equipoActualId: string,
-): Promise<{ ok: boolean; message: string }> {
-  try {
-    const salaSnap = await getDoc(salaRef(splitId));
-    if (!salaSnap.exists()) return { ok: false, message: "No hay subasta abierta." };
-    const sala = salaSnap.data() as SalaSubasta;
-    if (sala.estado !== "esperando_apertura") {
-      return { ok: false, message: "El turno solo puede pasarse antes de la primera puja." };
-    }
-    if (sala.abridor_equipo_id !== equipoActualId) {
-      return { ok: false, message: `La apertura le toca a ${sala.abridor_equipo_nombre}.` };
-    }
-
-    const elegibles = (await leerEquiposDeSubasta(splitId, sala.plazas_por_equipo))
-      .filter(equipo => !equipo.completo);
-    if (elegibles.length < 2) {
-      return { ok: false, message: "No hay otro jeque elegible al que pasarle el turno." };
-    }
-    const indiceActual = elegibles.findIndex(equipo => equipo.id === equipoActualId);
-    const siguiente = elegibles[indiceActual >= 0 ? (indiceActual + 1) % elegibles.length : 0];
-
-    return await runTransaction(db, async transaction => {
-      const actualSnap = await transaction.get(salaRef(splitId));
-      const actual = actualSnap.data() as SalaSubasta | undefined;
-      if (!actual || actual.estado !== "esperando_apertura") {
-        return { ok: false, message: "La puja ya ha comenzado." };
-      }
-      if (actual.abridor_equipo_id !== equipoActualId) {
-        return { ok: false, message: `El turno ya corresponde a ${actual.abridor_equipo_nombre}.` };
-      }
-      transaction.update(salaRef(splitId), {
-        abridor_equipo_id: siguiente.id,
-        abridor_equipo_nombre: siguiente.nombre,
-        actualizado_en: serverTimestamp(),
-      });
-      return { ok: true, message: `${actual.abridor_equipo_nombre} pasa el turno a ${siguiente.nombre}.` };
-    });
-  } catch (error: any) {
-    return { ok: false, message: `Error al pasar el turno: ${error.message}` };
-  }
+  return { ok: true, message: `${piloto.nombre} ya está disponible para todos los jeques.` };
 }
 
 // ─── PUJAS ───────────────────────────────────────────────────────────────────
@@ -241,11 +189,7 @@ export async function pujar(
       if (!salaSnap.exists()) return { ok: false, message: "No hay subasta abierta." };
       const sala = salaSnap.data() as SalaSubasta;
 
-      if (sala.estado === "esperando_apertura") {
-        if (sala.abridor_equipo_id !== equipo.id) {
-          return { ok: false, message: `La apertura le toca a ${sala.abridor_equipo_nombre}.` };
-        }
-      } else if (sala.estado === "en_curso") {
+      if (sala.estado === "en_curso") {
         if (sala.termina_en != null && Date.now() > sala.termina_en) {
           return { ok: false, message: "El tiempo se agotó." };
         }
@@ -255,7 +199,7 @@ export async function pujar(
         if (sala.puja_actual != null && cifra <= sala.puja_actual) {
           return { ok: false, message: `Hay que superar los ${sala.puja_actual}M.` };
         }
-      } else {
+      } else if (sala.estado !== "esperando_apertura") {
         return { ok: false, message: "La subasta no está abierta." };
       }
 
