@@ -299,14 +299,16 @@ export function mediaPuntosCarrera(resultados: Array<{ puntos: number }>): numbe
 // carreras: es la curva que se pinta en el perfil.
 export function evolucionOVRSplit(
   ratingInicial: number,
-  carreras: Array<{ id: string; nombre: string; resultado: ResultadoParaOVR | null; media: number }>,
+  carreras: Array<{ id: string; nombre: string; resultado: ResultadoParaOVR | null; media: number; bonusOVR?: number }>,
 ): { ratingFinal: number; puntos: Array<{ circuitoId: string; carrera: string; rating: number; delta: number }> } {
   let rating = Math.max(OVR_SUELO, Math.min(OVR_TECHO, ratingInicial || OVR_DEBUT));
   const puntos: Array<{ circuitoId: string; carrera: string; rating: number; delta: number }> = [];
 
   for (const carrera of carreras) {
-    // Sin resultado el piloto no corrió: el rating ni sube ni baja, se arrastra.
-    const delta = carrera.resultado ? deltaOVRCarrera(carrera.resultado, carrera.media, rating) : 0;
+    // Sin resultado el piloto no corrió: el rating ni sube ni baja, se arrastra. El bonus de
+    // piloto del día se suma aparte, así que cuenta aunque esa carrera no la haya corrido.
+    const deltaCarrera = carrera.resultado ? deltaOVRCarrera(carrera.resultado, carrera.media, rating) : 0;
+    const delta = deltaCarrera + (carrera.bonusOVR ?? 0);
     rating = Math.max(OVR_SUELO, Math.min(OVR_TECHO, rating + delta));
     puntos.push({
       circuitoId: carrera.id,

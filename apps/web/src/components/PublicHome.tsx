@@ -7,9 +7,10 @@ import { TotalStandings } from "./TotalStandings";
 import { FomLive } from "./FomLive";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 import { TeamsView } from "./TeamsView";
+import { RaceResultsView } from "./RaceResultsView";
 import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
 
-type Tab = "clasificacion" | "equipos" | "tv";
+type Tab = "clasificacion" | "equipos" | "resultados" | "tv";
 
 function useTheme() {
   const [dark, setDark] = useState(() => {
@@ -111,6 +112,7 @@ export function PublicHome() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "clasificacion", label: "Clasificación" },
     { id: "equipos", label: "Equipos" },
+    { id: "resultados", label: "Resultados" },
     { id: "tv", label: "TV" },
   ];
 
@@ -225,6 +227,16 @@ export function PublicHome() {
             )}
             {activeTab === "equipos" && (
               <TeamsView
+                key={selectedRealSplitId}
+                validSplits={validSplits}
+                currentSplitId={selectedRealSplitId}
+                onSelectSplit={setActiveSplitId}
+                currentSplit={currentSplit}
+                getPilotPhoto={getPilotPhoto}
+              />
+            )}
+            {activeTab === "resultados" && (
+              <RaceResultsView
                 key={selectedRealSplitId}
                 validSplits={validSplits}
                 currentSplitId={selectedRealSplitId}

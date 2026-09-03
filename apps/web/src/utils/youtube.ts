@@ -1,4 +1,4 @@
-export function getYoutubeEmbedUrl(url: string): string {
+export function getYoutubeVideoId(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) return "";
 
@@ -7,25 +7,34 @@ export function getYoutubeEmbedUrl(url: string): string {
     const host = parsed.hostname.replace(/^www\./, "");
 
     if (host === "youtu.be") {
-      const id = parsed.pathname.replace(/^\//, "").split("/")[0];
-      return id ? `https://www.youtube-nocookie.com/embed/${id}?rel=0` : "";
+      return parsed.pathname.replace(/^\//, "").split("/")[0] || "";
     }
 
     if (host.endsWith("youtube.com")) {
       const embedId = parsed.pathname.match(/\/embed\/([^/]+)/)?.[1];
-      if (embedId) return `https://www.youtube-nocookie.com/embed/${embedId}?rel=0`;
+      if (embedId) return embedId;
 
       const shortsId = parsed.pathname.match(/\/shorts\/([^/]+)/)?.[1];
-      if (shortsId) return `https://www.youtube-nocookie.com/embed/${shortsId}?rel=0`;
+      if (shortsId) return shortsId;
 
       const watchId = parsed.searchParams.get("v");
-      if (watchId) return `https://www.youtube-nocookie.com/embed/${watchId}?rel=0`;
+      if (watchId) return watchId;
     }
   } catch {
     return "";
   }
 
   return "";
+}
+
+export function getYoutubeEmbedUrl(url: string): string {
+  const id = getYoutubeVideoId(url);
+  return id ? `https://www.youtube-nocookie.com/embed/${id}?rel=0` : "";
+}
+
+export function getYoutubeThumbnailUrl(url: string): string {
+  const id = getYoutubeVideoId(url);
+  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "";
 }
 
 export function getSplitIntroUrl(splitId: string, explicitUrl?: string | null): string {

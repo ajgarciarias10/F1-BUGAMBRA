@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { collection, collectionGroup, onSnapshot, getDocs } from "firebase/firestore";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { collection, collectionGroup, onSnapshot } from "firebase/firestore";
 import { db } from "../services/firebase";
 import type { Usuario, Piloto, SplitView, Circuito, Equipo, PilotInRoster, RosterEntry } from "../types";
 import { computePilotOVR } from "../utils/splitResolver";
@@ -91,233 +91,237 @@ function heredarEscudos(splits: SplitView[]): SplitView[] {
 }
 
 // ─── SPLITS (con circuitos, equipos y roster enriquecido) ────────────────────
+//
+// Los documentos crudos viven en el estado, uno por colección, y el SplitView que consumen
+// los componentes se deriva de ellos con un useMemo. No hay ningún fetchAll: los cinco
+// listeners de abajo son la única fuente de datos, y cada uno solo parchea, con
+// snapshot.docChanges(), el documento que de verdad cambió — Firestore ya avisa de qué
+// cambió, así que no hace falta releer la colección entera en cada escritura.
 
-function useSplitsSource() {
-  const [splits, setSplits] = useState<SplitView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [listenersReady, setListenersReady] = useState(false);
-  const [trigger, setTrigger] = useState(0);
-  const hasLoaded = useRef(false);
+type MapaUno = Map<string, Map<string, any>>;              // sid → (id → data)
+type MapaDos = Map<string, Map<string, Map<string, any>>>; // sid → eid → (pilotoId → data)
 
-  // Los listeners se conectan después del recorrido inicial. Su snapshot inicial ya está
-  // cubierto por fetchAll y los cambios consecutivos se agrupan en una sola recarga.
-  useEffect(() => {
-    if (!listenersReady) return;
-    let debounce: ReturnType<typeof setTimeout> | undefined;
-    const bump = () => {
-      if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => setTrigger(t => t + 1), 300);
-    };
-    const errHandler = (err: Error) => console.warn("useSplits listener error:", err);
-    const listen = (target: Parameters<typeof onSnapshot>[0]) => {
-      let initial = true;
-      return onSnapshot(target as any, () => {
-        if (initial) { initial = false; return; }
-        bump();
-      }, errHandler);
-    };
+interface RawState {
+  splits: Map<string, any>;
+  equipos: MapaUno;
+  circuitos: MapaUno;
+  rosterFlat: MapaUno;
+  pilotosPorEquipo: MapaDos;
+  pilotosGlobales: Map<string, any>;
+}
 
-    const unsubs = [
-      listen(collection(db, "splits")),
-      listen(collectionGroup(db, "equipos")),
-      listen(collectionGroup(db, "pilotos")),
-      listen(collectionGroup(db, "roster")),
-      listen(collectionGroup(db, "circuitos")),
-    ];
-    return () => {
-      if (debounce) clearTimeout(debounce);
-      unsubs.forEach(u => u());
-    };
-  }, [listenersReady]);
+const rawVacio = (): RawState => ({
+  splits: new Map(),
+  equipos: new Map(),
+  circuitos: new Map(),
+  rosterFlat: new Map(),
+  pilotosPorEquipo: new Map(),
+  pilotosGlobales: new Map(),
+});
 
-  useEffect(() => {
-    let active = true;
+function conUno(mapa: MapaUno, sid: string, id: string, data: any | null): MapaUno {
+  const next = new Map(mapa);
+  const inner = new Map(next.get(sid) ?? []);
+  if (data === null) inner.delete(id); else inner.set(id, data);
+  if (inner.size === 0) next.delete(sid); else next.set(sid, inner);
+  return next;
+}
 
-    async function fetchAll() {
-      try {
-        const [splitsSnap, pilotosSnap] = await Promise.all([
-          getDocs(collection(db, "splits")),
-          getDocs(collection(db, "pilotos")).catch(() => null),
-        ]);
-        const pilotMap: Record<string, Piloto> = {};
-        if (pilotosSnap) {
-          pilotosSnap.docs.forEach(d => {
-            pilotMap[d.id] = { id: d.id, ...d.data() } as Piloto;
-          });
-        }
+function conDos(mapa: MapaDos, sid: string, eid: string, pid: string, data: any | null): MapaDos {
+  const next = new Map(mapa);
+  const nivelSplit = new Map(next.get(sid) ?? []);
+  const nivelEquipo = new Map(nivelSplit.get(eid) ?? []);
+  if (data === null) nivelEquipo.delete(pid); else nivelEquipo.set(pid, data);
+  if (nivelEquipo.size === 0) nivelSplit.delete(eid); else nivelSplit.set(eid, nivelEquipo);
+  if (nivelSplit.size === 0) next.delete(sid); else next.set(sid, nivelSplit);
+  return next;
+}
 
-        const sortedDocs = [...splitsSnap.docs].sort((a, b) => {
-          const aOrden = a.data().orden ?? 999;
-          const bOrden = b.data().orden ?? 999;
-          if (aOrden !== bOrden) return aOrden - bOrden;
-          return a.id.localeCompare(b.id);
-        });
+function enriquecerFicha(pilotoId: string, equipoId: string, entry: RosterEntry, piloto: any): PilotInRoster {
+  return {
+    ...entry,
+    pilotoId,
+    equipoId,
+    nombre: piloto?.nombre ?? (entry as any).nombre ?? pilotoId,
+    foto_url: piloto?.foto_url ?? (entry as any).foto_url,
+    rating_piloto: Number(entry.rating_piloto) > 0
+      ? Number(entry.rating_piloto)
+      : Number(piloto?.rating_piloto) > 0
+        ? Number(piloto?.rating_piloto)
+        : computePilotOVR(entry as any),
+  };
+}
 
-        const loadSplit = async (splitDoc: typeof sortedDocs[number]): Promise<SplitView> => {
-          const sid = splitDoc.id;
+function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
+  const circuitosMap = raw.circuitos.get(sid) ?? new Map();
+  const circuitos: Circuito[] = [...circuitosMap.entries()].map(([id, data]) => ({
+    id,
+    completado: false,
+    acta_cerrada: false,
+    economia_procesada: false,
+    ...data,
+    resultados: sid === "origins" ? (data.resultados || []) : normalizeRaceResults((data.resultados || []) as any[]),
+  })) as Circuito[];
 
-          const [circSnap, equipSnap, flatRosterSnap] = await Promise.all([
-            getDocs(collection(db, `splits/${sid}/circuitos`)),
-            getDocs(collection(db, `splits/${sid}/equipos`)),
-            getDocs(collection(db, `splits/${sid}/roster`)),
-          ]);
+  // `agente_libre` es el cajón donde viven los pilotos sin escudería, no una escudería: no
+  // compite, no tiene presupuesto y no debe aparecer en ninguna lista de equipos.
+  const equiposMap = raw.equipos.get(sid) ?? new Map();
+  const equipos: Equipo[] = [...equiposMap.entries()]
+    .filter(([id]) => id !== "agente_libre")
+    .map(([id, data]) => ({ id, nombre: id, presupuesto: 100, puntos_constructores: 0, ...data })) as Equipo[];
 
-          const circuitos: Circuito[] = circSnap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              completado: false,
-              acta_cerrada: false,
-              economia_procesada: false,
-              ...data,
-              resultados: sid === "origins" ? (data.resultados || []) : normalizeRaceResults((data.resultados || []) as any[]),
-            };
-          }) as Circuito[];
-
-          // `agente_libre` es el cajón donde viven los pilotos sin escudería, no una
-          // escudería: no compite, no tiene presupuesto y no debe aparecer en ninguna
-          // lista de equipos. Que un piloto esté libre se sabe por su `equipoId`.
-          const equipos: Equipo[] = equipSnap.docs
-            .filter(d => d.id !== "agente_libre")
-            .map(d => ({
-              id: d.id,
-              nombre: d.id,
-              presupuesto: 100,
-              puntos_constructores: 0,
-              ...d.data(),
-            })) as Equipo[];
-
-          // Leer pilotos desde splits/{sid}/equipos/{equipoId}/pilotos
-          const teamRosters = await Promise.all(equipSnap.docs.map(async equipoDoc => {
-            try {
-              const pilotosSnap = await getDocs(
-                collection(db, `splits/${sid}/equipos/${equipoDoc.id}/pilotos`)
-              );
-              return pilotosSnap.docs.map(pd => ({ equipoDoc, pd }));
-            } catch {
-              return [];
-            }
-          }));
-
-          const rosterByPilot = new Map<string, PilotInRoster>();
-          for (const teamRoster of teamRosters) {
-            for (const { equipoDoc, pd } of teamRoster) {
-                const entry = pd.data() as RosterEntry;
-                const piloto = pilotMap[pd.id];
-                const normalizedEntry: PilotInRoster = {
-                  ...entry,
-                  pilotoId: pd.id,
-                  // The Firestore path is authoritative if a stale copied field disagrees.
-                  equipoId: equipoDoc.id,
-                  nombre: piloto?.nombre ?? (entry as any).nombre ?? pd.id,
-                  foto_url: piloto?.foto_url ?? (entry as any).foto_url,
-                  rating_piloto: Number(entry.rating_piloto) > 0
-                    ? Number(entry.rating_piloto)
-                    : Number(piloto?.rating_piloto) > 0
-                      ? Number(piloto?.rating_piloto)
-                      : computePilotOVR(entry as any),
-                };
-                const existing = rosterByPilot.get(pd.id);
-                const existingEnded = existing?.participa_hasta != null;
-                const candidateEnded = normalizedEntry.participa_hasta != null;
-                if (!existing || (existingEnded && !candidateEnded)) {
-                  rosterByPilot.set(pd.id, normalizedEntry);
-                }
-            }
-          }
-
-          // Individual seasons (such as Origins) store participants directly
-          // below the split because no team exists.
-          for (const pd of flatRosterSnap.docs) {
-            if (rosterByPilot.has(pd.id)) continue;
-            const entry = pd.data() as RosterEntry;
-            const piloto = pilotMap[pd.id];
-            rosterByPilot.set(pd.id, {
-              ...entry,
-              pilotoId: pd.id,
-              equipoId: entry.equipoId || "individual",
-              nombre: piloto?.nombre ?? (entry as any).nombre ?? pd.id,
-              foto_url: piloto?.foto_url ?? (entry as any).foto_url,
-              rating_piloto: Number(entry.rating_piloto) > 0
-                    ? Number(entry.rating_piloto)
-                    : Number(piloto?.rating_piloto) > 0
-                      ? Number(piloto?.rating_piloto)
-                      : computePilotOVR(entry as any),
-            });
-          }
-
-          const roster = [...rosterByPilot.values()];
-
-          return {
-            id: sid,
-            nombre: splitDoc.data().nombre ?? sid,
-            orden: splitDoc.data().orden ?? 0,
-            fichajes_abiertos: splitDoc.data().fichajes_abiertos ?? false,
-            activo: splitDoc.data().activo ?? false,
-            completado: splitDoc.data().completado ?? false,
-            temporada_iniciada: splitDoc.data().temporada_iniciada ?? false,
-            tipo: splitDoc.data().tipo ?? "equipos",
-            duos: splitDoc.data().duos ?? [],
-            rivalries: splitDoc.data().rivalries,
-            video_intro: splitDoc.data().video_intro ?? undefined,
-            circuitos,
-            equipos,
-            roster,
-            isStarted: circuitos.some(c => c.completado),
-          };
-        };
-
-        if (sortedDocs.length === 0) {
-          if (active) {
-            hasLoaded.current = true;
-            setSplits([]);
-            setLoading(false);
-            setListenersReady(true);
-          }
-          return;
-        }
-
-        const activeDoc = sortedDocs.find(d => d.data().activo)
-          || sortedDocs.find(d => d.id === "split_3")
-          || sortedDocs.find(d => d.data().orden === 3)
-          || sortedDocs[sortedDocs.length - 1];
-        const initialLoad = !hasLoaded.current;
-        const activeSplit = await loadSplit(activeDoc);
-        if (active && initialLoad) {
-          hasLoaded.current = true;
-          setSplits([activeSplit]);
-          setLoading(false);
-        }
-
-        const otherResults = await Promise.allSettled(
-          sortedDocs.filter(d => d.id !== activeDoc.id).map(loadSplit)
-        );
-        const loadedById = new Map<string, SplitView>([[activeSplit.id, activeSplit]]);
-        otherResults.forEach(result => {
-          if (result.status === "fulfilled") loadedById.set(result.value.id, result.value);
-        });
-        const result = sortedDocs.flatMap(d => {
-          const split = loadedById.get(d.id);
-          return split ? [split] : [];
-        });
-        if (active) {
-          hasLoaded.current = true;
-          setSplits(heredarEscudos(result));
-          setLoading(false);
-          setListenersReady(true);
-        }
-      } catch (err) {
-        console.error("useSplits fetchAll error:", err);
-        if (active) {
-          setLoading(false);
-          setListenersReady(true);
-        }
+  const rosterByPilot = new Map<string, PilotInRoster>();
+  const pilotosPorEquipoDelSplit = raw.pilotosPorEquipo.get(sid) ?? new Map();
+  for (const [equipoId, pilotosDelEquipo] of pilotosPorEquipoDelSplit) {
+    for (const [pilotoId, entry] of pilotosDelEquipo) {
+      const normalizedEntry = enriquecerFicha(pilotoId, equipoId, entry as RosterEntry, raw.pilotosGlobales.get(pilotoId));
+      const existing = rosterByPilot.get(pilotoId);
+      const existingEnded = existing?.participa_hasta != null;
+      const candidateEnded = normalizedEntry.participa_hasta != null;
+      if (!existing || (existingEnded && !candidateEnded)) {
+        rosterByPilot.set(pilotoId, normalizedEntry);
       }
     }
+  }
 
-    fetchAll();
-    return () => { active = false; };
-  }, [trigger]);
+  // Las temporadas individuales (como Origins) guardan a sus participantes directamente bajo
+  // el split, porque no tienen equipos.
+  const rosterFlatMap = raw.rosterFlat.get(sid) ?? new Map();
+  for (const [pilotoId, entry] of rosterFlatMap) {
+    if (rosterByPilot.has(pilotoId)) continue;
+    const equipoId = (entry as RosterEntry).equipoId || "individual";
+    rosterByPilot.set(pilotoId, enriquecerFicha(pilotoId, equipoId, entry as RosterEntry, raw.pilotosGlobales.get(pilotoId)));
+  }
+
+  const roster = [...rosterByPilot.values()];
+
+  return {
+    id: sid,
+    nombre: splitData.nombre ?? sid,
+    orden: splitData.orden ?? 0,
+    fichajes_abiertos: splitData.fichajes_abiertos ?? false,
+    activo: splitData.activo ?? false,
+    completado: splitData.completado ?? false,
+    temporada_iniciada: splitData.temporada_iniciada ?? false,
+    tipo: splitData.tipo ?? "equipos",
+    duos: splitData.duos ?? [],
+    rivalries: splitData.rivalries,
+    rivalidades_manual: splitData.rivalidades_manual,
+    video_intro: splitData.video_intro ?? undefined,
+    circuitos,
+    equipos,
+    roster,
+    isStarted: circuitos.some(c => c.completado),
+  };
+}
+
+function useSplitsSource() {
+  const [raw, setRaw] = useState<RawState>(rawVacio);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelado = false;
+    const listos = new Set<string>();
+    const marcarListo = (clave: string) => {
+      listos.add(clave);
+      if (listos.size === 5) setLoading(false);
+    };
+
+    const unsubSplits = onSnapshot(collection(db, "splits"), snap => {
+      if (cancelado) return;
+      setRaw(prev => {
+        const splits = new Map(prev.splits);
+        snap.docChanges().forEach(change => {
+          if (change.type === "removed") splits.delete(change.doc.id);
+          else splits.set(change.doc.id, change.doc.data());
+        });
+        return { ...prev, splits };
+      });
+      marcarListo("splits");
+    }, err => console.warn("useSplits (splits) error:", err));
+
+    const unsubEquipos = onSnapshot(collectionGroup(db, "equipos"), snap => {
+      if (cancelado) return;
+      setRaw(prev => {
+        let equipos = prev.equipos;
+        snap.docChanges().forEach(change => {
+          const sid = change.doc.ref.parent.parent?.id;
+          if (!sid) return;
+          equipos = conUno(equipos, sid, change.doc.id, change.type === "removed" ? null : change.doc.data());
+        });
+        return { ...prev, equipos };
+      });
+      marcarListo("equipos");
+    }, err => console.warn("useSplits (equipos) error:", err));
+
+    const unsubCircuitos = onSnapshot(collectionGroup(db, "circuitos"), snap => {
+      if (cancelado) return;
+      setRaw(prev => {
+        let circuitos = prev.circuitos;
+        snap.docChanges().forEach(change => {
+          const sid = change.doc.ref.parent.parent?.id;
+          if (!sid) return;
+          circuitos = conUno(circuitos, sid, change.doc.id, change.type === "removed" ? null : change.doc.data());
+        });
+        return { ...prev, circuitos };
+      });
+      marcarListo("circuitos");
+    }, err => console.warn("useSplits (circuitos) error:", err));
+
+    const unsubRoster = onSnapshot(collectionGroup(db, "roster"), snap => {
+      if (cancelado) return;
+      setRaw(prev => {
+        let rosterFlat = prev.rosterFlat;
+        snap.docChanges().forEach(change => {
+          const sid = change.doc.ref.parent.parent?.id;
+          if (!sid) return;
+          rosterFlat = conUno(rosterFlat, sid, change.doc.id, change.type === "removed" ? null : change.doc.data());
+        });
+        return { ...prev, rosterFlat };
+      });
+      marcarListo("roster");
+    }, err => console.warn("useSplits (roster) error:", err));
+
+    // collectionGroup("pilotos") engancha a la vez el catálogo global (pilotos/{id}, en raíz)
+    // y las fichas de roster (splits/{}/equipos/{}/pilotos/{id}): hay que separarlas por la
+    // ruta del documento o se mezclan pilotos globales con fichas de equipo.
+    const unsubPilotos = onSnapshot(collectionGroup(db, "pilotos"), snap => {
+      if (cancelado) return;
+      setRaw(prev => {
+        let pilotosPorEquipo = prev.pilotosPorEquipo;
+        let pilotosGlobales = prev.pilotosGlobales;
+        let globalesTocado = false;
+        snap.docChanges().forEach(change => {
+          const equipoRef = change.doc.ref.parent.parent; // null si es del catálogo raíz
+          if (equipoRef === null) {
+            if (!globalesTocado) { pilotosGlobales = new Map(pilotosGlobales); globalesTocado = true; }
+            if (change.type === "removed") pilotosGlobales.delete(change.doc.id);
+            else pilotosGlobales.set(change.doc.id, { id: change.doc.id, ...change.doc.data() });
+            return;
+          }
+          const sid = equipoRef.parent.parent?.id;
+          if (!sid) return;
+          pilotosPorEquipo = conDos(pilotosPorEquipo, sid, equipoRef.id, change.doc.id, change.type === "removed" ? null : change.doc.data());
+        });
+        return { ...prev, pilotosPorEquipo, pilotosGlobales };
+      });
+      marcarListo("pilotos");
+    }, err => console.warn("useSplits (pilotos) error:", err));
+
+    return () => {
+      cancelado = true;
+      unsubSplits(); unsubEquipos(); unsubCircuitos(); unsubRoster(); unsubPilotos();
+    };
+  }, []);
+
+  const splits = useMemo(() => {
+    const entradas = [...raw.splits.entries()].sort(([aid, a], [bid, b]) => {
+      const aOrden = a.orden ?? 999, bOrden = b.orden ?? 999;
+      if (aOrden !== bOrden) return aOrden - bOrden;
+      return aid.localeCompare(bid);
+    });
+    return heredarEscudos(entradas.map(([sid, data]) => derivarSplit(sid, data, raw)));
+  }, [raw]);
 
   return { splits, loading };
 }

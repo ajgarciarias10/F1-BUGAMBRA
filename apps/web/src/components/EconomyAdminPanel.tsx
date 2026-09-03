@@ -391,7 +391,11 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     try {
       const circuitIndex = circuits.findIndex(c => c.id === circuit.id);
       const previousCircuitIds = circuits.slice(0, circuitIndex).map(c => c.id);
-      await procesarEconomiaCarrera(selectedSplitId, circuit.id, circuit.nombre, (msg) => setProcessLog(prev => [...prev, msg]), previousCircuitIds);
+      // Si procesarEconomiaCarrera sale por un guard temprano (acta sin cerrar, ya
+      // procesada...) no llama a onProgress ni una vez: el log se quedaría congelado en
+      // "Procesando..." si no se pinta también el mensaje final aquí.
+      const result = await procesarEconomiaCarrera(selectedSplitId, circuit.id, circuit.nombre, (msg) => setProcessLog(prev => [...prev, msg]), previousCircuitIds);
+      setProcessLog(prev => [...prev, result.message]);
       await loadData(selectedSplitId);
     } catch (err: any) {
       setProcessLog(prev => [...prev, `Error: ${err.message}`]);

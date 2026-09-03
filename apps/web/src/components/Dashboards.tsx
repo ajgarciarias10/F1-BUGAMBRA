@@ -9,6 +9,7 @@ import { MarketDeadlineView } from "./MarketDeadlineView";
 import { AuctionRoom } from "./AuctionRoom";
 import { PaddockForum } from "./PaddockForum";
 import { TeamsView } from "./TeamsView";
+import { RaceResultsView } from "./RaceResultsView";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 import { Shield, ChevronLeft } from "lucide-react";
@@ -202,6 +203,17 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
             darkMode
           />
         )}
+        {activeTab === "resultados" && (
+          <RaceResultsView
+            key={resolvedTeamsSplitId}
+            validSplits={validSplits}
+            currentSplitId={resolvedTeamsSplitId}
+            onSelectSplit={(id: string) => setTeamsSplitId(id)}
+            currentSplit={teamsSplit}
+            getPilotPhoto={getPilotPhoto}
+            darkMode
+          />
+        )}
         {activeTab === "profile" && <ProfileView />}
         {activeTab === "suggestions" && <SuggestionsView isAdmin={false} />}
         {renderExtraTabs && activeTab === "extra" && renderExtraTabs()}
@@ -218,6 +230,7 @@ export function JequeDashboard() {
     { id: "market", label: "Mercado" },
     { id: "paddock", label: "Paddock" },
     { id: "equipos",      label: "Equipos" },
+    { id: "resultados",    label: "Resultados" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
   ];
@@ -239,6 +252,7 @@ export function PilotoDashboard() {
     { id: "market", label: "Mercado" },
     { id: "paddock", label: "Paddock" },
     { id: "equipos",      label: "Equipos" },
+    { id: "resultados",    label: "Resultados" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
   ];
@@ -258,6 +272,7 @@ export function UsuarioDashboard() {
     { id: "market", label: "Mercado" },
     { id: "paddock", label: "Paddock" },
     { id: "equipos",      label: "Equipos" },
+    { id: "resultados",    label: "Resultados" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
   ];

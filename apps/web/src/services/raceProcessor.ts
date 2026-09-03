@@ -1,8 +1,8 @@
 import {
-  doc, collection, getDocs, runTransaction, writeBatch,
+  doc, collection, getDocs, getDoc, runTransaction, writeBatch, updateDoc,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
-import { POINTS_BY_POSITION } from "./economyService";
+import { POINTS_BY_POSITION, revertirEconomiaCarrera } from "./economyService";
 import { evolucionOVRSplit, mediaPuntosCarrera, OVR_DEBUT } from "../utils/splitResolver";
 import type { RaceResult, RosterEntry } from "../types";
 
@@ -198,6 +198,51 @@ export async function processRace(
   }
 }
 
+// ─── PILOTO DEL DÍA ───────────────────────────────────────────────────────────
+// Vota cualquier cuenta de la liga, un voto por persona. El recuento se guarda como un
+// mapa uid → pilotoId (no arrays por candidato): cambiar de voto es sobreescribir la
+// propia entrada, y el dedupe es automático porque solo puede haber una por uid.
+
+export async function votarPilotoDelDia(
+  splitId: string,
+  circuitoId: string,
+  uid: string,
+  pilotoId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    const snap = await getDoc(circuitoRef);
+    if (!snap.exists()) return { ok: false, message: "Circuito no encontrado." };
+    const data = snap.data() as any;
+    if (data.piloto_dia_cerrado) return { ok: false, message: "La votación ya está cerrada." };
+    if (!data.completado) return { ok: false, message: "Todavía no hay resultados de esta carrera." };
+
+    await updateDoc(circuitoRef, { [`piloto_dia_votantes.${uid}`]: pilotoId });
+    return { ok: true, message: "Voto registrado." };
+  } catch (error: any) {
+    return { ok: false, message: `Error al votar: ${error.message}` };
+  }
+}
+
+// Recuento y cierre a cargo del admin. Propone el más votado (con la primera posición del
+// desempate por id) pero deja fijar el ganador a mano, por si hace falta corregirlo.
+export async function cerrarVotacionPilotoDelDia(
+  splitId: string,
+  circuitoId: string,
+  pilotoIdGanador: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    await updateDoc(circuitoRef, {
+      piloto_dia_cerrado: true,
+      piloto_dia_ganador: pilotoIdGanador,
+    });
+    return { ok: true, message: "Piloto del día fijado. El bonus se aplicará en la siguiente carrera." };
+  } catch (error: any) {
+    return { ok: false, message: `Error al cerrar la votación: ${error.message}` };
+  }
+}
+
 // ─── RECALCULAR EL OVR ───────────────────────────────────────────────────────
 // El overall es la carrera entera de un piloto, no la foto de un bloque. Empieza en 70 el
 // día que debuta —que para unos es Origins y para otros un split posterior— y a partir de
@@ -260,13 +305,20 @@ async function leerBloque(splitId: string) {
         nombre: circuito.nombre || circuito.id,
         media: mediaPuntosCarrera(resultados.map(res => ({ puntos: puntosDelResultado(res) }))),
         porPiloto: new Map(resultados.map(res => [res.pilotoId, res])),
+        // Piloto del día ya cerrado en este circuito: su bonus se aplica en el SIGUIENTE.
+        pilotoDiaGanador: circuito.piloto_dia_cerrado ? (circuito.piloto_dia_ganador ?? null) : null,
       };
     });
 }
 
+// El bonus del piloto del día es +2 de OVR de un solo uso: se aplica en la primera carrera
+// después de ganarlo y no vuelve a contar, aunque se recalcule el split entero desde cero.
+const BONUS_PILOTO_DEL_DIA = 2;
+
 function evolucionDePiloto(pilotId: string, base: number, bloque: Awaited<ReturnType<typeof leerBloque>>) {
-  return evolucionOVRSplit(base, bloque.map(circuito => {
+  return evolucionOVRSplit(base, bloque.map((circuito, indice) => {
     const res = circuito.porPiloto.get(pilotId);
+    const anterior = indice > 0 ? bloque[indice - 1] : null;
     return {
       id: circuito.id,
       nombre: circuito.nombre,
@@ -275,6 +327,7 @@ function evolucionDePiloto(pilotId: string, base: number, bloque: Awaited<Return
       resultado: res
         ? { puntos: puntosDelResultado(res), racePos: res.racePos, qualyPos: res.qualyPos, dnf: res.racePos > 12 || !!res.isDnfOwnError }
         : null,
+      bonusOVR: anterior?.pilotoDiaGanador === pilotId ? BONUS_PILOTO_DEL_DIA : 0,
     };
   }));
 }
@@ -367,11 +420,9 @@ export async function recalcSplitPoints(
     const equipoRefMap: Record<string, any> = {};
     equiposSnap.docs.forEach(d => { equipoRefMap[d.id] = d.ref; });
 
-    if (completed.length === 0) {
-      // Sin carreras completadas no hay nada que recalcular: el rating se conserva tal cual.
-      return { ok: 0, notFound: [], message: `Sin circuitos completados en ${splitId}. No hay nada que recalcular.` };
-    }
-
+    // Sin carreras completadas, pilotAccum ya está a cero para todos: seguimos igual y el
+    // batch de abajo escribe ese reset. Salir aquí antes se saltaba justo esa escritura, así
+    // que deshacer la única carrera de un split dejaba los puntos viejos sin tocar.
     const notFound: string[] = [];
     const teamPts: Record<string, number> = {};
 
@@ -429,5 +480,41 @@ export async function recalcSplitPoints(
     return { ok, notFound, message: msg };
   } catch (error: any) {
     return { ok: 0, notFound: [], message: `Error recalculando ${splitId}: ${error.message}` };
+  }
+}
+
+// ─── DESHACER UNA CARRERA POR COMPLETO ───────────────────────────────────────
+// Para probar una carrera y poder tirarla atrás entera: economía (si se procesó), puntos,
+// rating y el estado del acta. No hace falta rehacer a mano la resta de puntos/rating —
+// basta con vaciar los resultados de este circuito y recalcSplitPoints los rehace desde
+// cero a partir de lo que queda, exactamente igual que si esta carrera no se hubiera
+// disputado.
+export async function revertirCarreraCompleta(
+  splitId: string,
+  circuitoId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    const snap = await getDoc(circuitoRef);
+    if (!snap.exists()) return { ok: false, message: "Circuito no encontrado." };
+    const data = snap.data() as any;
+
+    const pasos: string[] = [];
+
+    if (data.economia_procesada) {
+      const economia = await revertirEconomiaCarrera(splitId, circuitoId);
+      if (!economia.ok) return economia;
+      pasos.push(economia.message);
+    }
+
+    await updateDoc(circuitoRef, { resultados: [], completado: false, acta_cerrada: false });
+    pasos.push("Resultados y acta reiniciados.");
+
+    const recalculo = await recalcSplitPoints(splitId);
+    pasos.push(recalculo.message);
+
+    return { ok: true, message: pasos.join(" ") };
+  } catch (error: any) {
+    return { ok: false, message: `Error al deshacer la carrera: ${error.message}` };
   }
 }

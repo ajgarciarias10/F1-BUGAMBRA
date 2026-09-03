@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { Users, ChevronLeft, Award } from "lucide-react";
 import { TotalStandings } from "./TotalStandings";
+import { RaceResultsView } from "./RaceResultsView";
 import { FomLive } from "./FomLive";
 import { MarketDeadlineView } from "./MarketDeadlineView";
 import { PaddockForum } from "./PaddockForum";
@@ -11,7 +12,15 @@ import { MobileBottomTabs } from "./MobileBottomTabs";
 export function GuestDashboard() {
   const { splits, loading } = useSplits();
   const { usuarios } = useUsuarios();
-  const [activeTab, setActiveTab] = useState<"tv" | "market" | "paddock" | "album" | "acumulado">("tv");
+  const [activeTab, setActiveTab] = useState<"tv" | "market" | "paddock" | "resultados" | "album" | "acumulado">("tv");
+  const [resultadosSplitId, setResultadosSplitId] = useState("");
+  const resultadosSplits = (splits || [])
+    .filter((s: any) => s.id !== "global" && s.tipo !== "individual")
+    .sort((a: any, b: any) => Number(a.orden ?? 999) - Number(b.orden ?? 999));
+  const resolvedResultadosSplitId = resultadosSplits.some((s: any) => s.id === resultadosSplitId)
+    ? resultadosSplitId
+    : (resultadosSplits.find((s: any) => s.activo)?.id || resultadosSplits[resultadosSplits.length - 1]?.id || "");
+  const resultadosSplit = resultadosSplits.find((s: any) => s.id === resolvedResultadosSplitId);
 
   const getPilotPhoto = (pilotId: string) => {
     const u = (usuarios || []).find((u: any) => u.uid === pilotId || u.piloto_id === pilotId);
@@ -60,11 +69,12 @@ export function GuestDashboard() {
         {/* Navigation Tabs */}
         <div className="hidden md:flex flex-wrap border-b border-white/10 mb-8 gap-2">
           {([
-            { id: "tv",        label: "TV" },
-            { id: "market",    label: "Deadline" },
-            { id: "paddock",   label: "Paddock" },
-            { id: "album",     label: "🎴 Álbum de Cromos" },
-            { id: "acumulado", label: "🏆 Ranking Total" },
+            { id: "tv",         label: "TV" },
+            { id: "market",     label: "Deadline" },
+            { id: "paddock",    label: "Paddock" },
+            { id: "resultados", label: "Resultados" },
+            { id: "album",      label: "🎴 Álbum de Cromos" },
+            { id: "acumulado",  label: "🏆 Ranking Total" },
           ] as const).map(tab => (
             <button
               key={tab.id}
@@ -87,16 +97,28 @@ export function GuestDashboard() {
             { id: "tv", label: "TV" },
             { id: "market", label: "Deadline" },
             { id: "paddock", label: "Paddock" },
+            { id: "resultados", label: "Resultados" },
             { id: "album", label: "Álbum" },
             { id: "acumulado", label: "Ranking" },
           ]}
           activeTab={activeTab}
-          onTab={(id) => setActiveTab(id as "tv" | "market" | "paddock" | "album" | "acumulado")}
+          onTab={(id) => setActiveTab(id as "tv" | "market" | "paddock" | "resultados" | "album" | "acumulado")}
         />
 
         {activeTab === "tv" && <FomLive />}
         {activeTab === "market" && <MarketDeadlineView readOnly />}
         {activeTab === "paddock" && <PaddockForum readOnly />}
+        {activeTab === "resultados" && (
+          <RaceResultsView
+            key={resolvedResultadosSplitId}
+            validSplits={resultadosSplits}
+            currentSplitId={resolvedResultadosSplitId}
+            onSelectSplit={(id: string) => setResultadosSplitId(id)}
+            currentSplit={resultadosSplit}
+            getPilotPhoto={getPilotPhoto}
+            darkMode
+          />
+        )}
         {activeTab === "album" && (
           <StickerAlbum splits={splits || []} usuarios={usuarios || []} loading={loading} />
         )}

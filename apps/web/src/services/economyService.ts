@@ -1,6 +1,6 @@
 import {
-  doc, getDoc, collection, getDocs, updateDoc, addDoc, deleteDoc, setDoc,
-  serverTimestamp, increment, writeBatch, runTransaction,
+  doc, getDoc, getDocFromServer, collection, getDocs, updateDoc, addDoc, deleteDoc, setDoc,
+  serverTimestamp, increment, writeBatch, runTransaction, deleteField, query, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { TipoTransaccion } from "../types";
@@ -267,7 +267,12 @@ export async function procesarEconomiaCarrera(
 ): Promise<{ processed: number; message: string }> {
   try {
     const circuitoRef  = doc(db, `splits/${splitId}/circuitos`, circuitoId);
-    const circuitoSnap = await getDoc(circuitoRef);
+    // Del servidor, no de la caché local persistente: la transacción de abajo siempre lee
+    // del servidor, así que si esta primera lectura viniera de caché y aún no hubiera
+    // sincronizado el último cambio (cerrar acta, corregir resultados...), las dos
+    // lecturas no coincidirían nunca y el proceso fallaría siempre con "los resultados
+    // cambiaron", aunque nadie los haya tocado de verdad.
+    const circuitoSnap = await getDocFromServer(circuitoRef);
     if (!circuitoSnap.exists()) return { processed: 0, message: "Circuito no encontrado." };
 
     const circuitoData = circuitoSnap.data();
@@ -335,9 +340,12 @@ export async function procesarEconomiaCarrera(
       if (currentCircuit.data()?.economia_procesada) {
         return { applied: false as const };
       }
-      if (JSON.stringify(currentCircuit.data()?.resultados ?? []) !== JSON.stringify(resultados)) {
-        throw new Error("Los resultados cambiaron durante el procesado. Vuelve a intentarlo.");
-      }
+      // Se calcula sobre la lectura fresca de la transacción, no sobre la de fuera: Firestore
+      // no garantiza el mismo orden de claves entre una lectura normal y una de transacción,
+      // así que comparar con JSON.stringify podía fallar aunque el dato fuera idéntico. Si
+      // alguien corrigió los resultados de verdad entre medias, runTransaction ya reintenta
+      // solo — es la garantía nativa de Firestore, no hace falta reimplementarla a mano.
+      const resultadosTx: any[] = currentCircuit.data()?.resultados ?? [];
 
       const teamById: Record<string, { ref: any; nombre: string }> = {};
       teamDocs.forEach(teamDoc => {
@@ -377,14 +385,14 @@ export async function procesarEconomiaCarrera(
 
       const dirtyTeams = new Set<string>();
       const participatingTeams = new Set<string>();
-      for (const raceResult of resultados) {
+      for (const raceResult of resultadosTx) {
         const teamId = raceResult.equipoId ?? teamByPilot[raceResult.pilotoId];
         if (!teamId) continue;
         participatingTeams.add(teamId);
         if (!raceResult.isClean) dirtyTeams.add(teamId);
       }
 
-      for (const raceResult of resultados) {
+      for (const raceResult of resultadosTx) {
         const teamId = raceResult.equipoId ?? teamByPilot[raceResult.pilotoId];
         if (!teamId) continue;
 
@@ -409,7 +417,7 @@ export async function procesarEconomiaCarrera(
         if (group.type === "solo") continue;
         const members = group.members
           .map((member: any) => {
-            const raceResult = resultados.find((entry: any) => entry.pilotoId === member.id);
+            const raceResult = resultadosTx.find((entry: any) => entry.pilotoId === member.id);
             const teamId = raceResult?.equipoId ?? teamByPilot[member.id];
             if (!raceResult || !teamId) return null;
             return {
@@ -529,6 +537,121 @@ export async function procesarEconomiaCarrera(
     };
   } catch (error: any) {
     return { processed: 0, message: `Error al procesar economía: ${error.message}` };
+  }
+}
+
+// ─── REVERTIR LA ECONOMÍA DE UNA CARRERA ─────────────────────────────────────
+// Deshace exactamente lo que procesarEconomiaCarrera aplicó para un circuito: devuelve a
+// cada equipo lo que se le ingresó, borra el registro de transacciones de esa carrera y
+// restaura el precio de cada piloto al estado justo anterior. El precio se lee del propio
+// historial_precios del piloto (el "vigente" que la carrera ya dejó escrito), no se
+// recalcula desde cero: recalcularCurvaPreciosSplit no sirve para esto porque empuja a cada
+// piloto hacia el cierre del split entero, no hacia el estado de la carrera anterior.
+// Solo se puede revertir el circuito procesado más reciente del split: revertir uno
+// intermedio desordenaría la secuencia de índices de la curva de precios de los que ya se
+// procesaron después.
+export async function revertirEconomiaCarrera(
+  splitId: string,
+  circuitoId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    const [circuitoSnap, calendarioSnap] = await Promise.all([
+      getDoc(circuitoRef),
+      getDocs(collection(db, `splits/${splitId}/circuitos`)),
+    ]);
+    if (!circuitoSnap.exists()) return { ok: false, message: "Circuito no encontrado." };
+    const circuitoData = circuitoSnap.data() as any;
+    if (!circuitoData.economia_procesada) {
+      return { ok: false, message: "Este circuito no tiene economía procesada." };
+    }
+
+    const calendario = calendarioSnap.docs
+      .map(d => ({
+        id: d.id,
+        orden: Number((d.data() as any).numero_carrera ?? 0),
+        procesada: !!(d.data() as any).economia_procesada,
+        fecha: (d.data() as any).fecha,
+      }))
+      .sort((a, b) => {
+        if (a.orden && b.orden) return a.orden - b.orden;
+        if (a.orden) return -1;
+        if (b.orden) return 1;
+        const fa = a.fecha?.toMillis?.() ?? 0, fb = b.fecha?.toMillis?.() ?? 0;
+        return fa !== fb ? fa - fb : a.id.localeCompare(b.id);
+      });
+    const indice = calendario.findIndex(c => c.id === circuitoId);
+    if (calendario.slice(indice + 1).some(c => c.procesada)) {
+      return { ok: false, message: "Hay una carrera posterior con economía ya procesada: revierte primero esa." };
+    }
+    const anteriorId = indice > 0 ? calendario[indice - 1].id : null;
+
+    const [equiposSnap, txSnap] = await Promise.all([
+      getDocs(collection(db, `splits/${splitId}/equipos`)),
+      getDocs(query(collection(db, "transacciones"), where("splitId", "==", splitId), where("circuitoId", "==", circuitoId))),
+    ]);
+
+    const teamIdByName: Record<string, string> = {};
+    equiposSnap.docs.forEach(d => { teamIdByName[(d.data() as any).nombre || d.id] = d.id; });
+
+    // Todas las entradas que procesarEconomiaCarrera registra son ingresos (esIngreso
+    // siempre true, ver el closure add() más arriba); revertir siempre resta.
+    const refund: Record<string, number> = {};
+    txSnap.docs.forEach(txDoc => {
+      const data = txDoc.data() as any;
+      const teamId = teamIdByName[data.equipo];
+      if (!teamId) return;
+      refund[teamId] = (refund[teamId] || 0) + Number(data.cantidad || 0);
+    });
+
+    const batch = writeBatch(db);
+    for (const [teamId, total] of Object.entries(refund)) {
+      if (total === 0) continue;
+      batch.update(doc(db, `splits/${splitId}/equipos`, teamId), { presupuesto: increment(-total) });
+    }
+    txSnap.docs.forEach(txDoc => batch.delete(txDoc.ref));
+
+    let pilotosRestaurados = 0;
+    for (const equipoDoc of equiposSnap.docs) {
+      const pilotosSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`));
+      for (const pd of pilotosSnap.docs) {
+        const d = pd.data() as any;
+        const entry = d.historial_precios?.[circuitoId];
+        if (!entry) continue;
+        pilotosRestaurados++;
+
+        if (entry.congelado) {
+          // Un precio pactado no cambia mantener/cláusula al procesar: solo hay que quitar
+          // la entrada de esta carrera del historial.
+          batch.update(pd.ref, { [`historial_precios.${circuitoId}`]: deleteField() });
+          continue;
+        }
+
+        const anterior = anteriorId ? d.historial_precios?.[anteriorId] : null;
+        const precioCarreraAnterior = anterior && !anterior.congelado && anterior.mantener != null
+          ? anterior.mantener
+          : d.mantener_inicial_split ?? entry.mantener;
+
+        batch.update(pd.ref, {
+          mantener_actual: entry.mantener,
+          clausula_actual: entry.clausula,
+          precio_carrera_anterior: precioCarreraAnterior,
+          [`historial_precios.${circuitoId}`]: deleteField(),
+        });
+      }
+    }
+
+    batch.update(circuitoRef, { economia_procesada: false });
+    await batch.commit();
+
+    return {
+      ok: true,
+      message: `Economía de ${circuitoData.nombre || circuitoId} revertida: `
+        + `${Object.keys(refund).length} equipo(s) reembolsados, ${txSnap.docs.length} movimiento(s) borrados, `
+        + `${pilotosRestaurados} piloto(s) con precio restaurado.`,
+    };
+  } catch (error: any) {
+    return { ok: false, message: `Error al revertir la economía: ${error.message}` };
   }
 }
 

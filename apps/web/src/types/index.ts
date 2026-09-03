@@ -38,6 +38,9 @@ export interface Split {
     puntos_carreras?: number[];
   }>;
   rivalries?: RivalryConfig;
+  /** Fuente cruda que edita el admin: {id, pilotoIds}[]. `rivalries.groups` es lo derivado
+   *  de esto (con nombre, equipo, rating...) para el cálculo económico. */
+  rivalidades_manual?: Array<{ id: string; pilotoIds: string[] }>;
   video_intro?: string;
 }
 
@@ -112,6 +115,12 @@ export interface Circuito {
   acta_cerrada: boolean;
   economia_procesada: boolean;
   resultados: RaceResult[];
+  /** uid del votante → pilotoId elegido. Un voto por cuenta de la liga, sin duplicados. */
+  piloto_dia_votantes?: Record<string, string>;
+  /** true cuando el admin ha fijado el ganador y la votación ya no acepta cambios. */
+  piloto_dia_cerrado?: boolean;
+  /** pilotoId del ganador; solo tiene sentido si piloto_dia_cerrado es true. */
+  piloto_dia_ganador?: string | null;
 }
 
 // ─── RESULTADOS DE CARRERA ────────────────────────────────────────────────────

@@ -1,10 +1,118 @@
-import { ArrowUpRight, MonitorPlay, Radio, Video } from "lucide-react";
+import { useEffect, useState } from "react";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query } from "firebase/firestore";
+import { db } from "../services/firebase";
+import { useAuth } from "../contexts/AuthContext";
+import { getYoutubeEmbedUrl, getYoutubeThumbnailUrl, getYoutubeVideoId } from "../utils/youtube";
+import { ArrowUpRight, Loader2, MonitorPlay, Play, Plus, Radio, Trash2, Video } from "lucide-react";
 
 const FOM_CHANNEL = {
   id: "tonicotitular",
   name: "Tonicotitular",
   label: "Cámara oficial Tonicotitular",
 };
+
+interface Interview {
+  id: string;
+  title: string;
+  youtubeUrl: string;
+  authorName: string;
+  createdAt: string;
+}
+
+function InterviewsSection({ compact }: { compact: boolean }) {
+  const { user, userData } = useAuth();
+  const isAdmin = userData?.rol === "admin";
+  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [publishing, setPublishing] = useState(false);
+
+  useEffect(() => onSnapshot(query(collection(db, "fom_interviews"), orderBy("createdAt", "desc")), snapshot => {
+    setInterviews(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Interview[]);
+  }), []);
+
+  const validUrl = getYoutubeVideoId(url) !== "";
+
+  const publish = async () => {
+    if (!user || !userData || !title.trim() || !validUrl) return;
+    setPublishing(true);
+    try {
+      await addDoc(collection(db, "fom_interviews"), {
+        title: title.trim(),
+        youtubeUrl: url.trim(),
+        authorName: userData.nombre || "Admin",
+        createdBy: user.uid,
+        createdAt: new Date().toISOString(),
+      });
+      setTitle(""); setUrl("");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    if (!isAdmin) return;
+    await deleteDoc(doc(db, "fom_interviews", id));
+  };
+
+  return (
+    <section className="border border-white/10 bg-white/[0.02] p-4 md:p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Video className="w-4 h-4 text-[#e10600]" />
+        <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Entrevistas</span>
+      </div>
+
+      {isAdmin && (
+        <div className="mb-4 border border-white/10 bg-black/20 p-3 flex flex-col gap-2 md:flex-row md:items-center">
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título de la entrevista" maxLength={120}
+            className="flex-1 min-w-40 bg-black/30 border border-white/10 px-3 py-2 text-xs text-white outline-none focus:border-[#e10600]" />
+          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="URL de YouTube"
+            className="flex-1 min-w-48 bg-black/30 border border-white/10 px-3 py-2 text-xs text-white outline-none focus:border-[#e10600]" />
+          <button onClick={publish} disabled={publishing || !title.trim() || !validUrl}
+            className="inline-flex items-center justify-center gap-2 bg-[#e10600] px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-35">
+            {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Añadir
+          </button>
+        </div>
+      )}
+
+      {interviews.length === 0 ? (
+        <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25 py-3 text-center">Todavía no hay entrevistas publicadas</p>
+      ) : (
+        <div className={`grid gap-3 ${compact ? "" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
+          {interviews.map(item => (
+            <article key={item.id} className="border border-white/8 bg-black/25">
+              {openId === item.id ? (
+                <div className="aspect-video bg-black">
+                  <iframe src={getYoutubeEmbedUrl(item.youtubeUrl)} className="w-full h-full border-0" allowFullScreen
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" />
+                </div>
+              ) : (
+                <button onClick={() => setOpenId(item.id)} className="relative block w-full aspect-video bg-black group">
+                  <img src={getYoutubeThumbnailUrl(item.youtubeUrl)} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                  <span className="absolute inset-0 grid place-items-center bg-black/30 group-hover:bg-black/15 transition-colors">
+                    <span className="w-11 h-11 grid place-items-center bg-[#e10600] shadow-[0_8px_24px_rgba(225,6,0,0.4)]"><Play className="w-5 h-5 text-white ml-0.5" fill="white" /></span>
+                  </span>
+                </button>
+              )}
+              <div className="p-3 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-black uppercase text-xs truncate">{item.title}</p>
+                  <p className="text-[8px] font-mono text-white/30 uppercase tracking-wider mt-0.5">{item.authorName}</p>
+                </div>
+                {isAdmin && (
+                  <button onClick={() => remove(item.id)} className="shrink-0 text-white/20 hover:text-red-300 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function FomLive({ compact = false }: { compact?: boolean }) {
   const domain = window.location.hostname || "localhost";
@@ -58,6 +166,8 @@ export function FomLive({ compact = false }: { compact?: boolean }) {
           <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/clips`} icon={<MonitorPlay className="w-3.5 h-3.5" />} label="Clips" />
         </div>
       </section>
+
+      <InterviewsSection compact={compact} />
     </div>
   );
 }

@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
-import { useSplits } from "../hooks/useData";
-import { CalendarClock, Megaphone, ShieldAlert, Sparkles, TrendingUp, Trash2 } from "lucide-react";
+import { useSplits, usePilotos } from "../hooks/useData";
+import { CalendarClock, Megaphone, ShieldAlert, Sparkles, TrendingUp, Trash2, UserX } from "lucide-react";
 
-type MarketPostKind = "rumor" | "rookie";
+type MarketPostKind = "rumor" | "rookie" | "regreso";
 
 interface MarketPost {
   id: string;
@@ -23,8 +23,6 @@ interface MarketPost {
   createdBy: string;
   authorName: string;
 }
-
-const SPLIT_ID = "split_3";
 
 function buildCandidateTeams(split: any) {
   return [...(split?.equipos || [])]
@@ -51,6 +49,13 @@ function createCopy(pilot: any, split: any, kind: MarketPostKind) {
     };
   }
 
+  if (kind === "regreso") {
+    return {
+      headline: `¿Vuelve ${pilot.nombre} a la parrilla?`,
+      body: `${pilot.nombre} lleva fuera de la liga desde que dejó su última escudería, pero el nombre no deja de sonar en el paddock. Con ${rating} OVR de referencia, cualquier regreso apuntaría a ${teamNames}.`,
+    };
+  }
+
   return {
     headline: `Deadline Watch: ${pilot.nombre} agita el mercado`,
     body: `${pilot.nombre} aparece en la lista de agentes libres con ${points} puntos, ${rating} OVR y una cláusula de ${clause}M. El rumor ya suena fuerte y los destinos más lógicos pasan por ${teamNames}.`,
@@ -63,11 +68,25 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
   const [posts, setPosts] = useState<MarketPost[]>([]);
   const [publishingId, setPublishingId] = useState<string | null>(null);
 
-  const marketSplit = useMemo(() => {
-    return (splits || []).find((split: any) => split.id === SPLIT_ID)
-      || (splits || []).find((split: any) => split.activo)
-      || null;
+  // Splits reales con mercado propio: cada uno tiene su propia sección de rumores, no solo
+  // el que esté activo ahora mismo.
+  const marketSplits = useMemo(() => {
+    return (splits || [])
+      .filter((split: any) => split.id !== "global" && split.tipo !== "individual")
+      .sort((a: any, b: any) => Number(a.orden ?? 999) - Number(b.orden ?? 999));
   }, [splits]);
+
+  const [selectedSplitId, setSelectedSplitId] = useState("");
+  const defaultSplitId = useMemo(() => {
+    return marketSplits.find((split: any) => split.activo)?.id
+      || marketSplits[marketSplits.length - 1]?.id
+      || "";
+  }, [marketSplits]);
+
+  const marketSplit = useMemo(() => {
+    const id = marketSplits.some((split: any) => split.id === selectedSplitId) ? selectedSplitId : defaultSplitId;
+    return marketSplits.find((split: any) => split.id === id) || null;
+  }, [marketSplits, selectedSplitId, defaultSplitId]);
 
   const freeAgents = useMemo(() => {
     return (marketSplit?.roster || [])
@@ -80,6 +99,17 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
       .filter((pilot: any) => pilot.rookie)
       .sort((a: any, b: any) => (Number(b.rating_piloto ?? 0) - Number(a.rating_piloto ?? 0)) || (Number(b.puntos_piloto ?? 0) - Number(a.puntos_piloto ?? 0)));
   }, [marketSplit]);
+
+  // Piloto global sin ficha en el roster del split de mercado: no está en ningún equipo ni
+  // en la bolsa de agentes libres porque en algún split anterior se marcó "deja la liga".
+  const { pilotos } = usePilotos();
+  const exPilotos = useMemo(() => {
+    const enRoster = new Set((marketSplit?.roster || []).map((pilot: any) => pilot.pilotoId));
+    return (pilotos || [])
+      .filter(piloto => !enRoster.has(piloto.id))
+      .map(piloto => ({ pilotoId: piloto.id, nombre: piloto.nombre, rating_piloto: piloto.rating_piloto ?? 70 }))
+      .sort((a, b) => Number(b.rating_piloto ?? 0) - Number(a.rating_piloto ?? 0));
+  }, [pilotos, marketSplit]);
 
   const seasonSummaries = useMemo(() => {
     return (splits || []).filter((split: any) => split.completado && split.circuitos?.length).map((split: any) => {
@@ -102,6 +132,9 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
     });
     return unsub;
   }, []);
+
+  // Cada split tiene su propio muro: un rumor de Split 2 no debe mezclarse con el de Split 3.
+  const splitPosts = useMemo(() => posts.filter(post => post.splitId === marketSplit?.id), [posts, marketSplit]);
 
   const publishPost = async (pilot: any, kind: MarketPostKind) => {
     if (!user || !userData || !marketSplit) return;
@@ -155,10 +188,29 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
               Posts para calentar el mercado del {marketSplit.nombre}. Cada agente libre puede tener su propio rumor y cada rookie, su anuncio de llegada.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.25em] text-white/30">
-            <CalendarClock className="w-4 h-4 text-[#e10600]" /> Split 3 activo
-          </div>
+          {marketSplit.activo && (
+            <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.25em] text-white/30">
+              <CalendarClock className="w-4 h-4 text-[#e10600]" /> {marketSplit.nombre} activo
+            </div>
+          )}
         </div>
+        {marketSplits.length > 1 && (
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {marketSplits.map((split: any) => (
+              <button
+                key={split.id}
+                onClick={() => setSelectedSplitId(split.id)}
+                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors ${
+                  marketSplit.id === split.id
+                    ? "bg-[#e10600] text-white"
+                    : "bg-white/[0.03] text-white/40 border border-white/10 hover:border-white/25 hover:text-white/70"
+                }`}
+              >
+                {split.nombre}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {seasonSummaries.length > 0 && (
@@ -174,7 +226,7 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
       )}
 
       {!readOnly && isAdmin && (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <div className="border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center gap-2 mb-3">
               <Megaphone className="w-4 h-4 text-[#e10600]" />
@@ -200,7 +252,7 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
                   </div>
                 );
               }) : (
-                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay agentes libres en Split 3.</p>
+                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay agentes libres en {marketSplit.nombre}.</p>
               )}
             </div>
           </div>
@@ -226,7 +278,33 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
                   </button>
                 </div>
               )) : (
-                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay rookies detectados en Split 3.</p>
+                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay rookies detectados en {marketSplit.nombre}.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="border border-white/10 bg-white/[0.02] p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <UserX className="w-4 h-4 text-violet-400" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Ex-pilotos</span>
+            </div>
+            <div className="space-y-2">
+              {exPilotos.length > 0 ? exPilotos.map((pilot) => (
+                <div key={pilot.pilotoId} className="border border-white/8 bg-black/20 p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="font-black uppercase tracking-tight">{pilot.nombre}</p>
+                    <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto} OVR · fuera de la parrilla</p>
+                  </div>
+                  <button
+                    onClick={() => publishPost(pilot, "regreso")}
+                    disabled={publishingId === pilot.pilotoId}
+                    className="px-3 py-2 bg-violet-500/15 text-violet-300 border border-violet-500/20 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-violet-500/25 transition-colors disabled:opacity-40"
+                  >
+                    {publishingId === pilot.pilotoId ? "Publicando..." : "Publicar rumor"}
+                  </button>
+                </div>
+              )) : (
+                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay expilotos fuera de la parrilla.</p>
               )}
             </div>
           </div>
@@ -234,13 +312,17 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
       )}
 
       <div className="grid gap-3">
-        {posts.length > 0 ? posts.map(post => (
+        {splitPosts.length > 0 ? splitPosts.map(post => (
           <article key={post.id} className="border border-white/10 bg-white/[0.02] p-5">
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-[9px] font-mono uppercase tracking-[0.25em] px-2 py-1 border ${post.kind === "rookie" ? "border-amber-500/25 text-amber-300 bg-amber-500/10" : "border-[#e10600]/25 text-[#e10600] bg-[#e10600]/10"}`}>
-                    {post.kind === "rookie" ? "Rookie draft" : "Rumor de mercado"}
+                  <span className={`text-[9px] font-mono uppercase tracking-[0.25em] px-2 py-1 border ${
+                    post.kind === "rookie" ? "border-amber-500/25 text-amber-300 bg-amber-500/10"
+                      : post.kind === "regreso" ? "border-violet-500/25 text-violet-300 bg-violet-500/10"
+                      : "border-[#e10600]/25 text-[#e10600] bg-[#e10600]/10"
+                  }`}>
+                    {post.kind === "rookie" ? "Rookie draft" : post.kind === "regreso" ? "Rumor de regreso" : "Rumor de mercado"}
                   </span>
                   <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-white/25">{post.authorName}</span>
                 </div>
@@ -255,7 +337,7 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
             </div>
             <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-[0.22em] text-white/35">
               <span className="px-2 py-1 border border-white/10">{post.pilotName}</span>
-              <span className="px-2 py-1 border border-white/10">{post.points ?? 0} pts</span>
+              {post.kind !== "regreso" && <span className="px-2 py-1 border border-white/10">{post.points ?? 0} pts</span>}
               <span className="px-2 py-1 border border-white/10">{post.rating ?? 0} ovr</span>
               {post.candidateTeams.slice(0, 3).map(team => (
                 <span key={team.id} className="px-2 py-1 border border-white/10 text-white/50">{team.nombre}</span>
@@ -265,7 +347,7 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
         )) : (
           <div className="border border-dashed border-white/10 bg-black/20 p-8 text-center">
             <ShieldAlert className="w-8 h-8 mx-auto text-white/20" />
-            <p className="mt-3 text-[10px] font-mono uppercase tracking-[0.3em] text-white/25">Todavía no hay posts del deadline</p>
+            <p className="mt-3 text-[10px] font-mono uppercase tracking-[0.3em] text-white/25">Todavía no hay posts del deadline en {marketSplit.nombre}</p>
           </div>
         )}
       </div>

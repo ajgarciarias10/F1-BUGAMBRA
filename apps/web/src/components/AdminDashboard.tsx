@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect, useMemo } from "react";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
-import { processRace, RaceResult } from "../services/raceProcessor";
-import { procesarEconomiaCarrera } from "../services/economyService";
+import { processRace, RaceResult, revertirCarreraCompleta, recalcSplitPoints } from "../services/raceProcessor";
+import { procesarEconomiaCarrera, revertirEconomiaCarrera } from "../services/economyService";
 import { db } from "../services/firebase";
 import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch } from "firebase/firestore";
 import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
@@ -123,6 +123,11 @@ export function AdminDashboard() {
   const [isActaCerrada, setIsActaCerrada] = useState(false);
   const [procesandoEconomia, setProcesandoEconomia] = useState(false);
   const [economiaMsg, setEconomiaMsg] = useState("");
+  const [isEconomiaProcesada, setIsEconomiaProcesada] = useState(false);
+  const [revirtiendoEconomia, setRevirtiendoEconomia] = useState(false);
+  const [reabriendoActa, setReabriendoActa] = useState(false);
+  const [deshaciendoCarrera, setDeshaciendoCarrera] = useState(false);
+  const [recalculandoPuntos, setRecalculandoPuntos] = useState(false);
 
   // Form State
   const [results, setResults] = useState<Record<string, Partial<RaceResult>>>({});
@@ -253,6 +258,7 @@ export function AdminDashboard() {
       if (circuito?.completado && circuito.resultados) {
         setIsEditingFinished(true);
         setIsActaCerrada(!!circuito.acta_cerrada);
+        setIsEconomiaProcesada(!!circuito.economia_procesada);
         const savedResults: Record<string, Partial<RaceResult>> = {};
         circuito.resultados.forEach((res: RaceResult) => {
           savedResults[res.pilotoId] = res;
@@ -261,6 +267,7 @@ export function AdminDashboard() {
       } else {
         setIsEditingFinished(false);
         setIsActaCerrada(false);
+        setIsEconomiaProcesada(false);
         setResults({});
       }
     }
@@ -546,6 +553,89 @@ export function AdminDashboard() {
           setMsg("Error al cerrar acta: " + err.message);
         } finally {
           setLoading(false);
+        }
+      }
+    });
+  };
+
+  // Solo se puede revertir la economía de la carrera procesada más reciente del split:
+  // revertir una intermedia desordenaría la curva de precios de las que vinieron después.
+  const esUltimaCarreraProcesada = useMemo(() => {
+    if (!selectedSplitId || !selectedCircuitoId) return false;
+    const split = splits.find(s => s.id === selectedSplitId);
+    const circuitos = [...(split?.circuitos ?? [])].sort(
+      (a: any, b: any) => (a.numero_carrera ?? 9999) - (b.numero_carrera ?? 9999)
+    );
+    const idx = circuitos.findIndex((c: any) => c.id === selectedCircuitoId);
+    if (idx < 0) return false;
+    return !circuitos.slice(idx + 1).some((c: any) => c.economia_procesada);
+  }, [splits, selectedSplitId, selectedCircuitoId]);
+
+  const handleRevertirEconomia = () => {
+    if (!selectedSplitId || !selectedCircuitoId) return;
+    setConfirmModal({
+      isOpen: true,
+      title: "Revertir economía de la carrera",
+      message: "Devuelve a cada equipo lo que se le ingresó por esta carrera, borra sus transacciones y restaura el precio de cada piloto a como estaba antes. ¿Continuar?",
+      onConfirm: async () => {
+        setRevirtiendoEconomia(true);
+        try {
+          const result = await revertirEconomiaCarrera(selectedSplitId, selectedCircuitoId);
+          setEconomiaMsg(result.message);
+          if (result.ok) setIsEconomiaProcesada(false);
+        } catch (err: any) {
+          setEconomiaMsg("Error al revertir la economía: " + err.message);
+        } finally {
+          setRevirtiendoEconomia(false);
+        }
+      }
+    });
+  };
+
+  const handleReabrirActa = () => {
+    if (!selectedSplitId || !selectedCircuitoId) return;
+    setConfirmModal({
+      isOpen: true,
+      title: "Reabrir acta de carrera",
+      message: "Vuelve a permitir editar los resultados de esta carrera. Solo tiene sentido si ya has revertido su economía. ¿Continuar?",
+      onConfirm: async () => {
+        setReabriendoActa(true);
+        try {
+          const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
+          await updateDoc(ref, { acta_cerrada: false });
+          setIsActaCerrada(false);
+          setMsg("Acta reabierta: ya se pueden corregir los resultados.");
+          setTimeout(() => setMsg(""), 4000);
+        } catch (err: any) {
+          setMsg("Error al reabrir acta: " + err.message);
+        } finally {
+          setReabriendoActa(false);
+        }
+      }
+    });
+  };
+
+  const handleDeshacerCarrera = () => {
+    if (!selectedSplitId || !selectedCircuitoId) return;
+    setConfirmModal({
+      isOpen: true,
+      title: "Deshacer esta carrera por completo",
+      message: "Revierte economía (si estaba procesada), borra los resultados, reabre el acta y recalcula puntos y rating del split entero desde lo que quede. Es como si esta carrera no se hubiera disputado. ¿Continuar?",
+      onConfirm: async () => {
+        setDeshaciendoCarrera(true);
+        try {
+          const result = await revertirCarreraCompleta(selectedSplitId, selectedCircuitoId);
+          setMsg(result.message);
+          if (result.ok) {
+            setIsEconomiaProcesada(false);
+            setIsActaCerrada(false);
+            setIsEditingFinished(false);
+            setResults({});
+          }
+        } catch (err: any) {
+          setMsg("Error al deshacer la carrera: " + err.message);
+        } finally {
+          setDeshaciendoCarrera(false);
         }
       }
     });
@@ -1085,7 +1175,7 @@ export function AdminDashboard() {
                 </button>
               )}
 
-              {isActaCerrada && (
+              {isActaCerrada && !isEconomiaProcesada && (
                 <button
                   disabled={procesandoEconomia}
                   onClick={async () => {
@@ -1104,12 +1194,51 @@ export function AdminDashboard() {
                       prevIds
                     );
                     setEconomiaMsg(result.message);
+                    // processed puede salir en 0 por un guard interno (resultados
+                    // inválidos, sin pole/vuelta rápida...): en ese caso no se aplicó
+                    // nada y no hay que marcar la economía como procesada.
+                    if (result.processed > 0) setIsEconomiaProcesada(true);
                     setProcesandoEconomia(false);
                   }}
                   className="px-4 py-1.5 rounded-sm border border-amber-500/40 text-amber-400 text-[10px] font-black uppercase hover:bg-amber-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {procesandoEconomia ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                   {procesandoEconomia ? "Procesando..." : "Procesar Economía"}
+                </button>
+              )}
+
+              {isEconomiaProcesada && (
+                <button
+                  disabled={revirtiendoEconomia || !esUltimaCarreraProcesada}
+                  title={esUltimaCarreraProcesada ? "" : "Hay una carrera posterior con economía procesada: revierte primero esa."}
+                  onClick={handleRevertirEconomia}
+                  className="px-4 py-1.5 rounded-sm border border-orange-500/40 text-orange-400 text-[10px] font-black uppercase hover:bg-orange-500/10 transition-all disabled:opacity-40 flex items-center gap-1.5"
+                >
+                  {revirtiendoEconomia ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {revirtiendoEconomia ? "Revirtiendo..." : "Revertir Economía"}
+                </button>
+              )}
+
+              {isActaCerrada && !isEconomiaProcesada && (
+                <button
+                  disabled={reabriendoActa}
+                  onClick={handleReabrirActa}
+                  className="px-4 py-1.5 rounded-sm border border-sky-500/40 text-sky-400 text-[10px] font-black uppercase hover:bg-sky-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {reabriendoActa ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {reabriendoActa ? "Reabriendo..." : "Reabrir Acta"}
+                </button>
+              )}
+
+              {isEditingFinished && (!isEconomiaProcesada || esUltimaCarreraProcesada) && (
+                <button
+                  disabled={deshaciendoCarrera}
+                  title="Revierte economía, puntos, rating y el estado del acta de esta carrera, todo de una vez"
+                  onClick={handleDeshacerCarrera}
+                  className="px-4 py-1.5 rounded-sm border border-red-500/40 text-red-400 text-[10px] font-black uppercase hover:bg-red-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {deshaciendoCarrera ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {deshaciendoCarrera ? "Deshaciendo..." : "Deshacer Carrera"}
                 </button>
               )}
 
@@ -1168,6 +1297,27 @@ export function AdminDashboard() {
             >
               {resetPointsLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
               Reset circuitos
+            </button>
+            <button
+              onClick={async () => {
+                if (!selectedSplitId) return;
+                setRecalculandoPuntos(true);
+                try {
+                  const result = await recalcSplitPoints(selectedSplitId);
+                  setMsg(result.message);
+                  setTimeout(() => setMsg(""), 6000);
+                } catch (err: any) {
+                  setMsg("Error al recalcular: " + err.message);
+                } finally {
+                  setRecalculandoPuntos(false);
+                }
+              }}
+              disabled={recalculandoPuntos || !selectedSplitId}
+              title="Rehace puntos, rating y puntos de constructor desde cero a partir de los circuitos que sigan completados. Úsalo si un split se queda con cifras desincronizadas."
+              className="px-3 py-1 bg-sky-500/[0.06] hover:bg-sky-500/15 border border-sky-500/20 text-[9px] uppercase font-bold tracking-wider text-sky-400/70 hover:text-sky-400 transition-colors disabled:opacity-40 flex items-center gap-1"
+            >
+              {recalculandoPuntos ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
+              Recalcular puntos y rating
             </button>
           </div>
 
