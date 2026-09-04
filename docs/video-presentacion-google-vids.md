@@ -90,12 +90,29 @@ Una idea por escena. Si una necesita dos frases, es que son dos escenas.
 
 ## La voz
 
-Dos caminos:
+Vids narra por escena, no por vídeo entero. Con una escena seleccionada busca en
+la barra lateral el panel de voz en off (icono de micrófono; el nombre del menú
+cambia de una versión a otra). Desde ahí tienes tres caminos:
 
-- **Grabar en Vids**: trae teleprompter y grabación de voz por escena. Cómodo si
-  te vas a oír a ti mismo.
-- **ElevenLabs**: generas el audio, lo subes a Drive y lo insertas como pista.
-  Suena más uniforme entre escenas.
+**1. Voz generada por Vids.** Escribes el texto de esa escena, eliges una voz y
+Vids la lee. Es lo más rápido, y tiene una ventaja que no se ve a primera vista:
+**la escena se ajusta sola a lo que dura la narración**. No tienes que cuadrar
+tiempos a mano.
+
+**2. Grabar tu propia voz.** Mismo panel, con teleprompter: el texto va pasando
+mientras te grabas. La escena también se ajusta sola.
+
+**3. Importar audio de ElevenLabs.** Generas los bloques, los subes a Drive y los
+insertas como pista de audio. Aquí sí te toca estirar cada escena a mano hasta
+que cuadre con su locución.
+
+**Cuál elegir.** Las voces en español de Vids cumplen, pero suenan a vídeo
+corporativo: neutras y planas. Para una liga de F1, donde interesa un punto de
+retransmisión deportiva, ElevenLabs queda bastante mejor. Si lo que quieres es
+tenerlo hecho hoy, tira de la voz de Vids y no le des más vueltas.
+
+Sea cual sea, el guion de abajo va **un bloque por escena**: pega el bloque 1 en
+la escena 1, el 2 en la 2, y así.
 
 Si tiras de ElevenLabs, los ajustes recomendados y las trampas de pronunciación
 están en [video-instalacion-instrucciones.md](video-instalacion-instrucciones.md).
