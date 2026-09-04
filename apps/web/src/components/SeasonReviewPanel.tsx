@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { GoogleAuthProvider, linkWithPopup, reauthenticateWithPopup } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, setDoc, writeBatch } from "firebase/firestore";
 import { Check, FileSpreadsheet, Loader2, MousePointer2, Save, ShieldCheck, X } from "lucide-react";
-import { auth, db } from "../services/firebase";
+import { db } from "../services/firebase";
+import { auth } from "../services/auth";
 import { recalcSplitPoints } from "../services/raceProcessor";
 import { POINTS_BY_POSITION, calcularMillonesRivalidadClasificacion, calcularMillonesRivalidadCarrera } from "../services/economyService";
 

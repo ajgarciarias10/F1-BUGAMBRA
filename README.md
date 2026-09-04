@@ -95,6 +95,33 @@ antiguas se limpien en los dispositivos ya instalados.
 Firestore, Auth y Storage nunca pasan por caché: el service worker los deja ir
 siempre a red para no servir datos de liga caducados.
 
+El `index.html` se sirve desde la caché y se revalida por detrás, para que la app
+arranque sin esperar a la red. Efecto secundario a tener presente: tras un
+despliegue, cada móvil ve la versión anterior una vez y la nueva en la siguiente
+apertura. Solo afecta al código; los datos de la liga llegan por Firestore en
+tiempo real.
+
+## Peso del arranque
+
+Solo se descarga y parsea antes del primer pintado lo que necesita la
+clasificación de la portada: `index` + `react` + `firebase-firestore`. Fuera del
+arranque quedan el SDK de autenticación (`AuthContext` lo importa de forma
+diferida), los dashboards, el panel de admin y las pestañas de Equipos,
+Resultados y TV.
+
+Dos reglas que es fácil romper sin querer al tocar esto:
+
+- **`manualChunks` no puede acabar en un `return 'vendor'` genérico.** Ese cajón
+  de sastre arrastra al paquete inicial cosas que solo se alcanzan por import
+  dinámico, y anula la carga diferida de `firebase/auth` (unos 190 kB).
+- **`services/firebase.ts` no puede importar `firebase/auth`.** Lo importa todo
+  el que necesita `db`, así que bastaría eso para devolver el SDK de
+  autenticación al arranque. La instancia vive en `services/auth.ts`.
+
+Para comprobar el reparto tras un cambio, `npm run build` y mirar qué ficheros
+aparecen como `modulepreload` en `apps/web/dist/index.html`: esos son,
+exactamente, los que bloquean el arranque.
+
 Para generar un vídeo explicativo de la instalación con NotebookLM o Gemini están
 las instrucciones en [docs/video-instalacion-instrucciones.md](docs/video-instalacion-instrucciones.md),
 con la guía de usuario en [docs/guia-instalacion-app.md](docs/guia-instalacion-app.md).

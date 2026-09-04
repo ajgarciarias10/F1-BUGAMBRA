@@ -2,14 +2,16 @@
  * Service worker de F1 Bugambra.
  *
  * Estrategia:
- *  - Navegaciones: red primero, con el index.html cacheado como respaldo offline.
+ *  - Navegaciones: se sirve el shell cacheado al instante y se revalida por
+ *    detrás. Esperar al index.html por red antes de empezar a bajar el JS
+ *    añadía medio segundo largo a cada apertura en móvil.
  *  - /assets/* (hash en el nombre): caché primero, son inmutables.
  *  - Iconos y manifest: caché con revalidación en segundo plano.
  *  - Firestore, Auth, Storage y cualquier API: nunca se tocan, van siempre a red.
  *
  * Sube SW_VERSION al cambiar este archivo para forzar la limpieza de cachés viejas.
  */
-const SW_VERSION = "v1";
+const SW_VERSION = "v2";
 const SHELL_CACHE = `bugambra-shell-${SW_VERSION}`;
 const ASSET_CACHE = `bugambra-assets-${SW_VERSION}`;
 const CURRENT_CACHES = [SHELL_CACHE, ASSET_CACHE];
@@ -60,18 +62,28 @@ function isNeverCached(url) {
   return NEVER_CACHE_HOSTS.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
 }
 
-async function networkFirstNavigation(request) {
+async function shellFirstNavigation(request) {
   const cache = await caches.open(SHELL_CACHE);
-  try {
-    const response = await fetch(request);
-    // Guardamos la última copia buena del shell para el modo offline.
-    if (response.ok) cache.put("/", response.clone());
-    return response;
-  } catch (error) {
-    const cached = (await cache.match(request)) || (await cache.match("/"));
-    if (cached) return cached;
-    throw error;
+  const cached = await cache.match("/");
+
+  // La revalidación va aparte: si se esperase a ella no habría ganancia alguna.
+  const fresca = fetch(request)
+    .then(response => {
+      if (response.ok) cache.put("/", response.clone());
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    // Que la revalidación siga viva aunque ya hayamos respondido.
+    fresca.catch(() => {});
+    return cached;
   }
+
+  // Primera visita: no hay shell todavía, toca esperar a la red.
+  const response = await fresca;
+  if (response) return response;
+  throw new Error("Sin conexión y sin shell en caché");
 }
 
 async function cacheFirst(request, cacheName) {
@@ -103,7 +115,7 @@ self.addEventListener("fetch", (event) => {
   if (isNeverCached(url)) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirstNavigation(request));
+    event.respondWith(shellFirstNavigation(request));
     return;
   }
 

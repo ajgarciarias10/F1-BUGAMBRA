@@ -7,6 +7,13 @@
     <title>F1 Bugambra</title>
     <meta name="description" content="Clasificación, equipos, mercado y señal en directo de la liga F1 Bugambra." />
 
+    <!-- El handshake con Firestore (DNS + TLS) cuesta cientos de ms en móvil.
+         Abriéndolo ya, se solapa con la descarga y el parseo del JavaScript en
+         vez de empezar cuando el SDK hace su primera consulta. -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin />
+
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0a0a0a" />

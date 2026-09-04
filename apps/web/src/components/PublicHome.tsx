@@ -1,13 +1,20 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense, lazy } from "react";
 import { Link } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Sun, Moon, Play, Radio, Crown } from "lucide-react";
 import { TotalStandings } from "./TotalStandings";
-import { FomLive } from "./FomLive";
 import { MobileBottomTabs } from "./MobileBottomTabs";
-import { TeamsView } from "./TeamsView";
-import { RaceResultsView } from "./RaceResultsView";
+
+// La portada abre siempre en Clasificación. Equipos, Resultados y TV solo hacen
+// falta si el usuario toca esas pestañas, así que no viajan en el arranque.
+const FomLive = lazy(() => import("./FomLive").then(m => ({ default: m.FomLive })));
+const TeamsView = lazy(() => import("./TeamsView").then(m => ({ default: m.TeamsView })));
+const RaceResultsView = lazy(() => import("./RaceResultsView").then(m => ({ default: m.RaceResultsView })));
+
+const tabFallback = (
+  <div className="py-20 text-center text-[13px] text-black/30 dark:text-white/30">Cargando…</div>
+);
 import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
 import { InstallButton } from "./InstallApp";
 import { usePWAInstall } from "../hooks/usePWAInstall";
@@ -243,6 +250,7 @@ export function PublicHome() {
                 getPilotPhoto={getPilotPhoto}
               />
             )}
+            {activeTab !== "clasificacion" && <Suspense fallback={tabFallback}>
             {activeTab === "equipos" && (
               <TeamsView
                 key={selectedRealSplitId}
@@ -264,6 +272,7 @@ export function PublicHome() {
               />
             )}
             {activeTab === "tv" && <FomLive />}
+            </Suspense>}
           </>
         )}
 

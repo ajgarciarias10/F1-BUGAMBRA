@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { SharedDashboardView } from "./SharedDashboard";
 import { ProfileView } from "./ProfileView";
-import { auth } from "../services/firebase";
+import { auth } from "../services/auth";
 import { SuggestionsView } from "./SuggestionsView";
 import { MarketDeadlineView } from "./MarketDeadlineView";
 import { AuctionRoom } from "./AuctionRoom";

@@ -10,7 +10,8 @@ import {
   type User,
 } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, runTransaction } from "firebase/firestore";
-import { auth, db } from "../services/firebase";
+import { db } from "../services/firebase";
+import { auth } from "../services/auth";
 import { Navigate, Link } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";

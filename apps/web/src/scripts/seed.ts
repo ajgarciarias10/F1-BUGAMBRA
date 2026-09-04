@@ -1,6 +1,7 @@
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, writeBatch } from "firebase/firestore";
-import { auth, db } from "../services/firebase.js";
+import { db } from "../services/firebase.js";
+import { auth } from "../services/auth.js";
 import type { Piloto, RosterEntry } from "../types/index.js";
 
 // ─── PILOTOS GLOBALES ─────────────────────────────────────────────────────────
