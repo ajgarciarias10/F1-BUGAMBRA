@@ -4,6 +4,7 @@ import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Sun, Moon, Play, Radio, Crown } from "lucide-react";
 import { TotalStandings } from "./TotalStandings";
+import { SplitIntroGallery } from "./SplitIntroGallery";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 
 // La portada abre siempre en Clasificación. Equipos, Resultados y TV solo hacen
@@ -11,6 +12,7 @@ import { MobileBottomTabs } from "./MobileBottomTabs";
 const FomLive = lazy(() => import("./FomLive").then(m => ({ default: m.FomLive })));
 const TeamsView = lazy(() => import("./TeamsView").then(m => ({ default: m.TeamsView })));
 const RaceResultsView = lazy(() => import("./RaceResultsView").then(m => ({ default: m.RaceResultsView })));
+const PaddockForum = lazy(() => import("./PaddockForum").then(m => ({ default: m.PaddockForum })));
 
 const tabFallback = (
   <div className="py-20 text-center text-[13px] text-black/30 dark:text-white/30">Cargando…</div>
@@ -19,7 +21,7 @@ import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
 import { InstallButton } from "./InstallApp";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 
-type Tab = "clasificacion" | "equipos" | "resultados" | "tv";
+type Tab = "clasificacion" | "equipos" | "resultados" | "paddock" | "tv";
 
 function useTheme() {
   const [dark, setDark] = useState(() => {
@@ -122,6 +124,7 @@ export function PublicHome() {
     { id: "clasificacion", label: "Clasificación" },
     { id: "equipos", label: "Equipos" },
     { id: "resultados", label: "Resultados" },
+    { id: "paddock", label: "Paddock" },
     { id: "tv", label: "TV" },
   ];
 
@@ -271,6 +274,7 @@ export function PublicHome() {
                 getPilotPhoto={getPilotPhoto}
               />
             )}
+            {activeTab === "paddock" && <PaddockForum readOnly={!user} />}
             {activeTab === "tv" && <FomLive />}
             </Suspense>}
           </>
@@ -332,7 +336,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
     <div className="space-y-8">
 
       {/* Video de introducción del split */}
-      {currentSplit?.id === "origins" && videoIntroUrl && (
+      {currentSplitId !== "general" && currentSplit?.id === "origins" && videoIntroUrl && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-[#0a0a0a]/[0.08] dark:border-white/[0.06] p-4">
           <div className="flex items-center gap-3">
             <span className="w-1 h-4 bg-[#e10600] shrink-0" />
@@ -351,7 +355,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
         </div>
       )}
 
-      {currentSplit?.id !== "origins" && videoIntroUrl && (
+      {currentSplitId !== "general" && currentSplit?.id !== "origins" && videoIntroUrl && (
         <div className="border border-[#0a0a0a]/[0.08] dark:border-white/[0.06] p-4">
           <div className="flex items-center gap-3 mb-4">
             <span className="w-1 h-4 bg-[#e10600] shrink-0" />
@@ -435,7 +439,10 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
 
       {/* Clasificación general acumulada */}
       {currentSplitId === "general" && (
-        <TotalStandings splits={validSplits} getPilotPhoto={getPilotPhoto} />
+        <>
+          <TotalStandings splits={validSplits} getPilotPhoto={getPilotPhoto} />
+          <SplitIntroGallery splits={validSplits} />
+        </>
       )}
 
       {/* Tabla pilotos */}

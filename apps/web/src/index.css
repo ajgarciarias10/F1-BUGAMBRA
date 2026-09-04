@@ -111,6 +111,15 @@ a {
   textarea {
     font-size: 16px;
   }
+
+  /* Altura táctil mínima en cualquier campo. Los paneles de administración
+     están llenos de campos de 24-28 px pensados para ratón; en el móvil hay
+     que acertarles con el pulgar. Casillas, radios y selectores de archivo se
+     quedan fuera: ahí manda el tamaño que les da el sistema. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select {
+    min-height: 2.75rem;
+  }
 }
 
 /* Carruseles horizontales (selectores de temporada, filtros...) sin barra visible. */
@@ -177,10 +186,17 @@ a {
     padding-top: max(0.75rem, env(safe-area-inset-top));
   }
 
-  /* Con viewport-fit=cover el contenido se mete bajo el notch en horizontal. */
-  .safe-x {
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+  /* Con viewport-fit=cover el contenido se mete bajo el notch en horizontal.
+     Va con `max()` y solo en móvil por dos motivos: esta regla está fuera de
+     las capas de Tailwind, así que gana a `px-3`, y en un móvil sin muescas
+     laterales env() vale 0px. Sin el suelo, el contenido quedaba pegado al
+     borde de la pantalla y los carruseles se salían por su margen negativo.
+     En escritorio no se toca nada: mandan los `md:px-*` de cada pantalla. */
+  @media (max-width: 767px) {
+    .safe-x {
+      padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+      padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+    }
   }
 }
 

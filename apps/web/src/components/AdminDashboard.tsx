@@ -762,12 +762,12 @@ export function AdminDashboard() {
          </div>
 
         {/* Navigation Tabs */}
-        <div className="sticky top-2 z-40 flex overflow-x-auto border border-white/10 bg-zinc-950/85 backdrop-blur-xl rounded-3xl mb-4 gap-1 p-1 shadow-2xl shadow-black/30">
+        <div className="hide-scrollbar sticky top-2 z-40 mb-4 flex gap-1 overflow-x-auto rounded-3xl border border-white/10 bg-zinc-950/85 p-1 shadow-2xl shadow-black/30 backdrop-blur-xl">
           {ADMIN_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setAdminTab(tab.id)}
-              className={`shrink-0 min-h-11 rounded-2xl px-4 py-2 font-mono font-bold text-[10px] uppercase tracking-wider transition-all relative cursor-pointer ${
+              className={`relative min-h-11 shrink-0 cursor-pointer rounded-2xl px-4 text-[12px] font-bold transition-all md:py-2 md:font-mono md:text-[10px] md:uppercase md:tracking-wider ${
                 adminTab === tab.id
                   ? `text-white bg-[#e10600] shadow-lg shadow-red-950/30 ${tab.pulse ? "animate-pulse" : ""}`
                   : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
@@ -1082,29 +1082,29 @@ export function AdminDashboard() {
             <h3 className="font-bold text-[10px] uppercase tracking-wider text-white">Programación — {getCircuitName()}</h3>
           </div>
           <div className="grid grid-cols-1 max-w-2xl gap-3">
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div>
                 <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Nº carrera</label>
                 <input type="number" min={1} max={20} value={numeroCarrera}
                   onChange={(e) => setNumeroCarrera(parseInt(e.target.value) || 1)}
-                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-1.5 px-2.5 text-xs text-white outline-none focus:border-[#e10600] transition-colors text-center"
+                  className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors text-center"
                 />
               </div>
               <div>
                 <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Fecha</label>
                 <input type="date" value={fechaVal} onChange={(e) => setFechaVal(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-1.5 px-2.5 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
+                  className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors"
                 />
               </div>
               <div>
                 <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Hora</label>
                 <input type="time" value={horaVal} onChange={(e) => setHoraVal(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-1.5 px-2.5 text-xs text-white outline-none focus:border-[#e10600] transition-colors"
+                  className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors"
                 />
               </div>
               <div className="flex items-end">
                 <button onClick={handleSaveSchedule} disabled={isSavingSchedule}
-                  className="w-full border border-white/10 text-white/80 text-[9px] font-bold uppercase tracking-wider py-1.5 px-3 rounded-sm transition-all flex items-center justify-center gap-1.5 hover:bg-white/[0.06] cursor-pointer disabled:opacity-40"
+                  className="w-full border border-white/10 text-white/80 min-h-11 rounded-lg px-3 text-[12px] font-bold md:min-h-0 md:rounded-sm md:py-1.5 md:text-[9px] md:uppercase md:tracking-wider transition-all flex items-center justify-center gap-1.5 hover:bg-white/[0.06] cursor-pointer disabled:opacity-40"
                 >
                   {isSavingSchedule ? <Loader2 className="w-3 h-3 animate-spin" /> : "Guardar"}
                 </button>
@@ -1114,7 +1114,7 @@ export function AdminDashboard() {
               <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">URL Hotlap (YouTube)</label>
               <input type="url" value={hotlapUrl} onChange={(e) => setHotlapUrl(e.target.value)}
                 placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full bg-white/[0.02] border border-white/10 rounded-sm py-1.5 px-2.5 text-xs text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors font-mono"
               />
             </div>
           </div>
@@ -1356,7 +1356,7 @@ export function AdminDashboard() {
             )}
           </AnimatePresence>
 
-          <div className="overflow-x-auto -mx-4 px-4">
+          <div className="-mx-3 overflow-x-auto px-3 md:-mx-4 md:px-4">
             <table className="w-full text-sm text-left border-collapse">
               <thead>
                 <tr className="text-[9px] text-white/30 uppercase tracking-[0.2em] font-mono border-b border-white/10 pb-2">

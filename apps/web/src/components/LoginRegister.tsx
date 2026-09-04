@@ -219,7 +219,7 @@ export function LoginRegister() {
       </div>
 
       {/* Right — Form */}
-      <div className="safe-top safe-bottom safe-x flex flex-1 flex-col items-center justify-center px-5 py-8 lg:p-16">
+      <div className="safe-top safe-bottom flex flex-1 flex-col items-center justify-center px-5 py-8 lg:p-16">
         {/* Mobile logo */}
         <div className="mb-8 flex items-center gap-2 lg:mb-12 lg:hidden">
           <span className="w-0.5 h-6 bg-[#e10600]" />
