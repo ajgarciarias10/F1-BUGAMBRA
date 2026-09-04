@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ChevronRight, Crown, Play, Shield, Users } from "lucide-react";
 import { useUsuarios } from "../hooks/useData";
 import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
@@ -10,6 +10,32 @@ interface TeamsViewProps {
   currentSplit: any;
   getPilotPhoto: (pilotId: string) => string;
   darkMode?: boolean;
+}
+
+/**
+ * Número de columnas que está pintando una rejilla CSS ahora mismo.
+ *
+ * Hace falta para insertar el desplegable al final de la fila del equipo
+ * pulsado. Se lee del estilo calculado en vez de duplicar aquí los puntos de
+ * ruptura de las clases, que se desincronizarían al primer retoque.
+ */
+function useColumnCount(ref: RefObject<HTMLElement | null>) {
+  const [columns, setColumns] = useState(1);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const medir = () => {
+      const template = getComputedStyle(element).gridTemplateColumns;
+      setColumns(template ? template.split(" ").filter(Boolean).length : 1);
+    };
+    medir();
+    const observer = new ResizeObserver(medir);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return columns;
 }
 
 function ratingAccent(rating: number): string {
@@ -48,7 +74,20 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
     return result;
   }, [currentSplit]);
 
-  const selectedTeam = (currentSplit?.equipos || []).find((team: any) => team.id === selectedTeamId);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const columnas = useColumnCount(gridRef);
+
+  const equipos = currentSplit?.equipos || [];
+  const selectedTeam = equipos.find((team: any) => team.id === selectedTeamId);
+
+  // El desplegable ocupa el ancho completo, así que va detrás de la última
+  // tarjeta de la fila del equipo pulsado: si se colara justo detrás de la
+  // tarjeta dejaría un hueco en el resto de la fila. En móvil, con una sola
+  // columna, ese final de fila es la propia tarjeta.
+  const indiceSeleccionado = equipos.findIndex((team: any) => team.id === selectedTeamId);
+  const finDeFila = indiceSeleccionado < 0
+    ? -1
+    : Math.min((Math.floor(indiceSeleccionado / columnas) + 1) * columnas, equipos.length) - 1;
   const selectedJeques = selectedTeam ? jequesPorEquipo[selectedTeam.id] || [] : [];
   const selectedPilots = selectedTeam ? pilotsByTeam[selectedTeam.id] || [] : [];
   const selectedAverage = selectedPilots.length
@@ -159,8 +198,8 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
               </a>
             </div>
           )}
-          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(currentSplit?.equipos || []).map((team: any) => {
+          <div ref={gridRef} className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {equipos.map((team: any, index: number) => {
               const pilots = pilotsByTeam[team.id] || [];
               const average = pilots.length
                 ? Math.round(pilots.reduce((sum, pilot) => sum + (Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70), 0) / pilots.length)
@@ -168,8 +207,8 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
               const selected = team.id === selectedTeamId;
               const jeques = jequesPorEquipo[team.id] || [];
               return (
+                <Fragment key={team.id}>
                 <button
-                  key={team.id}
                   onClick={() => setSelectedTeamId(selected ? "" : team.id)}
                   aria-expanded={selected}
                   className={`m-card group relative min-h-32 md:min-h-40 overflow-hidden border p-4 md:p-5 text-left transition-all active:scale-[0.99] ${
@@ -217,74 +256,78 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                     </div>
                   </div>
                 </button>
+
+                {selectedTeam && index === finDeFila && (
+                  <div className="col-span-full">
+                    <div className="m-card m-expand border border-[#e10600]/35 bg-[#0d0e12] text-white shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border-b border-white/[0.08]">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 border border-white/10 bg-white/5 p-1.5 flex items-center justify-center">
+                            {selectedTeam.logo_url
+                              ? <img src={selectedTeam.logo_url} alt={selectedTeam.nombre} className="w-full h-full object-contain" />
+                              : <Shield className="w-6 h-6 text-white/20" />}
+                          </div>
+                          <div>
+                            <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-[#e10600]">Alineación · {currentSplit.nombre}</span>
+                            <h3 className="text-xl font-black uppercase tracking-[-0.03em]">{selectedTeam.nombre}</h3>
+                            {selectedJeques.length > 0 && (
+                              <span className="mt-1.5 flex flex-col gap-1">
+                                {selectedJeques.map((jeque, i) => (
+                                  <span key={i} className="flex items-center gap-1.5">
+                                    {jeque.foto_url
+                                      ? <img src={jeque.foto_url} alt="" className="w-5 h-5 shrink-0 object-cover" />
+                                      : <Crown className="w-3.5 h-3.5 shrink-0 text-white/35" />}
+                                    <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-white/50">Jeque · {jeque.nombre}</span>
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-6">
+                          <div><span className="block text-[8px] uppercase tracking-[0.2em] text-white/30">Pilotos</span><strong className="text-2xl">{selectedPilots.length}</strong></div>
+                          <div><span className="block text-[8px] uppercase tracking-[0.2em] text-white/30">Media</span><strong className="text-2xl">{selectedAverage || "--"}</strong></div>
+                        </div>
+                      </div>
+                      <div className="grid gap-px bg-white/[0.06] sm:grid-cols-2 xl:grid-cols-4">
+                        {selectedPilots
+                          .slice()
+                          .sort((a, b) => Number(b.rating_piloto || 0) - Number(a.rating_piloto || 0))
+                          .map(pilot => {
+                            const photo = getPilotPhoto(pilot.pilotoId);
+                            const rating = Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70;
+                            return (
+                              <div key={pilot.pilotoId} className="m-row flex min-w-0 items-center gap-3 bg-[#101116] p-3 md:p-4">
+                                <div className="w-14 h-14 shrink-0 overflow-hidden bg-white/5 border border-white/10">
+                                  {photo
+                                    ? <img src={photo} alt={pilot.nombre} className="w-full h-full object-cover" />
+                                    : <div className="w-full h-full grid place-items-center text-sm font-black text-white/20">{pilot.nombre?.slice(0, 2).toUpperCase()}</div>}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  {pilot.rookie && <span className="text-[7px] font-black uppercase tracking-[0.2em] text-sky-300">Rookie</span>}
+                                  <p className="font-black uppercase truncate text-sm">{pilot.nombre}</p>
+                                  <span className="text-[8px] font-mono text-white/30">{pilot.puntos_piloto || 0} PTS</span>
+                                </div>
+                                <div className={`w-14 h-14 shrink-0 border grid place-items-center ${ratingAccent(rating)}`}>
+                                  <div className="text-center"><strong className="block text-xl leading-none tabular-nums">{rating}</strong><span className="text-[7px] font-black tracking-[0.18em]">OVR</span></div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        {selectedPilots.length === 0 && (
+                          <div className="sm:col-span-2 xl:col-span-4 bg-[#101116] py-10 text-center text-white/25 text-[10px] font-mono uppercase tracking-[0.25em]">
+                            <Users className="w-5 h-5 mx-auto mb-2" /> Sin pilotos asignados
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                </Fragment>
               );
             })}
           </div>
 
-          {selectedTeam && (
-            <div className="m-card border border-[#e10600]/35 bg-[#0d0e12] text-white shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border-b border-white/[0.08]">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 border border-white/10 bg-white/5 p-1.5 flex items-center justify-center">
-                    {selectedTeam.logo_url
-                      ? <img src={selectedTeam.logo_url} alt={selectedTeam.nombre} className="w-full h-full object-contain" />
-                      : <Shield className="w-6 h-6 text-white/20" />}
-                  </div>
-                  <div>
-                    <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-[#e10600]">Alineación · {currentSplit.nombre}</span>
-                    <h3 className="text-xl font-black uppercase tracking-[-0.03em]">{selectedTeam.nombre}</h3>
-                    {selectedJeques.length > 0 && (
-                      <span className="mt-1.5 flex flex-col gap-1">
-                        {selectedJeques.map((jeque, i) => (
-                          <span key={i} className="flex items-center gap-1.5">
-                            {jeque.foto_url
-                              ? <img src={jeque.foto_url} alt="" className="w-5 h-5 shrink-0 object-cover" />
-                              : <Crown className="w-3.5 h-3.5 shrink-0 text-white/35" />}
-                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-white/50">Jeque · {jeque.nombre}</span>
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex gap-6">
-                  <div><span className="block text-[8px] uppercase tracking-[0.2em] text-white/30">Pilotos</span><strong className="text-2xl">{selectedPilots.length}</strong></div>
-                  <div><span className="block text-[8px] uppercase tracking-[0.2em] text-white/30">Media</span><strong className="text-2xl">{selectedAverage || "--"}</strong></div>
-                </div>
-              </div>
-              <div className="grid gap-px bg-white/[0.06] sm:grid-cols-2 xl:grid-cols-4">
-                {selectedPilots
-                  .slice()
-                  .sort((a, b) => Number(b.rating_piloto || 0) - Number(a.rating_piloto || 0))
-                  .map(pilot => {
-                    const photo = getPilotPhoto(pilot.pilotoId);
-                    const rating = Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70;
-                    return (
-                      <div key={pilot.pilotoId} className="m-row flex min-w-0 items-center gap-3 bg-[#101116] p-3 md:p-4">
-                        <div className="w-14 h-14 shrink-0 overflow-hidden bg-white/5 border border-white/10">
-                          {photo
-                            ? <img src={photo} alt={pilot.nombre} className="w-full h-full object-cover" />
-                            : <div className="w-full h-full grid place-items-center text-sm font-black text-white/20">{pilot.nombre?.slice(0, 2).toUpperCase()}</div>}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          {pilot.rookie && <span className="text-[7px] font-black uppercase tracking-[0.2em] text-sky-300">Rookie</span>}
-                          <p className="font-black uppercase truncate text-sm">{pilot.nombre}</p>
-                          <span className="text-[8px] font-mono text-white/30">{pilot.puntos_piloto || 0} PTS</span>
-                        </div>
-                        <div className={`w-14 h-14 shrink-0 border grid place-items-center ${ratingAccent(rating)}`}>
-                          <div className="text-center"><strong className="block text-xl leading-none tabular-nums">{rating}</strong><span className="text-[7px] font-black tracking-[0.18em]">OVR</span></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                {selectedPilots.length === 0 && (
-                  <div className="sm:col-span-2 xl:col-span-4 bg-[#101116] py-10 text-center text-white/25 text-[10px] font-mono uppercase tracking-[0.25em]">
-                    <Users className="w-5 h-5 mx-auto mb-2" /> Sin pilotos asignados
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

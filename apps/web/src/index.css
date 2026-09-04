@@ -281,3 +281,29 @@ a {
 .rail-title-on-dark {
   color: #fff;
 }
+
+/* Despliegue de un panel dentro de una rejilla (los pilotos de un equipo).
+   La altura no se puede animar sin conocerla, así que se combina un
+   desplazamiento corto con la opacidad: da la sensación de que el bloque sale
+   de la tarjeta que lo abre, sin necesidad de medir nada. */
+.m-expand {
+  animation: m-expand-in 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+  transform-origin: top center;
+}
+
+@keyframes m-expand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scaleY(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-expand {
+    animation: none;
+  }
+}
