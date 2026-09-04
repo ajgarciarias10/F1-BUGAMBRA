@@ -228,6 +228,14 @@ function useSplitsSource() {
       if (listos.size === 5) setLoading(false);
     };
 
+    // Un listener que falla también "termina". Si no, basta con que Firestore
+    // rechace una sola consulta (permisos, red) para que la pantalla se quede
+    // en "Cargando temporada" eternamente, sin decir nunca qué ha pasado.
+    const marcarFallido = (clave: string) => (err: unknown) => {
+      console.warn(`useSplits (${clave}) error:`, err);
+      if (!cancelado) marcarListo(clave);
+    };
+
     const unsubSplits = onSnapshot(collection(db, "splits"), snap => {
       if (cancelado) return;
       setRaw(prev => {
@@ -239,7 +247,7 @@ function useSplitsSource() {
         return { ...prev, splits };
       });
       marcarListo("splits");
-    }, err => console.warn("useSplits (splits) error:", err));
+    }, marcarFallido("splits"));
 
     const unsubEquipos = onSnapshot(collectionGroup(db, "equipos"), snap => {
       if (cancelado) return;
@@ -253,7 +261,7 @@ function useSplitsSource() {
         return { ...prev, equipos };
       });
       marcarListo("equipos");
-    }, err => console.warn("useSplits (equipos) error:", err));
+    }, marcarFallido("equipos"));
 
     const unsubCircuitos = onSnapshot(collectionGroup(db, "circuitos"), snap => {
       if (cancelado) return;
@@ -267,7 +275,7 @@ function useSplitsSource() {
         return { ...prev, circuitos };
       });
       marcarListo("circuitos");
-    }, err => console.warn("useSplits (circuitos) error:", err));
+    }, marcarFallido("circuitos"));
 
     const unsubRoster = onSnapshot(collectionGroup(db, "roster"), snap => {
       if (cancelado) return;
@@ -281,7 +289,7 @@ function useSplitsSource() {
         return { ...prev, rosterFlat };
       });
       marcarListo("roster");
-    }, err => console.warn("useSplits (roster) error:", err));
+    }, marcarFallido("roster"));
 
     // collectionGroup("pilotos") engancha a la vez el catálogo global (pilotos/{id}, en raíz)
     // y las fichas de roster (splits/{}/equipos/{}/pilotos/{id}): hay que separarlas por la
@@ -307,7 +315,7 @@ function useSplitsSource() {
         return { ...prev, pilotosPorEquipo, pilotosGlobales };
       });
       marcarListo("pilotos");
-    }, err => console.warn("useSplits (pilotos) error:", err));
+    }, marcarFallido("pilotos"));
 
     return () => {
       cancelado = true;

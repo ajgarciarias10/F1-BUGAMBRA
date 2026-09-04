@@ -17,6 +17,13 @@ service cloud.firestore {
     match /{path=**}/circuitos/{circuitoId} {
       allow read: if true;
     }
+    // La portada consulta el roster con collectionGroup para montar la
+    // clasificación. Una consulta de grupo NO usa la regla de
+    // /splits/{id}/roster/{id}: necesita la suya propia o Firestore la
+    // rechaza entera, y la portada se queda cargando para siempre.
+    match /{path=**}/roster/{pilotoId} {
+      allow read: if true;
+    }
 
     // --- PRIMITIVE HELPERS ---
     function isValidId(id) {
