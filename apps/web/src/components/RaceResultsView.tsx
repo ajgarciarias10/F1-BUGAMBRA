@@ -182,21 +182,57 @@ function RaceDetailModal({
         <h2 className="mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] text-white">{circuito.nombre}</h2>
 
         {/* ── Podio ── */}
-        <div className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
+        {/* Podio de verdad: el segundo a la izquierda, el ganador en el centro y
+            más alto, el tercero a la derecha. El orden del DOM sigue siendo
+            P1-P2-P3 y la colocación la hace CSS, para que quien lea la página
+            con un lector de pantalla los oiga por clasificación. */}
+        <div className="mt-6 grid grid-cols-3 items-end gap-2 sm:gap-3">
           {podio.map(r => {
             const photo = getPilotPhoto(r.pilotoId);
+            const esGanador = r.racePos === 1;
+            const columna = esGanador ? "order-2" : r.racePos === 2 ? "order-1" : "order-3";
+            const peana = esGanador ? "h-14 sm:h-20" : r.racePos === 2 ? "h-9 sm:h-13" : "h-6 sm:h-9";
+            // El primero entra el último: la mirada sube por el podio.
+            const retardo = esGanador ? "0.3s" : r.racePos === 2 ? "0.15s" : "0s";
+
             return (
-              <div key={r.pilotoId} className={`m-card border p-2.5 text-center sm:p-4 ${r.racePos === 1 ? "border-amber-400/40 bg-amber-400/[0.06]" : "border-white/10 bg-white/[0.02]"}`}>
-                <div className="mx-auto h-14 w-14 overflow-hidden rounded-full border border-white/10 bg-white/5 sm:h-16 sm:w-16 sm:rounded-none">
-                  {photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-white/20 font-black">{nombreDe(currentSplit, r.pilotoId).slice(0, 2).toUpperCase()}</div>}
+              <div key={r.pilotoId} className={`podium-rise ${columna}`} style={{ animationDelay: retardo }}>
+                <div
+                  className={`m-card relative border p-2.5 text-center sm:p-4 ${
+                    esGanador
+                      ? "winner-shine winner-glow border-amber-400/60 bg-gradient-to-b from-amber-400/[0.18] to-amber-400/[0.04]"
+                      : "border-white/10 bg-white/[0.02]"
+                  }`}
+                >
+                  {esGanador && (
+                    <Crown className="crown-pop mx-auto mb-1 h-5 w-5 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]" />
+                  )}
+                  <div className={`mx-auto overflow-hidden rounded-full bg-white/5 sm:rounded-none ${
+                    esGanador ? "h-16 w-16 border-2 border-amber-300/70 sm:h-20 sm:w-20" : "h-14 w-14 border border-white/10 sm:h-16 sm:w-16"
+                  }`}>
+                    {photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-white/20 font-black">{nombreDe(currentSplit, r.pilotoId).slice(0, 2).toUpperCase()}</div>}
+                  </div>
+                  <p className={`mt-2 text-[11px] font-bold sm:font-mono sm:text-[9px] sm:uppercase sm:tracking-[0.2em] ${esGanador ? "text-amber-300" : "text-white/40"}`}>
+                    P{r.racePos}
+                  </p>
+                  <p className={`truncate font-black uppercase text-white ${esGanador ? "text-sm sm:text-base" : "text-[13px] sm:text-sm"}`}>
+                    {nombreDe(currentSplit, r.pilotoId)}
+                  </p>
                 </div>
-                <p className="mt-2 text-[11px] font-bold text-white/40 sm:font-mono sm:text-[9px] sm:uppercase sm:tracking-[0.2em]">P{r.racePos}</p>
-                <p className="truncate text-[13px] font-black uppercase text-white sm:text-sm">{nombreDe(currentSplit, r.pilotoId)}</p>
+
+                {/* Peana. La cifra grande hace de número del cajón. */}
+                <div className={`${peana} grid place-items-end justify-center overflow-hidden rounded-b-xl border-x border-b sm:rounded-none ${
+                  esGanador ? "border-amber-400/40 bg-gradient-to-b from-amber-400/25 to-transparent" : "border-white/10 bg-gradient-to-b from-white/[0.07] to-transparent"
+                }`}>
+                  <span className={`pb-1 text-2xl font-black italic leading-none tabular-nums sm:text-3xl ${esGanador ? "text-amber-300/70" : "text-white/20"}`}>
+                    {r.racePos}
+                  </span>
+                </div>
               </div>
             );
           })}
           {podio.length === 0 && (
-            <div className="sm:col-span-3 text-center py-6 text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">Sin podio registrado</div>
+            <div className="col-span-3 py-6 text-center text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">Sin podio registrado</div>
           )}
         </div>
 
@@ -208,15 +244,29 @@ function RaceDetailModal({
           </div>
 
           {circuito.piloto_dia_cerrado && circuito.piloto_dia_ganador ? (
-            <div className="flex items-center gap-3 border border-amber-400/30 bg-amber-400/[0.06] p-4">
-              <div className="w-14 h-14 shrink-0 overflow-hidden bg-white/5 border border-white/10">
-                {getPilotPhoto(circuito.piloto_dia_ganador)
-                  ? <img src={getPilotPhoto(circuito.piloto_dia_ganador)} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full grid place-items-center text-white/20 font-black">{nombreDe(currentSplit, circuito.piloto_dia_ganador).slice(0, 2).toUpperCase()}</div>}
+            <div className="m-card winner-glow flex items-center gap-3 border border-amber-400/40 bg-gradient-to-r from-amber-400/[0.14] to-amber-400/[0.03] p-4">
+              {/* La foto es el ancla del "+2": la insignia sale justo de ella. */}
+              <div className="relative shrink-0">
+                <div className="h-14 w-14 overflow-hidden rounded-full border-2 border-amber-300/60 bg-white/5 sm:rounded-none sm:border">
+                  {getPilotPhoto(circuito.piloto_dia_ganador)
+                    ? <img src={getPilotPhoto(circuito.piloto_dia_ganador)} alt="" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full grid place-items-center text-white/20 font-black">{nombreDe(currentSplit, circuito.piloto_dia_ganador).slice(0, 2).toUpperCase()}</div>}
+                </div>
+                <span
+                  aria-hidden="true"
+                  className="bonus-plus2 pointer-events-none absolute -right-2 -top-2 rounded-full bg-amber-400 px-2 py-0.5 text-[12px] font-black tabular-nums text-black shadow-[0_0_14px_rgba(251,191,36,0.8)]"
+                >
+                  +2
+                </span>
               </div>
-              <div>
-                <p className="font-black uppercase text-white">{nombreDe(currentSplit, circuito.piloto_dia_ganador)}</p>
-                <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-amber-300">+2 OVR próxima carrera · {totalVotos} voto(s)</p>
+              <div className="min-w-0">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300">
+                  <Crown className="crown-pop h-3.5 w-3.5" /> Piloto del día
+                </span>
+                <p className="truncate text-base font-black uppercase text-white">{nombreDe(currentSplit, circuito.piloto_dia_ganador)}</p>
+                <p className="text-[12px] text-amber-300/80 sm:font-mono sm:text-[9px] sm:uppercase sm:tracking-[0.2em]">
+                  +2 OVR en la próxima carrera · {totalVotos} voto(s)
+                </p>
               </div>
             </div>
           ) : (

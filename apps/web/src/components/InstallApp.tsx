@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { ArrowLeft, Check, Download, Share, PlusSquare, MoreVertical, Smartphone, WifiOff, Zap, Bell } from "lucide-react";
 import { usePWAInstall } from "../hooks/usePWAInstall";
+import { usePageBackground } from "../hooks/usePageBackground";
 
 const DISMISS_KEY = "f1-install-banner-dismissed";
 
@@ -113,6 +114,7 @@ const IOS_STEPS = [
 
 export function InstallApp() {
   const { canInstall, installed, platform, install } = usePWAInstall();
+  usePageBackground("#0a0a0a");
   const [tab, setTab] = useState<"android" | "ios">(platform === "ios" ? "ios" : "android");
   const steps = tab === "ios" ? IOS_STEPS : ANDROID_STEPS;
 

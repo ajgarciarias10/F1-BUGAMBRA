@@ -323,3 +323,104 @@ a {
     animation: none;
   }
 }
+
+/* ── CELEBRACIÓN DEL GANADOR (ficha de carrera) ──────────────────────────────
+   Todo en CSS a propósito: esta vista es un chunk diferido y no compensa
+   devolverle una librería de animación por unos segundos de celebración. */
+
+/* Los tres del podio entran de abajo arriba, con retardo por posición, para que
+   el primero llegue el último y se lleve la mirada. */
+.podium-rise {
+  animation: podium-rise 0.55s cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
+}
+
+@keyframes podium-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Destello que cruza la tarjeta del ganador. Se apoya en el overflow oculto de
+   .m-card, así que no hace falta recortar nada aparte. */
+.winner-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.42) 50%,
+    transparent 65%
+  );
+  transform: translateX(-130%);
+  animation: winner-shine 3.6s ease-in-out 0.9s infinite;
+  pointer-events: none;
+}
+
+@keyframes winner-shine {
+  0% { transform: translateX(-130%); }
+  /* El destello ocupa una fracción del ciclo; el resto es la espera entre pases. */
+  28%, 100% { transform: translateX(130%); }
+}
+
+/* Halo dorado que respira bajo la tarjeta del ganador. */
+.winner-glow {
+  animation: winner-glow 2.8s ease-in-out 0.6s infinite;
+}
+
+@keyframes winner-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+  50% { box-shadow: 0 0 26px -4px rgba(251, 191, 36, 0.55); }
+}
+
+/* La corona del piloto del día aterriza con un rebote corto. */
+.crown-pop {
+  animation: crown-pop 0.7s cubic-bezier(0.2, 1.5, 0.4, 1) 0.25s backwards;
+}
+
+@keyframes crown-pop {
+  from { opacity: 0; transform: translateY(-0.75rem) rotate(-18deg) scale(0.6); }
+  to { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .podium-rise,
+  .winner-glow,
+  .crown-pop,
+  .winner-shine::after {
+    animation: none;
+  }
+  .podium-rise,
+  .crown-pop {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* El "+2" del piloto del día: sale de la foto y sube, como una recompensa de
+   videojuego. Se repite con pausa larga para que se vea si llegas tarde a la
+   ficha, sin llegar a cansar. */
+.bonus-plus2 {
+  animation: bonus-plus2 3.8s ease-out 0.5s infinite;
+}
+
+@keyframes bonus-plus2 {
+  0% { opacity: 0; transform: translateY(0.25rem) scale(0.6); }
+  10% { opacity: 1; transform: translateY(-0.35rem) scale(1.15); }
+  18% { transform: translateY(-0.4rem) scale(1); }
+  55% { opacity: 1; transform: translateY(-0.6rem) scale(1); }
+  75%, 100% { opacity: 0; transform: translateY(-1.6rem) scale(0.95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bonus-plus2 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

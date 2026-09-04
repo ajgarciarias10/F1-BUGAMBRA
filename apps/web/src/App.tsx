@@ -1,5 +1,5 @@
-import React, { Suspense, lazy } from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router";
+import React, { Suspense, lazy, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DataProvider } from "./hooks/useData";
 import { PublicHome } from "./components/PublicHome";
@@ -22,6 +22,22 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   return <>{children}</>;
 }
 
+/**
+ * React Router conserva el scroll al cambiar de ruta, que es lo correcto al ir
+ * hacia atrás pero no al navegar a una pantalla nueva: pulsando "Instalar app"
+ * desde el final de la portada se aterrizaba al final de /instalar, con el gris
+ * del body asomando y aspecto de página en blanco.
+ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
+
 function DataRoutes() {
   return <DataProvider><Outlet /></DataProvider>;
 }
@@ -30,6 +46,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <Suspense fallback={routeFallback}>
           <Routes>
             <Route path="/login" element={<LoginRegister />} />
