@@ -43,6 +43,11 @@ service cloud.firestore {
       return isSignedIn() && (isAdminEmail() || (exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin'));
     }
 
+    // Registrado en la app: tiene ficha en /usuarios, no solo sesión de Firebase.
+    function isMiembroDeLaLiga() {
+      return isSignedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
     function isJeque() {
       return isSignedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'jeque';
     }
@@ -171,11 +176,30 @@ service cloud.firestore {
       match /circuitos/{circuitoId} {
         allow read: if true;
         allow create: if isAdmin() && isValidId(circuitoId);
-        // Cualquier cuenta de la liga puede votar al piloto del día, pero solo tocando ese
-        // campo — el resto del circuito (resultados, actas, economía) sigue siendo solo admin.
+        // Voto al piloto del día. Cerrar la votación NO entra aquí: escribe
+        // piloto_dia_cerrado y piloto_dia_ganador, que quedan fuera de hasOnly,
+        // así que solo el admin puede fijar al ganador.
+        //
+        // Cada condición tapa un agujero concreto:
+        //  - isMiembroDeLaLiga: vota quien está registrado en la app, no cualquiera
+        //    con un token de Firebase.
+        //  - el segundo hasOnly limita a cada uno a SU casilla del mapa de votos.
+        //    Sin él, permitir el campo entero deja a cualquiera borrar los votos de
+        //    los demás o rellenarlo con votos falsos para inclinar el recuento.
+        //  - completado y piloto_dia_cerrado: el cliente ya los mira, pero el
+        //    cliente no es seguridad. Sin esto se puede votar una carrera que aún
+        //    no se ha corrido, o seguir votando una votación ya cerrada.
         allow update: if isSignedIn() && isValidId(circuitoId) && (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['piloto_dia_votantes'])
+          (
+            isMiembroDeLaLiga() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['piloto_dia_votantes']) &&
+            incoming().piloto_dia_votantes
+              .diff(existing().get('piloto_dia_votantes', {}))
+              .affectedKeys().hasOnly([request.auth.uid]) &&
+            existing().get('completado', false) == true &&
+            existing().get('piloto_dia_cerrado', false) == false
+          )
         );
         allow delete: if isAdmin() && isValidId(circuitoId);
       }
