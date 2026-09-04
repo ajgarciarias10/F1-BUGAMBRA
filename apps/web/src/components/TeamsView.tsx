@@ -61,18 +61,18 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
     <div className="space-y-7">
       <div className={`flex flex-col gap-4 border-b border-black/10 dark:border-white/[0.08] pb-5 ${darkMode ? "border-white/[0.08]" : ""}`}>
         <div>
-          <p className={`text-[9px] font-mono uppercase tracking-[0.35em] ${darkMode ? "text-white/50" : "text-black/35 dark:text-white/35"}`}>Archivo de competición</p>
-          <h2 className={`mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] ${darkMode ? "text-white" : "text-black dark:text-white"}`}>Equipos por temporada</h2>
+          <p className={`text-[11px] md:text-[9px] md:font-mono md:uppercase md:tracking-[0.35em] ${darkMode ? "text-white/50" : "text-black/45 dark:text-white/45"}`}>Archivo de competición</p>
+          <h2 className={`mt-1 text-xl md:text-3xl font-black uppercase tracking-[-0.03em] md:tracking-[-0.04em] ${darkMode ? "text-white" : "text-black dark:text-white"}`}>Equipos por temporada</h2>
         </div>
-        <div className="flex overflow-x-auto hide-scrollbar border border-black/10 dark:border-white/10 self-start max-w-full">
+        <div className="m-rail hide-scrollbar gap-2 md:gap-0 md:border md:border-black/10 md:dark:border-white/10 md:self-start md:max-w-full">
           {validSplits.map(split => (
             <button
               key={split.id}
               onClick={() => onSelectSplit(split.id)}
-              className={`shrink-0 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] transition-colors ${
+              className={`min-h-11 shrink-0 rounded-full md:rounded-none px-4 text-[12px] font-bold md:py-3 md:text-[10px] md:font-black md:uppercase md:tracking-[0.18em] transition-colors ${
                 currentSplitId === split.id
                   ? "bg-[#e10600] text-white"
-                   : darkMode ? "bg-white/[0.06] text-white/75 hover:bg-white/[0.12] hover:text-white" : "bg-black/[0.03] dark:bg-white/[0.03] text-black/65 dark:text-white/70 hover:text-black dark:hover:text-white"
+                   : darkMode ? "bg-white/[0.08] text-white/75 hover:bg-white/[0.14] hover:text-white" : "bg-black/[0.05] dark:bg-white/[0.06] text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white"
               }`}
             >
               {split.nombre}
@@ -110,7 +110,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
               <div className="min-h-64 bg-black p-6">
                 <iframe
                   className="w-full aspect-video"
-                  src={`https://www.youtube.com/embed/${videoIntroUrl.split("v=")[1]?.split("&")[0]}`}
+                  src={getYoutubeEmbedUrl(videoIntroUrl)}
                   title={`Vídeo de ${currentSplit?.nombre}`}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
@@ -119,11 +119,11 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
             )}
           </div>
           {(currentSplit?.duos || []).length > 0 && (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-5">
               {[...(currentSplit.duos || [])]
                 .sort((a: any, b: any) => Number(b.puntos || 0) - Number(a.puntos || 0))
                 .map((duo: any, index: number) => (
-                  <div key={duo.id} className="border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] p-4 text-black dark:text-white">
+                  <div key={duo.id} className="m-card border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] p-4 text-black dark:text-white">
                     <span className="text-[8px] font-mono uppercase tracking-[0.25em] opacity-30">Dúo {String(index + 1).padStart(2, "0")}</span>
                     <p className="mt-2 font-black uppercase text-sm leading-tight">{duo.nombre}</p>
                     <p className="mt-4 text-2xl font-black tabular-nums">{duo.puntos} <small className="text-[8px] opacity-35">PTS</small></p>
@@ -172,7 +172,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                   key={team.id}
                   onClick={() => setSelectedTeamId(selected ? "" : team.id)}
                   aria-expanded={selected}
-                  className={`group relative min-h-40 overflow-hidden border p-5 text-left transition-all ${
+                  className={`m-card group relative min-h-32 md:min-h-40 overflow-hidden border p-4 md:p-5 text-left transition-all active:scale-[0.99] ${
                     selected
                       ? "border-[#e10600] bg-[#15161b] text-white shadow-[0_18px_50px_rgba(225,6,0,0.16)]"
                        : darkMode ? "border-white/10 bg-[#111217] text-white hover:-translate-y-0.5 hover:border-[#e10600]/50" : "border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] text-black dark:text-white hover:-translate-y-0.5 hover:border-[#e10600]/50"
@@ -189,7 +189,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-lg font-black uppercase tracking-[-0.03em] truncate">{team.nombre}</h3>
-                        <span className="text-[9px] font-mono uppercase tracking-[0.2em] opacity-40">{pilots.length} pilotos</span>
+                        <span className="text-[12px] opacity-50 md:font-mono md:text-[9px] md:uppercase md:tracking-[0.2em]">{pilots.length} pilotos</span>
                         {jeques.length > 0 && (
                           <span className="mt-1.5 flex flex-col gap-0.5 min-w-0">
                             {jeques.map((jeque, i) => (
@@ -197,7 +197,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                                 {jeque.foto_url
                                   ? <img src={jeque.foto_url} alt="" className="w-4 h-4 shrink-0 object-cover" />
                                   : <Crown className="w-3 h-3 shrink-0 opacity-40" />}
-                                <span className="truncate text-[9px] font-mono uppercase tracking-[0.16em] opacity-55">{jeque.nombre}</span>
+                                <span className="truncate text-[12px] opacity-60 md:font-mono md:text-[9px] md:uppercase md:tracking-[0.16em]">{jeque.nombre}</span>
                               </span>
                             ))}
                           </span>
@@ -208,11 +208,11 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                   </div>
                   <div className="relative mt-5 flex items-end justify-between border-t border-current/10 pt-3">
                     <div>
-                      <span className="block text-[8px] font-mono uppercase tracking-[0.22em] opacity-35">Constructores</span>
+                      <span className="block text-[11px] opacity-45 md:font-mono md:text-[8px] md:uppercase md:tracking-[0.22em]">Constructores</span>
                       <strong className="text-xl tabular-nums">{team.puntos_constructores || 0} <small className="text-[9px] opacity-40">PTS</small></strong>
                     </div>
                     <div className="text-right">
-                      <span className="block text-[8px] font-mono uppercase tracking-[0.22em] opacity-35">Media equipo</span>
+                      <span className="block text-[11px] opacity-45 md:font-mono md:text-[8px] md:uppercase md:tracking-[0.22em]">Media equipo</span>
                       <strong className="text-xl tabular-nums">{average || "--"} <small className="text-[9px] opacity-40">OVR</small></strong>
                     </div>
                   </div>
@@ -222,7 +222,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
           </div>
 
           {selectedTeam && (
-            <div className="border border-[#e10600]/35 bg-[#0d0e12] text-white shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+            <div className="m-card border border-[#e10600]/35 bg-[#0d0e12] text-white shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border-b border-white/[0.08]">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 border border-white/10 bg-white/5 p-1.5 flex items-center justify-center">
@@ -252,7 +252,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                   <div><span className="block text-[8px] uppercase tracking-[0.2em] text-white/30">Media</span><strong className="text-2xl">{selectedAverage || "--"}</strong></div>
                 </div>
               </div>
-              <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-px bg-white/[0.06]">
+              <div className="grid gap-px bg-white/[0.06] sm:grid-cols-2 xl:grid-cols-4">
                 {selectedPilots
                   .slice()
                   .sort((a, b) => Number(b.rating_piloto || 0) - Number(a.rating_piloto || 0))
@@ -260,7 +260,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                     const photo = getPilotPhoto(pilot.pilotoId);
                     const rating = Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70;
                     return (
-                      <div key={pilot.pilotoId} className="bg-[#101116] p-4 flex items-center gap-3 min-w-0">
+                      <div key={pilot.pilotoId} className="m-row flex min-w-0 items-center gap-3 bg-[#101116] p-3 md:p-4">
                         <div className="w-14 h-14 shrink-0 overflow-hidden bg-white/5 border border-white/10">
                           {photo
                             ? <img src={photo} alt={pilot.nombre} className="w-full h-full object-cover" />

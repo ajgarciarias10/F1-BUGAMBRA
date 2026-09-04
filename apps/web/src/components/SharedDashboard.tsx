@@ -400,13 +400,16 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   }
 
   return (
-    <div className="space-y-8 pb-32">
-      <div className="flex flex-wrap items-center justify-between gap-y-3 w-full p-1.5 rounded-sm border border-white/5">
-        <div className="flex flex-wrap gap-2">
+    <div className="space-y-7 md:space-y-8">
+      {/* Barra de temporada y accesos rápidos. En móvil las temporadas son un
+          carrusel y las dos acciones ocupan una fila propia a ancho completo:
+          apiladas y en mayúsculas de 10px eran casi imposibles de pulsar. */}
+      <div className="space-y-3 md:flex md:flex-wrap md:items-center md:justify-between md:gap-y-3 md:space-y-0 w-full md:p-1.5 md:rounded-sm md:border md:border-white/5">
+        <div className="m-rail hide-scrollbar gap-2">
           <button
             onClick={() => setActiveSplitId("global")}
-            className={`px-4 py-2 rounded-sm font-black text-[10px] uppercase tracking-widest transition-all ${
-              activeSplitId === "global" ? "bg-[#e10600] text-white " : "bg-white/[0.03] text-white/40 border border-white/5 hover:border-white/10"
+            className={`min-h-11 rounded-full md:rounded-sm px-4 text-[12px] font-bold md:text-[10px] md:font-black md:uppercase md:tracking-widest transition-all ${
+              activeSplitId === "global" ? "bg-[#e10600] text-white" : "bg-white/[0.06] text-white/60 border border-white/10 hover:border-white/20"
             }`}
           >
             Mundial Global
@@ -415,8 +418,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             <button
               key={s.id}
               onClick={() => setActiveSplitId(s.id)}
-              className={`px-4 py-2 rounded-sm font-black text-[10px] uppercase tracking-widest transition-all ${
-                activeSplitId === s.id ? "bg-[#e10600] text-white " : "bg-white/[0.03] text-white/40 border border-white/5 hover:border-white/10"
+              className={`min-h-11 rounded-full md:rounded-sm px-4 text-[12px] font-bold md:text-[10px] md:font-black md:uppercase md:tracking-widest transition-all ${
+                activeSplitId === s.id ? "bg-[#e10600] text-white" : "bg-white/[0.06] text-white/60 border border-white/10 hover:border-white/20"
               }`}
             >
               {s.nombre}
@@ -424,7 +427,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 md:flex md:items-center">
           <button
             onClick={() => {
               setIsCompareViewOpen(true);
@@ -438,17 +441,17 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                 else setComparePilotIdB(allPaddockPilots[0].id);
               }
             }}
-            className="px-4 py-2 border border-amber-500/45 hover:border-amber-400 text-amber-300 hover:text-white rounded-sm font-black text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer  active:scale-95"
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-amber-500/45 px-3 text-[12px] font-bold text-amber-300 transition-all hover:border-amber-400 hover:text-white active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-wider"
           >
-            <TrendingUp className="w-3.5 h-3.5" />
-            perfiles y comparador ⚔️
+            <TrendingUp className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
+            <span className="truncate">Comparador</span>
           </button>
           <button
             onClick={() => setIsF1TVOpen(true)}
-            className="px-4 py-2 border border-[#e10600]/50 hover:border-[#e10600] text-red-100 hover:text-white rounded-sm font-black text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-[#e10600]/50 px-3 text-[12px] font-bold text-red-100 transition-all hover:border-[#e10600] hover:text-white active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-wider"
           >
-            <MonitorPlay className="w-3.5 h-3.5" />
-            FOM EN DIRECTO
+            <MonitorPlay className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
+            <span className="truncate">FOM en directo</span>
           </button>
         </div>
       </div>
@@ -457,24 +460,26 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         <div className="mb-8"><NextRaceWidget currentSplit={currentSplit} /></div>
       )}
 
-      <div className="bg-white/[0.02]border border-white/10  p-4 flex flex-col lg:flex-row items-center justify-between gap-4 ">
+      <div className="m-card bg-white/[0.02] border border-white/10 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Award className="w-8 h-8 text-amber-400 shrink-0" />
-          <div>
-            <span className="text-[9px] uppercase tracking-[0.25em] text-[#e10600] font-black block">PADDOCK CLUB HALL OF FAME</span>
-            <span className="text-xs text-white/40 uppercase font-mono">Historial de Campeones Oficiales F1 Bugambra</span>
+          <div className="min-w-0">
+            <span className="block text-[13px] font-black text-[#e10600] md:text-[9px] md:uppercase md:tracking-[0.25em]">Paddock Club · Hall of Fame</span>
+            <span className="text-[12px] text-white/45 md:text-xs md:uppercase md:font-mono">Campeones oficiales de F1 Bugambra</span>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto flex-wrap">
           {championshipsTimeline.filter(t => t.completed).map((t: any) => (
             <div key={t.splitId} className="flex flex-col sm:flex-row gap-2.5">
-              <div className="bg-white/5 border border-white/5 rounded-sm px-4 py-2 flex items-center justify-between sm:justify-start gap-4">
-                <span className="text-[9px] text-amber-400/80 font-mono uppercase tracking-widest">🏆 {t.splitName} Pilotos:</span>
-                <span className="font-extrabold text-xs text-white uppercase tracking-tight">{t.winnerPilot} [{t.winnerPilotTeam}]</span>
+              {/* Cada palmarés es etiqueta arriba / campeón abajo en móvil: en una
+                  sola línea el nombre se comprimía hasta ser ilegible. */}
+              <div className="rounded-xl md:rounded-sm border border-white/10 bg-white/5 px-4 py-2.5 sm:flex sm:items-center sm:justify-start sm:gap-4">
+                <span className="block text-[11px] text-amber-400/90 md:font-mono md:uppercase md:tracking-widest md:text-[9px]">🏆 {t.splitName} · Pilotos</span>
+                <span className="mt-0.5 block text-[13px] font-extrabold uppercase tracking-tight text-white sm:mt-0 md:text-xs">{t.winnerPilot} [{t.winnerPilotTeam}]</span>
               </div>
-              <div className="bg-white/5 border border-white/5 rounded-sm px-4 py-2 flex items-center justify-between sm:justify-start gap-4">
-                <span className="text-[9px] text-[#e10600]/85 font-mono uppercase tracking-widest">🏎️ {t.splitName} Escuderías:</span>
-                <span className="font-extrabold text-xs text-white uppercase tracking-tight">{t.winnerTeam}</span>
+              <div className="rounded-xl md:rounded-sm border border-white/10 bg-white/5 px-4 py-2.5 sm:flex sm:items-center sm:justify-start sm:gap-4">
+                <span className="block text-[11px] text-[#e10600]/90 md:font-mono md:uppercase md:tracking-widest md:text-[9px]">🏎️ {t.splitName} · Escuderías</span>
+                <span className="mt-0.5 block text-[13px] font-extrabold uppercase tracking-tight text-white sm:mt-0 md:text-xs">{t.winnerTeam}</span>
               </div>
             </div>
           ))}
@@ -486,7 +491,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       )}
 
       {activeSplitId !== "global" && currentSplit?.tipo !== "individual" && miEscuderia && (
-        <section className="bg-white/[0.02]border border-white/20  p-6 relative overflow-hidden">
+        <section className="bg-white/[0.02] border border-white/20  p-6 relative overflow-hidden">
           <div className="absolute -right-4 -top-4 w-32 h-32 bg-[#e10600]/10 rounded-full pointer-events-none"></div>
           {miEscuderia ? (
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -505,13 +510,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                       <span className="text-[8px] font-mono text-white/20 uppercase tracking-tighter mt-1 group-hover:text-white/60">SUBIR LOGO</span>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-white/[0.02]opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[8px] font-mono uppercase tracking-widest gap-1 select-none">
+                  <div className="absolute inset-0 bg-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[8px] font-mono uppercase tracking-widest gap-1 select-none">
                     <Camera className="w-4 h-4 text-[#e10600]" /><span>EDITAR LOGO</span>
                   </div>
-                  {updatingLogo && <div className="absolute inset-0 bg-[#0a0a0a]flex items-center justify-center text-xs font-mono text-white">Cargando...</div>}
+                  {updatingLogo && <div className="absolute inset-0 bg-[#0a0a0a] flex items-center justify-center text-xs font-mono text-white">Cargando...</div>}
                 </div>
               ) : (
-                <div className="w-20 h-20 rounded-sm overflow-hidden border border-white/10 bg-white/[0.02]shrink-0 flex items-center justify-center">
+                <div className="w-20 h-20 rounded-sm overflow-hidden border border-white/10 bg-white/[0.02] shrink-0 flex items-center justify-center">
                   {(miEscuderia as any).logo_url ? <img src={(miEscuderia as any).logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs font-black uppercase text-white/20 font-mono">{miEscuderia.nombre ? miEscuderia.nombre.substring(0, 2).toUpperCase() : 'EQ'}</div>}
                 </div>
               )}
@@ -554,7 +559,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           </div>
           
           {currentUserPilotId && !miEscuderia ? (
-            <div className="bg-amber-500/5border border-amber-500/20  p-6 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className="bg-amber-500/5 border border-amber-500/20  p-6 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
               <div className="absolute right-0 top-0 w-32 h-32 bg-amber-500/5 rounded-full "></div>
               <div>
                 <div className="flex items-center gap-2 text-amber-500 font-black text-xs uppercase tracking-widest mb-2"><ShieldAlert className="w-4 h-4 animate-bounce" /> Agencia Libre / Estado Independiente</div>
@@ -618,7 +623,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             <span className="w-1 h-5 bg-[#e10600]" />
             {activeSplitId === "global" ? "PALMARÉS HISTÓRICO PILOTOS" : `MUNDIAL ${currentSplit?.nombre || 'PILOTOS'}`}
           </h2>
-          <div className="bg-white/[0.03] border border-white/10  overflow-hidden p-4">
+          <div className="m-card bg-white/[0.03] border border-white/10 overflow-hidden p-2 md:p-4">
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="text-[10px] text-white/30 uppercase tracking-wider border-b border-white/5">
@@ -637,7 +642,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                        className={`border-b border-white/5 last:border-0 transition-all group ${canOpenPilotProfile ? "hover:bg-[#e10600]/10 cursor-pointer" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística del piloto" : undefined}
                     >
                       <td className={`py-3 pl-2 font-black italic text-lg w-8 ${i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white/30"}`}>{i + 1}</td>
-                      <td className="py-3 font-bold">
+                      <td className="py-3.5 font-bold">
                         <div className="flex items-center gap-3">
                           {pilotPhoto ? (
                             <img src={pilotPhoto} alt={p.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full object-cover border border-[#e10600]/40" />
@@ -652,7 +657,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 text-right pr-2 font-bold tabular-nums">
+                      <td className="py-3.5 text-right pr-2 font-bold tabular-nums">
                         {activeSplitId === "global"
                           ? <span className="text-amber-400 text-base font-black">{p.points} 🏆</span>
                            : <span className={i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white"}>{p.points}</span>}
@@ -670,7 +675,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             <span className="w-1 h-5 bg-[#e10600]" />
             {activeSplitId === "global" ? "PALMARÉS HISTÓRICO ESCUDERÍAS" : currentSplit?.tipo === "individual" ? "MUNDIAL DÚOS" : "MUNDIAL ESCUDERÍAS"}
           </h2>
-          <div className="bg-white/[0.03] border border-white/10  overflow-hidden p-4">
+          <div className="m-card bg-white/[0.03] border border-white/10 overflow-hidden p-2 md:p-4">
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="text-[10px] text-white/30 uppercase tracking-wider border-b border-white/5">
@@ -685,7 +690,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                   return (
                     <tr key={t.id} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
                       <td className="py-3 pl-2 font-black italic text-white/30 text-lg w-8">{i + 1}</td>
-                      <td className="py-3 font-bold flex items-center gap-3">
+                      <td className="py-3.5 font-bold flex items-center gap-3">
                         {logo ? (
                           <img src={logo} alt={t.nombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-sm object-cover border border-white/10" />
                         ) : (
@@ -696,7 +701,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                          <span className="uppercase tracking-tighter">{t.nombre}</span>
                          {i === 0 && <Crown className="w-4 h-4 text-yellow-400 shrink-0" />}
                       </td>
-                      <td className="py-3 text-right pr-2 font-bold tabular-nums">
+                      <td className="py-3.5 text-right pr-2 font-bold tabular-nums">
                         {activeSplitId === "global"
                           ? <span className="text-amber-400 text-base font-black">{t.puntos} 🏆</span>
                           : t.puntos}
@@ -717,7 +722,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {championshipsTimeline.map((item, idx) => (
-              <div key={item.splitId} className={`border  p-5 relative overflow-hidden transition-all duration-300 ${item.completed ? "bg-[#0a0a0a]border-amber-500/30 hover:border-amber-500/50  shadow-amber-950/20" : "bg-white/[0.02] border-white/5 opacity-60"}`}>
+              <div key={item.splitId} className={`border  p-5 relative overflow-hidden transition-all duration-300 ${item.completed ? "bg-[#0a0a0a] border-amber-500/30 hover:border-amber-500/50  shadow-amber-950/20" : "bg-white/[0.02] border-white/5 opacity-60"}`}>
                 {item.completed ? (
                   <div className="absolute top-3 right-3 bg-amber-500/10 text-amber-400 border border-amber-500/25 rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider font-mono">Oficial 🏆</div>
                 ) : (
@@ -794,13 +799,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
 
       {confirmModal && confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-black/90z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/10  p-6 max-w-sm w-full relative text-left">
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+          <div className="relative w-full max-w-sm rounded-t-2xl border border-white/10 bg-[#0a0a0a] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-left sm:rounded-none sm:p-6 sm:pb-6">
             <h3 className="text-lg font-black text-white uppercase tracking-tight mb-2 flex items-center gap-2"><span className="w-1.5 h-4 bg-[#e10600]" /> {confirmModal.title}</h3>
-            <p className="text-xs text-white/60 leading-relaxed mb-6">{confirmModal.message}</p>
-            <div className="flex justify-end gap-3 font-semibold text-[10px] uppercase tracking-wider">
-              {confirmModal.showCancel !== false && (<button onClick={() => setConfirmModal(null)} className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-sm transition-colors border border-white/5">Cancelar</button>)}
-              <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} className="px-4 py-2.5 bg-[#e10600] text-white rounded-sm hover:bg-red-700 transition-colors ">Confirmar</button>
+            <p className="text-[13px] text-white/60 leading-relaxed mb-6">{confirmModal.message}</p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              {confirmModal.showCancel !== false && (<button onClick={() => setConfirmModal(null)} className="min-h-12 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition-colors hover:bg-white/10 sm:min-h-0 sm:rounded-sm sm:py-2.5 sm:text-[10px] sm:uppercase sm:tracking-wider">Cancelar</button>)}
+              <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} className="min-h-12 rounded-xl bg-[#e10600] px-4 text-sm font-bold text-white transition-colors hover:bg-red-700 sm:min-h-0 sm:rounded-sm sm:py-2.5 sm:text-[10px] sm:uppercase sm:tracking-wider">Confirmar</button>
             </div>
           </div>
         </div>
@@ -808,21 +813,21 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
       {isCompareViewOpen && (
         <div
-          className="fixed inset-0 bg-black/85 z-50 overflow-y-auto p-4 md:p-6 text-left backdrop-blur-sm"
+          className="fixed inset-0 bg-black/85 z-50 overflow-y-auto overscroll-contain p-0 md:p-6 text-left backdrop-blur-sm"
           onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }}
         >
-          <div className="max-w-5xl mx-auto bg-[#0d0d0d] border border-white/[0.08] p-6 relative my-4" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start border-b border-[#e10600]/20 pb-4 mb-6">
-              <div>
-                <span className="text-[10px] font-black tracking-[0.2em] text-[#e10600] uppercase font-mono block">CENTRAL DE TELEMETRÍA GP</span>
-                <h2 className="text-xl md:text-2xl font-black italic tracking-tight text-white uppercase flex items-center gap-2 mt-0.5"><TrendingUp className="w-6 h-6 text-amber-500" /> RIVALIDAD & RENDIMIENTO PADDOCK</h2>
+          <div className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl border-white/[0.08] bg-[#0d0d0d] p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 -mx-4 mb-5 flex items-start justify-between gap-3 border-b border-[#e10600]/20 bg-[#0d0d0d] px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:static md:mx-0 md:mb-6 md:px-0 md:pt-0 md:pb-4">
+              <div className="min-w-0">
+                <span className="block text-[11px] font-black text-[#e10600] md:font-mono md:text-[10px] md:uppercase md:tracking-[0.2em]">Central de telemetría GP</span>
+                <h2 className="mt-0.5 flex items-center gap-2 text-lg font-black uppercase italic tracking-tight text-white md:text-2xl"><TrendingUp className="w-5 h-5 shrink-0 text-amber-500 md:w-6 md:h-6" /> <span className="truncate">Rivalidad & rendimiento</span></h2>
               </div>
-              <button onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="p-2 hover:bg-white/5 text-white/50 hover:text-white rounded-sm transition-all border border-white/5 hover:border-white/10 cursor-pointer"><X className="w-5 h-5" /></button>
+              <button aria-label="Cerrar" onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 text-white/60 transition-all hover:bg-white/5 hover:text-white md:rounded-sm"><X className="w-5 h-5" /></button>
             </div>
 
-            <div className="flex border-b border-white/5 mb-6 gap-2">
-              <button onClick={() => { setActiveProfileTab("profile"); if (!selectedPilotForProfileId && allPaddockPilots.length > 0) setSelectedPilotForProfileId(allPaddockPilots[0].id); }} className={`flex-1 md:flex-initial px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "profile" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}>👤 Ficha Individual de Piloto</button>
-              <button onClick={() => { setActiveProfileTab("compare"); if (!comparePilotIdA && allPaddockPilots.length > 0) setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id); if (!comparePilotIdB && allPaddockPilots.length > 0) { const firstId = selectedPilotForProfileId || allPaddockPilots[0].id; const other = allPaddockPilots.filter(p => p.id !== firstId)[0]; setComparePilotIdB(other?.id || firstId); } }} className={`flex-1 md:flex-initial px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "compare" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}>⚔️ Comparador Cara a Cara</button>
+            <div className="grid grid-cols-2 gap-2 border-b border-white/5 mb-5 md:flex md:mb-6">
+              <button onClick={() => { setActiveProfileTab("profile"); if (!selectedPilotForProfileId && allPaddockPilots.length > 0) setSelectedPilotForProfileId(allPaddockPilots[0].id); }} className={`min-h-12 px-3 md:px-6 md:py-3 font-black text-[12px] md:text-xs md:uppercase tracking-tight md:tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "profile" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}><span className="md:hidden">👤 Ficha</span><span className="hidden md:inline">👤 Ficha Individual de Piloto</span></button>
+              <button onClick={() => { setActiveProfileTab("compare"); if (!comparePilotIdA && allPaddockPilots.length > 0) setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id); if (!comparePilotIdB && allPaddockPilots.length > 0) { const firstId = selectedPilotForProfileId || allPaddockPilots[0].id; const other = allPaddockPilots.filter(p => p.id !== firstId)[0]; setComparePilotIdB(other?.id || firstId); } }} className={`min-h-12 px-3 md:px-6 md:py-3 font-black text-[12px] md:text-xs md:uppercase tracking-tight md:tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "compare" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}><span className="md:hidden">⚔️ Comparar</span><span className="hidden md:inline">⚔️ Comparador Cara a Cara</span></button>
             </div>
 
             {activeProfileTab === "profile" && currentSplit?.id !== "origins" && (
@@ -1017,7 +1022,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                           <p className="text-[10px] text-white/40 font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-white">{statsA.rating.toFixed(0)}</span> | Cláusula: <span className="text-white">{statsA.clause.toFixed(1)}M</span></p>
                         </div>
                       </div>
-                      <div className="bg-white/[0.02]border border-red-500/20  p-4 flex items-center gap-4">
+                      <div className="bg-white/[0.02] border border-red-500/20  p-4 flex items-center gap-4">
                         {statsB.fotoUrl ? (
                           <img src={statsB.fotoUrl} alt={statsB.name} className="w-16 h-16 rounded-sm object-cover border border-red-500/40" />
                         ) : (
@@ -1104,7 +1109,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                               <span className="text-[10px] text-center">{metric.label}</span>
                               <span className={isBBetter ? "text-red-400 font-extrabold" : "text-white/60"}>{metric.format(metric.valB)}</span>
                             </div>
-                            <div className="grid grid-cols-2 gap-1 bg-white/[0.02]p-0.5 rounded-sm">
+                            <div className="grid grid-cols-2 gap-1 bg-white/[0.02] p-0.5 rounded-sm">
                               <div className="flex justify-end bg-white/[0.01] rounded-l h-2 overflow-hidden relative">
                                 <div className={`h-full rounded-l transition-all duration-500 bg-amber-400`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valA / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valA / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
                               </div>
@@ -1131,18 +1136,18 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       )}
 
       {isF1TVOpen && (
-        <div className="fixed inset-0 bg-[#0a0a0a]/95z-[60] overflow-y-auto p-4 md:p-6 text-left">
-          <div className="max-w-7xl mx-auto bg-[#0a0a0a] border border-[#e10600]/30  shadow-[0_0_50px_rgba(225,6,0,0.15)] p-4 md:p-6 relative my-4 overflow-hidden">
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#e10600]/10 rounded-full pointer-events-none" />
-            <div className="flex justify-between items-center border-b border-[#e10600]/20 pb-4 mb-6 relative z-10">
-              <div className="flex items-center gap-4">
-                <div className="bg-[#e10600] text-white font-black italic tracking-tighter text-3xl px-3 py-1 rounded-sm">FOM</div>
-                <div>
-                  <span className="text-[10px] font-black tracking-[0.2em] text-[#e10600] uppercase font-mono block animate-pulse">EN DIRECTO</span>
-                  <h2 className="text-xl font-bold uppercase tracking-tight text-white mt-0.5">Señal oficial Tonicotitular</h2>
+        <div className="fixed inset-0 bg-[#0a0a0a]/95 z-[60] overflow-y-auto overscroll-contain p-0 md:p-6 text-left">
+          <div className="relative mx-auto my-0 min-h-[100dvh] max-w-7xl overflow-hidden border-[#e10600]/30 bg-[#0a0a0a] p-4 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-[0_0_50px_rgba(225,6,0,0.15)] md:my-4 md:min-h-0 md:border md:p-6">
+            <div className="pointer-events-none absolute top-0 right-0 h-[500px] w-[500px] rounded-full bg-[#e10600]/10" />
+            <div className="relative z-10 mb-5 flex items-center justify-between gap-3 border-b border-[#e10600]/20 pt-[max(0.5rem,env(safe-area-inset-top))] pb-4 md:mb-6 md:pt-0">
+              <div className="flex min-w-0 items-center gap-3 md:gap-4">
+                <div className="shrink-0 rounded-sm bg-[#e10600] px-2.5 py-1 text-2xl font-black italic tracking-tighter text-white md:px-3 md:text-3xl">FOM</div>
+                <div className="min-w-0">
+                  <span className="block animate-pulse text-[11px] font-black text-[#e10600] md:font-mono md:text-[10px] md:uppercase md:tracking-[0.2em]">En directo</span>
+                  <h2 className="mt-0.5 truncate text-base font-bold uppercase tracking-tight text-white md:text-xl">Señal oficial Tonicotitular</h2>
                 </div>
               </div>
-              <button onClick={() => setIsF1TVOpen(false)} className="p-2 bg-white/5 hover:bg-white/10 text-white rounded-sm transition-all border border-white/10"><X className="w-6 h-6" /></button>
+              <button aria-label="Cerrar" onClick={() => setIsF1TVOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-white transition-all hover:bg-white/10 md:rounded-sm"><X className="w-5 h-5 md:w-6 md:h-6" /></button>
             </div>
             <FomLive compact />
           </div>

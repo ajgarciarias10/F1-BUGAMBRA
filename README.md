@@ -71,6 +71,36 @@ En Replit se configuran en **Secrets** (nunca en el código). En local se ponen 
 
 ---
 
+## Aplicación móvil (PWA)
+
+La web es instalable como aplicación en Android e iPhone, gratis y sin pasar por
+Play Store ni App Store. Los usuarios la instalan desde el propio navegador:
+la página **`/instalar`** explica los pasos de cada sistema y un banner la ofrece
+en la portada.
+
+Piezas que lo hacen posible:
+
+| Archivo | Función |
+|---|---|
+| `apps/web/public/manifest.webmanifest` | Nombre, iconos, color y accesos directos de la app |
+| `apps/web/public/sw.js` | Service worker: shell offline y caché de assets |
+| `apps/web/public/icons/` | Iconos 192/512, versión *maskable* y `apple-touch-icon` |
+| `apps/web/src/pwa/registerServiceWorker.ts` | Registro del SW (solo en producción) |
+| `apps/web/src/hooks/usePWAInstall.ts` | Captura `beforeinstallprompt` y detecta plataforma |
+| `apps/web/src/components/InstallApp.tsx` | Página `/instalar`, banner y botón de instalación |
+
+Al tocar `sw.js` hay que subir su constante `SW_VERSION` para que las cachés
+antiguas se limpien en los dispositivos ya instalados.
+
+Firestore, Auth y Storage nunca pasan por caché: el service worker los deja ir
+siempre a red para no servir datos de liga caducados.
+
+Para generar un vídeo explicativo de la instalación con NotebookLM o Gemini están
+las instrucciones en [docs/video-instalacion-instrucciones.md](docs/video-instalacion-instrucciones.md),
+con la guía de usuario en [docs/guia-instalacion-app.md](docs/guia-instalacion-app.md).
+
+---
+
 ## Firebase
 
 El proyecto usa Firebase para autenticación, base de datos (Firestore) y almacenamiento. La configuración CORS de Firebase Storage está en [cors.json](cors.json).

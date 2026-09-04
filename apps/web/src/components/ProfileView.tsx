@@ -218,10 +218,10 @@ export function ProfileView() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-8">
       {/* LEFT COLUMN: Visual Profile Card */}
       <div className="lg:col-span-1">
-        <div className="bg-gradient-to-b from-zinc-900 to-black border border-white/10 rounded-2xl p-6 relative overflow-hidden shadow-2xl flex flex-col items-center text-center">
+        <div className="relative flex flex-col items-center overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-zinc-900 to-black p-5 text-center shadow-2xl md:p-6">
           {/* Accent red outline */}
           <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#e10600]"></div>
           
@@ -279,7 +279,7 @@ export function ProfileView() {
 
       {/* RIGHT COLUMN: Edit Settings Panel */}
       <div className="lg:col-span-2">
-        <form onSubmit={handleSaveChanges} className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
+        <form onSubmit={handleSaveChanges} className="space-y-6 rounded-2xl border border-white/10 bg-zinc-900/40 p-4 shadow-2xl md:p-6 lg:p-8">
           <div className="border-b border-white/10 pb-4">
             <h3 className="text-lg font-bold uppercase tracking-tight flex items-center gap-2">
               <span className="w-1.5 h-5 bg-[#e10600] inline-block" />
@@ -366,7 +366,7 @@ export function ProfileView() {
                   type="url"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
-                  className="w-full bg-zinc-800 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs focus:outline-none focus:border-[#e10600] transition-colors"
+                  className="min-h-12 w-full rounded-xl border border-white/10 bg-zinc-800 py-2.5 pl-10 pr-4 text-white transition-colors focus:border-[#e10600] focus:outline-none md:min-h-0 md:text-xs"
                   placeholder="https://ejemplo.com/avatar.jpg"
                 />
               </div>
@@ -384,7 +384,7 @@ export function ProfileView() {
             <button
               type="submit"
               disabled={loading}
-              className="bg-[#e10600] hover:bg-red-700 text-white font-extrabold text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-lg shadow-red-900/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex min-h-13 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#e10600] px-8 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg shadow-red-900/20 transition-all hover:bg-red-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto md:min-h-0 md:py-3.5 md:text-xs md:tracking-widest"
             >
               {loading ? "Guardando..." : "Guardar Perfil"}
             </button>
@@ -446,7 +446,7 @@ export function ProfileView() {
 
         {/* Logo de equipo — solo para jeques */}
         {isJeque && escuderiaId && mySplits.length > 0 && (
-          <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-6 lg:p-8 space-y-5 mt-6">
+          <div className="mt-6 space-y-5 rounded-2xl border border-white/10 bg-zinc-900/40 p-4 md:p-6 lg:p-8">
             <div className="border-b border-white/10 pb-4 flex items-center gap-2">
               <span className="w-1.5 h-5 bg-[#e10600] inline-block" />
               <div>
@@ -495,13 +495,13 @@ export function ProfileView() {
                         value={localUrl}
                         onChange={e => setLogoUrlInputs(prev => ({ ...prev, [split.id]: e.target.value }))}
                         placeholder="o pega URL aquí"
-                        className="flex-1 min-w-0 bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white font-mono focus:outline-none focus:border-[#e10600] transition-colors"
+                        className="min-h-11 w-full min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-800 px-3 text-white transition-colors focus:border-[#e10600] focus:outline-none md:min-h-0 md:py-2 md:font-mono md:text-[11px]"
                       />
                       <button
                         type="button"
                         disabled={savingLogo === split.id}
                         onClick={() => saveTeamLogo(split.id, localUrl)}
-                        className="bg-[#e10600]/10 hover:bg-[#e10600]/20 border border-[#e10600]/30 text-[#e10600] text-[10px] font-bold uppercase px-3 py-2 rounded-lg transition-colors disabled:opacity-40 shrink-0"
+                        className="min-h-11 shrink-0 rounded-lg border border-[#e10600]/30 bg-[#e10600]/10 px-3 text-[13px] font-bold text-[#e10600] transition-colors hover:bg-[#e10600]/20 disabled:opacity-40 md:min-h-0 md:py-2 md:text-[10px] md:uppercase"
                       >
                         {savingLogo === split.id ? "..." : "Guardar"}
                       </button>

@@ -37,12 +37,29 @@ export function getYoutubeThumbnailUrl(url: string): string {
   return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "";
 }
 
-export function getSplitIntroUrl(splitId: string, explicitUrl?: string | null): string {
-  const url = (explicitUrl || "").trim();
-  if (url) return url;
+/** Intros originales de los splits históricos, anteriores a que el campo fuese editable.
+ *  Solo se usan cuando el split nunca ha guardado un valor. */
+const INTROS_POR_DEFECTO: Record<string, string> = {
+  origins: "https://youtu.be/5OLFg1W5LzU",
+  split_1: "https://www.youtube.com/watch?v=PCj87_WObys",
+  split_2: "https://www.youtube.com/watch?v=I3Ou8CxbU1I",
+};
 
-  if (splitId === "origins") return "https://youtu.be/5OLFg1W5LzU";
-  if (splitId === "split_1") return "https://www.youtube.com/watch?v=PCj87_WObys";
-  if (splitId === "split_2") return "https://www.youtube.com/watch?v=I3Ou8CxbU1I";
-  return "";
+export function getDefaultSplitIntroUrl(splitId: string): string {
+  return INTROS_POR_DEFECTO[splitId] ?? "";
+}
+
+/**
+ * URL de la intro de un split.
+ *
+ * Distingue tres estados a propósito, porque si no el admin no podía quitar la
+ * intro de un split histórico: guardaba el campo vacío y volvía a salir la de
+ * por defecto.
+ *  - `undefined` / `null` -> nunca se editó: se usa la intro histórica si la hay.
+ *  - `""` -> el admin la quitó deliberadamente: no hay intro.
+ *  - una URL -> la que haya guardado el admin.
+ */
+export function getSplitIntroUrl(splitId: string, explicitUrl?: string | null): string {
+  if (explicitUrl == null) return getDefaultSplitIntroUrl(splitId);
+  return explicitUrl.trim();
 }

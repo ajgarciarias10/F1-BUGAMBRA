@@ -240,7 +240,7 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-8">
       
       {/* LEFT COLUMN: Submit form (ONLY FOR USER VIEW) / STATS BRIEF (FOR BOTH) */}
       <div className="lg:col-span-1 space-y-6">
@@ -268,7 +268,7 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
                   placeholder="Ej: Chat general de escuderías..."
                   value={titulo}
                   onChange={e => setTitulo(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-white/20 outline-none focus:border-[#e10600] transition-colors"
+                  className="min-h-12 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none md:min-h-0 md:py-2 md:text-xs"
                 />
               </div>
 
@@ -277,7 +277,7 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
                 <select
                   value={categoria}
                   onChange={e => setCategoria(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-[#e10600] transition-colors cursor-pointer"
+                  className="min-h-12 w-full cursor-pointer rounded-lg border border-white/10 bg-black/40 px-3 text-white transition-colors focus:border-[#e10600] focus:outline-none md:min-h-0 md:py-2 md:text-xs"
                 >
                   {CATEGORIES.map(cat => (
                     <option key={cat.id} value={cat.id}>
@@ -295,14 +295,14 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
                   placeholder="Describe cómo funciona tu idea, por qué es útil y cómo mejoraría el paddock..."
                   value={descripcion}
                   onChange={e => setDescripcion(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-white/20 outline-none focus:border-[#e10600] transition-colors resize-none leading-relaxed"
+                  className="w-full resize-none rounded-lg border border-white/10 bg-black/40 px-3 py-2.5 leading-relaxed text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none md:text-xs"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-[#e10600] hover:bg-red-700 text-white font-extrabold text-xs uppercase py-2.5 rounded-lg transition-transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-red-950/20"
+                className="flex min-h-13 w-full items-center justify-center gap-1.5 rounded-lg bg-[#e10600] text-sm font-extrabold uppercase text-white shadow-lg shadow-red-950/20 transition-transform hover:bg-red-700 active:scale-95 md:min-h-0 md:py-2.5 md:text-xs"
               >
                 <Send className="w-3.5 h-3.5" />
                 {submitting ? "Enviando..." : "Enviar Sugerencia"}
@@ -369,14 +369,14 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
         </AnimatePresence>
 
         {/* Filters and sorting toolbelt */}
-        <div className="bg-zinc-900/30 border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col justify-between gap-3 rounded-2xl border border-white/5 bg-zinc-900/30 p-4 md:flex-row md:items-center md:gap-4">
           <div className="flex flex-wrap gap-2">
             
             {/* Category filter selects */}
             <select
               value={selectedCategoryFilter}
               onChange={e => setSelectedCategoryFilter(e.target.value)}
-              className="bg-zinc-950 border border-white/10 rounded-lg text-xs py-1.5 px-2.5 text-white/70 outline-none focus:border-[#e10600] transition-colors cursor-pointer"
+              className="min-h-11 cursor-pointer rounded-lg border border-white/10 bg-zinc-950 px-2.5 text-white/80 transition-colors focus:border-[#e10600] focus:outline-none md:min-h-0 md:py-1.5 md:text-xs"
             >
               <option value="all">Todas las categorías</option>
               {CATEGORIES.map(cat => (
@@ -388,7 +388,7 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
             <select
               value={selectedStatusFilter}
               onChange={e => setSelectedStatusFilter(e.target.value)}
-              className="bg-zinc-950 border border-white/10 rounded-lg text-xs py-1.5 px-2.5 text-white/70 outline-none focus:border-[#e10600] transition-colors cursor-pointer"
+              className="min-h-11 cursor-pointer rounded-lg border border-white/10 bg-zinc-950 px-2.5 text-white/80 transition-colors focus:border-[#e10600] focus:outline-none md:min-h-0 md:py-1.5 md:text-xs"
             >
               <option value="all">Todos los estados</option>
               {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
@@ -476,7 +476,7 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
                   </div>
 
                   {/* Suggestion Text Description */}
-                  <p className="text-xs text-white/70 leading-relaxed font-sans bg-black/25 rounded-xl p-3 border border-white/5 whitespace-pre-wrap">
+                  <p className="whitespace-pre-wrap rounded-xl border border-white/5 bg-black/25 p-3 font-sans text-[14px] leading-relaxed text-white/75 md:text-xs">
                     {sug.descripcion}
                   </p>
 

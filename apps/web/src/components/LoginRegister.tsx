@@ -191,7 +191,7 @@ export function LoginRegister() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex font-sans">
+    <div className="dark min-h-[100dvh] bg-[#0a0a0a] flex font-sans">
       {/* Left — Editorial */}
       <div className="hidden lg:flex w-1/2 flex-col justify-between p-16 border-r border-white/[0.06]">
         <Link to="/" className="flex items-center gap-3 group">
@@ -218,37 +218,37 @@ export function LoginRegister() {
       </div>
 
       {/* Right — Form */}
-      <div className="flex-1 flex flex-col justify-center items-center p-8 lg:p-16">
+      <div className="safe-top safe-bottom safe-x flex flex-1 flex-col items-center justify-center px-5 py-8 lg:p-16">
         {/* Mobile logo */}
-        <div className="flex items-center gap-2 mb-12 lg:hidden">
+        <div className="mb-8 flex items-center gap-2 lg:mb-12 lg:hidden">
           <span className="w-0.5 h-6 bg-[#e10600]" />
           <span className="text-white font-black tracking-[0.15em] uppercase">F1 Bugambra</span>
         </div>
 
         <div className="w-full max-w-sm">
           {/* Tab toggle */}
-          <div className="flex border-b border-white/10 mb-10">
+          <div className="mb-8 grid grid-cols-2 border-b border-white/10 lg:mb-10 lg:flex">
             <button
               onClick={() => setIsLogin(true)}
-              className={`pb-3 mr-8 text-xs font-bold tracking-[0.25em] uppercase transition-all border-b-2 -mb-px ${isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
+              className={`-mb-px min-h-12 border-b-2 text-sm font-bold uppercase tracking-[0.12em] transition-all lg:mr-8 lg:min-h-0 lg:pb-3 lg:text-xs lg:tracking-[0.25em] ${isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
             >
               Acceder
             </button>
             <button
               onClick={() => { setIsLogin(false); setPendingGoogleLink(null); }}
-              className={`pb-3 text-xs font-bold tracking-[0.25em] uppercase transition-all border-b-2 -mb-px ${!isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
+              className={`-mb-px min-h-12 border-b-2 text-sm font-bold uppercase tracking-[0.12em] transition-all lg:min-h-0 lg:pb-3 lg:text-xs lg:tracking-[0.25em] ${!isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
             >
               Registrarse
             </button>
           </div>
 
           {success && (
-            <div className="mb-6 p-4 border border-emerald-500/20 text-emerald-400 text-xs tracking-wider font-mono uppercase bg-emerald-500/5">
+            <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-[13px] text-emerald-400 lg:rounded-none lg:font-mono lg:text-xs lg:uppercase lg:tracking-wider">
               {success}
             </div>
           )}
           {error && (
-            <div className="mb-6 p-4 border border-[#e10600]/20 text-[#e10600] text-xs tracking-wider font-mono uppercase bg-[#e10600]/5">
+            <div className="mb-6 rounded-xl border border-[#e10600]/20 bg-[#e10600]/5 p-4 text-[13px] text-[#e10600] lg:rounded-none lg:font-mono lg:text-xs lg:uppercase lg:tracking-wider">
               {error}
             </div>
           )}
@@ -257,7 +257,7 @@ export function LoginRegister() {
             type="button"
             onClick={handleGoogleAuth}
             disabled={loading}
-            className="w-full border border-white/15 bg-white/[0.04] text-white text-xs font-bold tracking-[0.18em] uppercase py-3.5 hover:bg-white/[0.08] hover:border-white/30 transition-colors disabled:opacity-40 flex items-center justify-center gap-3"
+            className="flex min-h-14 w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-white/[0.04] text-sm font-bold uppercase tracking-[0.1em] text-white transition-colors hover:border-white/30 hover:bg-white/[0.08] disabled:opacity-40 lg:min-h-0 lg:rounded-none lg:py-3.5 lg:text-xs lg:tracking-[0.18em]"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -269,17 +269,17 @@ export function LoginRegister() {
 
           <div className="my-7 flex items-center gap-3">
             <span className="h-px flex-1 bg-white/[0.08]" />
-            <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-white/20">o con correo</span>
+            <span className="text-[12px] text-white/35 lg:font-mono lg:text-[9px] lg:uppercase lg:tracking-[0.25em] lg:text-white/20">o con correo</span>
             <span className="h-px flex-1 bg-white/[0.08]" />
           </div>
 
           <form onSubmit={handleAuth} className="space-y-6">
             <div>
-              <label className="block text-[10px] font-mono tracking-[0.3em] text-white/40 uppercase mb-2">Correo</label>
+              <label className="mb-2 block text-[12px] font-semibold text-white/55 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.3em] lg:text-white/40">Correo</label>
               <input
                 required
                 type="email"
-                className="w-full bg-transparent border-b border-white/20 py-2.5 text-white text-sm placeholder-white/20 focus:outline-none focus:border-[#e10600] transition-colors"
+                className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
                 placeholder="correo@ejemplo.com"
                 value={email}
                 onChange={e => {
@@ -290,11 +290,11 @@ export function LoginRegister() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-mono tracking-[0.3em] text-white/40 uppercase mb-2">Contraseña</label>
+              <label className="mb-2 block text-[12px] font-semibold text-white/55 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.3em] lg:text-white/40">Contraseña</label>
               <input
                 required={isLogin}
                 type="password"
-                className="w-full bg-transparent border-b border-white/20 py-2.5 text-white text-sm placeholder-white/20 focus:outline-none focus:border-[#e10600] transition-colors"
+                className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -303,7 +303,7 @@ export function LoginRegister() {
                 <button
                   type="button"
                   onClick={handleForgotPassword}
-                  className="mt-2 text-[10px] font-mono tracking-[0.2em] text-white/30 hover:text-[#e10600] uppercase transition-colors"
+                  className="mt-2 min-h-11 text-[13px] text-white/45 transition-colors hover:text-[#e10600] lg:min-h-0 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.2em]"
                 >
                   ¿Olvidaste tu contraseña?
                 </button>
@@ -312,11 +312,11 @@ export function LoginRegister() {
 
             {!isLogin && (
               <div>
-                <label className="block text-[10px] font-mono tracking-[0.3em] text-white/40 uppercase mb-2">Confirmar contraseña</label>
+                <label className="mb-2 block text-[12px] font-semibold text-white/55 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.3em] lg:text-white/40">Confirmar contraseña</label>
                 <input
                   required
                   type="password"
-                  className="w-full bg-transparent border-b border-white/20 py-2.5 text-white text-sm placeholder-white/20 focus:outline-none focus:border-[#e10600] transition-colors"
+                  className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
@@ -327,7 +327,7 @@ export function LoginRegister() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#e10600] text-white text-xs font-bold tracking-[0.3em] uppercase py-4 mt-4 hover:bg-red-700 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+              className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#e10600] text-sm font-bold uppercase tracking-[0.15em] text-white transition-colors hover:bg-red-700 disabled:opacity-40 lg:min-h-0 lg:rounded-none lg:py-4 lg:text-xs lg:tracking-[0.3em]"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : pendingGoogleLink && isLogin ? "Entrar y vincular Google" : (isLogin ? "Entrar" : "Crear cuenta")}
             </button>
@@ -336,7 +336,7 @@ export function LoginRegister() {
           <div className="mt-8 pt-8 border-t border-white/[0.06]">
             <Link
               to="/"
-              className="block text-center text-[10px] font-mono tracking-[0.3em] text-white/25 uppercase hover:text-white/50 transition-colors"
+              className="flex min-h-12 items-center justify-center text-center text-[13px] text-white/40 transition-colors hover:text-white/70 lg:min-h-0 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.3em] lg:text-white/25"
             >
               ← Ver clasificación pública
             </Link>

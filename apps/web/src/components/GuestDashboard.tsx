@@ -33,21 +33,24 @@ export function GuestDashboard() {
   };
   
   return (
-    <div className="min-h-screen bg-[#0E0E10] text-gray-100 px-4 pt-4 pb-28 md:p-8 font-sans">
+    <div className="dark min-h-[100dvh] bg-[#0E0E10] text-gray-100 px-3 pt-3 pb-tabbar md:p-8 font-sans safe-x">
       <div className="max-w-7xl mx-auto">
-        <header className="h-16 border border-white/10 bg-black/55 backdrop-blur-xl flex items-center justify-between px-4 md:px-6 shrink-0 md:-mx-8 md:-mt-8 mb-6 md:mb-8 rounded-3xl md:rounded-none shadow-2xl shadow-black/30">
-          <div className="flex items-center gap-4">
+        <header className="safe-top mb-5 flex min-h-16 shrink-0 items-center justify-between gap-2 rounded-3xl border border-white/10 bg-black/55 px-3 shadow-2xl shadow-black/30 backdrop-blur-xl md:-mx-8 md:-mt-8 md:mb-8 md:rounded-none md:px-6">
+          <div className="flex min-w-0 items-center gap-2 md:gap-4">
             <Link
               to="/login"
-              className="text-white/50 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"
+              aria-label="Volver"
+              className="-ml-1 grid h-11 w-11 shrink-0 place-items-center rounded-lg text-white/50 transition-colors hover:bg-white/5 hover:text-white"
             >
               <ChevronLeft className="w-5 h-5" />
             </Link>
-            <div className="bg-[#e10600] px-3 py-1 font-black text-white italic tracking-tighter text-xl">
+            <div className="shrink-0 bg-[#e10600] px-2.5 py-1 text-base font-black italic tracking-tighter text-white md:px-3 md:text-xl">
               F1 BUGAMBRA
             </div>
-            <div className="h-8 w-[1px] bg-white/20"></div>
-            <div className="flex flex-col">
+            <div className="hidden h-8 w-px bg-white/20 sm:block"></div>
+            {/* La etiqueta de modo invitado se cae en pantallas estrechas: el
+                botón de iniciar sesión es lo que hace falta tener a mano. */}
+            <div className="hidden flex-col sm:flex">
               <span className="text-[10px] uppercase tracking-widest text-white/50">
                 Modo Público
               </span>
@@ -56,14 +59,13 @@ export function GuestDashboard() {
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-6">
-            <Link
-              to="/login"
-              className="text-xs uppercase font-bold tracking-widest text-white/50 hover:text-white transition-colors border border-white/10 px-4 py-2 rounded-lg hover:bg-white/5"
-            >
-              Iniciar Sesión
-            </Link>
-          </div>
+          <Link
+            to="/login"
+            className="flex min-h-11 shrink-0 items-center rounded-full border border-white/10 px-3 text-[12px] font-bold text-white/70 transition-colors hover:bg-white/5 hover:text-white md:rounded-lg md:px-4 md:text-xs md:uppercase md:tracking-widest"
+          >
+            <span className="md:hidden">Entrar</span>
+            <span className="hidden md:inline">Iniciar Sesión</span>
+          </Link>
         </header>
 
         {/* Navigation Tabs */}

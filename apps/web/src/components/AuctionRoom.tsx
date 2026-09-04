@@ -322,7 +322,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const fotoDelPiloto = (pilotoId: string) =>
     (split?.roster || []).find((p: any) => p.pilotoId === pilotoId)?.foto_url || "";
 
-  const filaOpcion = "w-full flex items-center justify-between gap-3 px-4 py-3 border-b border-white/[0.05] text-left transition-colors";
+  const filaOpcion = "w-full min-h-14 flex items-center justify-between gap-3 px-4 py-3 border-b border-white/[0.05] text-left transition-colors";
 
   return (
     <section className="border border-white/10 bg-white/[0.03] p-5 space-y-5">
@@ -365,7 +365,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Modo</span>
               <select value={sala.modo} disabled={sala.simulacion_reversiones.length > 0}
                 onChange={e => configurarSala(splitId, { modo: e.target.value as any })}
-                className="bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]">
+                className="min-h-11 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
                 <option value="simulacro">Simulacro</option>
                 <option value="real">Real</option>
               </select>
@@ -374,13 +374,13 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Tiempo (s)</span>
               <input type="number" min={10} max={600} defaultValue={sala.duracion_segundos} key={`d-${sala.duracion_segundos}`}
                 onBlur={e => configurarSala(splitId, { duracion_segundos: Math.max(10, Number(e.target.value) || 60) })}
-                className="w-20 bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]" />
+                className="min-h-11 w-20 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
             </label>
             <label className="space-y-1">
               <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Prórroga (s)</span>
               <input type="number" min={0} max={120} defaultValue={sala.prorroga_segundos} key={`p-${sala.prorroga_segundos}`}
                 onBlur={e => configurarSala(splitId, { prorroga_segundos: Math.max(0, Number(e.target.value) || 0) })}
-                className="w-20 bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]" />
+                className="min-h-11 w-20 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
             </label>
             <label className="space-y-1">
               <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Abre el mercado</span>
@@ -389,13 +389,13 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 onBlur={e => configurarSala(splitId, {
                   apertura_programada: e.target.value ? new Date(e.target.value).getTime() : null,
                 })}
-                className="bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]" />
+                className="min-h-11 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
             </label>
             <label className="space-y-1">
               <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Plazas</span>
               <input type="number" min={1} max={8} defaultValue={sala.plazas_por_equipo} key={`z-${sala.plazas_por_equipo}`}
                 onBlur={e => configurarSala(splitId, { plazas_por_equipo: Math.max(1, Number(e.target.value) || 4) })}
-                className="w-16 bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]" />
+                className="min-h-11 w-16 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
             </label>
           </div>
 
@@ -403,7 +403,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
             <label className="space-y-1 flex-1 min-w-[180px]">
               <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Piloto</span>
               <select value={pilotoElegido} onChange={e => setPilotoElegido(e.target.value)}
-                className="w-full bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]">
+                className="min-h-11 w-full rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
                 <option value="">— elige —</option>
                 {candidatos.map(c => (
                   <option key={c.id} value={c.id}>
@@ -415,41 +415,41 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
             <label className="space-y-1">
               <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Operación</span>
               <select value={tipoElegido} onChange={e => setTipoElegido(e.target.value as TipoOperacion)}
-                className="bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]">
+                className="min-h-11 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
                 <option value="subasta">Subasta</option>
                 <option value="clausula">Cláusula</option>
                 <option value="mantener">Mantener</option>
               </select>
             </label>
             <button onClick={sacarPiloto} disabled={ocupado || !pilotoElegido}
-              className="inline-flex items-center gap-2 border border-[#e10600]/50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#e10600] disabled:opacity-30">
+              className="inline-flex items-center gap-2 border border-[#e10600]/50 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-[#e10600] disabled:opacity-30">
               {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gavel className="w-3.5 h-3.5" />}
               Sacar a subasta
             </button>
             <button onClick={adjudicarAhora}
               disabled={ocupado || sala.estado === "inactiva" || sala.estado === "adjudicada"}
-              className="border border-emerald-400/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 disabled:opacity-30">
+              className="border border-emerald-400/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 disabled:opacity-30">
               Adjudicar ya
             </button>
             <button onClick={concederProrroga}
               disabled={ocupado || sala.estado !== "en_curso" || sala.prorroga_segundos <= 0}
-              className="border border-amber-300/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-30">
+              className="border border-amber-300/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-30">
               Dar prórroga +{sala.prorroga_segundos}s
             </button>
             <button onClick={iniciarTemporada}
               disabled={ocupado || !!split?.temporada_iniciada || sala.estado === "en_curso" || sala.estado === "esperando_apertura" || sala.simulacion_reversiones.length > 0}
-              className="border border-sky-300/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-30">
+              className="border border-sky-300/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-30">
               {split?.temporada_iniciada ? "Temporada iniciada" : `Comenzar ${split?.nombre || "temporada"}`}
             </button>
             {sala.simulacion_reversiones.length > 0 && (
               <button onClick={deshacerSimulacion} disabled={ocupado}
-                className="border border-sky-300/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-30">
+                className="border border-sky-300/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-30">
                 Deshacer simulacro ({sala.simulacion_reversiones.length})
               </button>
             )}
             <button onClick={async () => { setOcupado(true); await cerrarSala(splitId); setAviso("Sala vaciada."); setOcupado(false); }}
               disabled={ocupado}
-              className="border border-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white/40 disabled:opacity-30">
+              className="border border-white/15 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-white/40 disabled:opacity-30">
               Vaciar sala
             </button>
           </div>
@@ -493,11 +493,11 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
           No hay ningún piloto en el atril
         </p>
       ) : (
-        <div className="border border-white/[0.06] bg-black/40">
-          <div className="grid md:grid-cols-[minmax(0,190px)_1fr] gap-5 p-5">
+        <div className="m-card border border-white/[0.06] bg-black/40">
+          <div className="grid gap-4 p-4 md:grid-cols-[minmax(0,190px)_1fr] md:gap-5 md:p-5">
 
             {/* Carta del piloto */}
-            <div style={{ animation: "subasta-carta 0.6s cubic-bezier(.2,1.3,.4,1)" }} key={sala.pilotoId ?? "vacio"}>
+            <div className="mx-auto w-full max-w-[190px] md:max-w-none" style={{ animation: "subasta-carta 0.6s cubic-bezier(.2,1.3,.4,1)" }} key={sala.pilotoId ?? "vacio"}>
               {pilotoEnAtril ? (
                 <PilotCardF1
                   pilot={pilotoEnAtril}
@@ -706,18 +706,18 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
       {/* ── Panel de puja ── */}
       {panelAbierto && miEquipo && enAtril && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           style={{ animation: "subasta-velo 0.2s ease-out" }}
           onClick={() => setPanelAbierto(false)}>
           <div onClick={e => e.stopPropagation()}
             style={{ animation: "subasta-panel 0.45s cubic-bezier(.2,1.35,.4,1)" }}
-            className="w-full max-w-sm border border-white/15 bg-[#0c0c0c] shadow-2xl shadow-black/70">
+            className="w-full max-w-sm rounded-t-2xl border border-white/15 bg-[#0c0c0c] pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black/70 sm:rounded-none sm:pb-0">
 
             <div className="flex items-center justify-between bg-[#e10600] px-4 py-2.5">
               <span className="text-[10px] font-black uppercase tracking-[0.22em] text-white">
                 {puedoAbrir ? "Abres la puja" : "Tu puja"}
               </span>
-              <button onClick={() => setPanelAbierto(false)} className="text-white/70 hover:text-white text-sm leading-none">✕</button>
+              <button aria-label="Cerrar" onClick={() => setPanelAbierto(false)} className="-mr-2 grid h-10 w-10 place-items-center text-white/70 hover:text-white">✕</button>
             </div>
 
             <div className="p-5 space-y-5">
@@ -753,7 +753,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               <div className="flex justify-center gap-2">
                 {[1, 5, 10].map(paso => (
                   <button key={paso} onClick={() => ajustarOferta(paso)}
-                    className="border border-white/10 px-3 py-1.5 text-[10px] font-black tabular-nums text-white/60 hover:border-white/40 hover:text-white transition-colors">
+                    className="min-h-11 min-w-14 rounded-xl border border-white/10 px-3 text-[13px] font-black tabular-nums text-white/70 transition-colors hover:border-white/40 hover:text-white sm:min-h-0 sm:min-w-0 sm:rounded-none sm:py-1.5 sm:text-[10px]">
                     +{paso}
                   </button>
                 ))}
@@ -777,7 +777,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               )}
 
               <button onClick={confirmarOferta} disabled={!ofertaValida || ocupado}
-                className="w-full flex items-center justify-center gap-2 bg-[#e10600] py-3 text-[11px] font-black uppercase tracking-[0.2em] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#ff1a09] transition-colors">
+                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#e10600] text-sm font-black uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#ff1a09] disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-0 sm:rounded-none sm:py-3 sm:text-[11px] sm:tracking-[0.2em]">
                 {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gavel className="w-4 h-4" />}
                 Confirmar {ofertaValida ? formatearMillones(ofertaNumero) : "oferta"}
               </button>

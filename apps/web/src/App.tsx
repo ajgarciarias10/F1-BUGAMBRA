@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DataProvider } from "./hooks/useData";
 import { PublicHome } from "./components/PublicHome";
+import { InstallApp, InstallBanner } from "./components/InstallApp";
 
 const LoginRegister = lazy(() => import("./components/LoginRegister").then(module => ({ default: module.LoginRegister })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then(module => ({ default: module.AdminDashboard })));
@@ -32,6 +33,7 @@ export default function App() {
         <Suspense fallback={routeFallback}>
           <Routes>
             <Route path="/login" element={<LoginRegister />} />
+            <Route path="/instalar" element={<InstallApp />} />
             <Route element={<DataRoutes />}>
               <Route path="/" element={<PublicHome />} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
@@ -42,6 +44,7 @@ export default function App() {
             </Route>
           </Routes>
         </Suspense>
+        <InstallBanner />
       </BrowserRouter>
     </AuthProvider>
   );

@@ -29,34 +29,33 @@ function AdminOverlay({ isOpen, onClose }: AdminOverlayProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[99] flex flex-col bg-[#0a0a0a] text-white">
-      <header className="flex items-center justify-between h-14 px-4 md:px-8 border-b border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl z-10">
-        <div className="flex items-center gap-3">
+    <div className="dark fixed inset-0 z-[99] flex flex-col bg-[#0a0a0a] text-white">
+      <header className="flex items-center justify-between min-h-14 px-3 md:px-8 border-b border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl z-10 safe-top safe-x">
+        <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={onClose}
-            className="p-2 text-white/40 hover:text-white transition-colors"
+            className="-ml-1 grid h-11 w-11 shrink-0 place-items-center text-white/50 hover:text-white transition-colors"
             aria-label="Cerrar panel admin"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2.5">
-            <span className="w-0.5 h-5 bg-[#e10600]" />
-            <span className="font-black tracking-[0.15em] uppercase text-sm text-white">F1 Bugambra</span>
-            <span className="px-2 py-0.5 text-[9px] font-mono uppercase tracking-widest bg-[#e10600]/20 text-[#e10600] border border-[#e10600]/30 rounded-sm">
-              ADMIN
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-0.5 h-5 shrink-0 bg-[#e10600]" />
+            <span className="truncate font-black tracking-tight md:tracking-[0.15em] uppercase text-sm text-white">F1 Bugambra</span>
+            <span className="shrink-0 rounded-full md:rounded-sm border border-[#e10600]/30 bg-[#e10600]/20 px-2 py-0.5 text-[10px] font-bold uppercase text-[#e10600]">
+              Admin
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-[10px] font-bold tracking-[0.2em] uppercase bg-white/5 hover:bg-white/10 border border-white/10 rounded-sm transition-colors"
-          >
-            Volver a mi dashboard
-          </button>
-        </div>
+        <button
+          onClick={onClose}
+          className="flex min-h-10 shrink-0 items-center rounded-full md:rounded-sm border border-white/10 bg-white/5 px-3 text-[12px] font-bold text-white/80 transition-colors hover:bg-white/10 md:text-[10px] md:tracking-[0.2em] md:uppercase"
+        >
+          <span className="md:hidden">Salir</span>
+          <span className="hidden md:inline">Volver a mi dashboard</span>
+        </button>
       </header>
-      <div className="flex-1 overflow-auto pt-4 pb-28">
+      <div className="flex-1 overflow-auto overscroll-contain pt-4 pb-24 safe-x">
         <Suspense fallback={<div className="py-24 text-center text-xs font-mono uppercase tracking-[0.3em] text-white/30">Cargando administración...</div>}>
           <AdminDashboard />
         </Suspense>
@@ -80,17 +79,17 @@ interface AppNavProps {
 function AppNav({ title, tabs, activeTab, onTab, isAdmin, onToggleAdmin, showAdminBadge = true }: AppNavProps) {
   const { userData } = useAuth();
   return (
-    <header className="fixed top-0 inset-x-0 z-50 bg-[#0a0a0a]/90 backdrop-blur-xl border-b border-white/[0.06] safe-top">
-      <div className="flex items-center justify-between h-14 px-6 md:px-10">
-        <div className="flex items-center gap-3">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <span className="w-0.5 h-5 bg-[#e10600]" />
-            <span className="font-black tracking-[0.15em] uppercase text-sm text-white group-hover:text-white/70 transition-colors">F1 Bugambra</span>
+    <header className="fixed top-0 inset-x-0 z-50 bg-[#0a0a0a]/90 backdrop-blur-xl border-b border-white/[0.06] safe-top safe-x">
+      <div className="flex items-center justify-between h-14 px-3 md:px-10 gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link to="/" className="flex items-center gap-2.5 group min-w-0">
+            <span className="w-0.5 h-5 shrink-0 bg-[#e10600]" />
+            <span className="truncate font-black tracking-tight md:tracking-[0.15em] uppercase text-sm text-white group-hover:text-white/70 transition-colors">F1 Bugambra</span>
           </Link>
           <span className="hidden md:block w-px h-4 bg-white/10" />
           <span className="hidden md:block text-[10px] font-mono tracking-[0.3em] text-white/30 uppercase">{title}</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1 md:gap-4 shrink-0">
           <div className="hidden md:flex items-center gap-2">
             <span className="text-[10px] font-mono tracking-[0.25em] text-white/25 uppercase">{userData?.rol}</span>
             <span className="text-[10px] font-bold text-white/70">{userData?.nombre}</span>
@@ -98,16 +97,16 @@ function AppNav({ title, tabs, activeTab, onTab, isAdmin, onToggleAdmin, showAdm
           {isAdmin && showAdminBadge && (
             <button
               onClick={onToggleAdmin}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-[0.2em] uppercase bg-[#e10600]/20 hover:bg-[#e10600]/30 border border-[#e10600]/30 text-[#e10600] rounded-sm transition-colors"
+              className="flex min-h-10 items-center gap-1.5 rounded-full md:rounded-sm px-3 text-[12px] font-bold md:text-[10px] md:tracking-[0.2em] md:uppercase bg-[#e10600]/20 hover:bg-[#e10600]/30 border border-[#e10600]/30 text-[#e10600] transition-colors"
               aria-label="Abrir panel de administración"
             >
-              <Shield className="w-3.5 h-3.5" />
+              <Shield className="w-4 h-4 md:w-3.5 md:h-3.5" />
               <span className="hidden sm:inline">Admin</span>
             </button>
           )}
           <button
             onClick={() => auth.signOut()}
-            className="text-[10px] font-bold tracking-[0.3em] uppercase text-white/30 hover:text-[#e10600] transition-colors"
+            className="min-h-10 px-2 text-[12px] font-bold text-white/40 hover:text-[#e10600] transition-colors md:text-[10px] md:tracking-[0.3em] md:uppercase md:text-white/30"
           >
             Salir
           </button>
@@ -124,7 +123,6 @@ function AppNav({ title, tabs, activeTab, onTab, isAdmin, onToggleAdmin, showAdm
           </button>
         ))}
       </div>
-      <MobileBottomTabs tabs={tabs} activeTab={activeTab} onTab={onTab} />
     </header>
   );
 }
@@ -172,7 +170,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
   const teamsSplit = validSplits.find((split: any) => split.id === resolvedTeamsSplitId);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
+    <div className="dark min-h-[100dvh] bg-[#0a0a0a] text-white font-sans">
       <AppNav
         title={title}
         tabs={tabs}
@@ -181,8 +179,12 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
         isAdmin={isAdmin}
         onToggleAdmin={() => setAdminOpen(true)}
       />
+      <MobileBottomTabs tabs={tabs} activeTab={activeTab} onTab={setActiveTab} />
       <AdminOverlay isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
-      <main className="pt-24 md:pt-[7.5rem] max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10 pb-28 md:pb-10">
+      <main className="pt-appbar md:pt-[7.5rem] max-w-7xl mx-auto px-3 md:px-10 py-6 md:py-10 pb-tabbar md:pb-10 safe-x">
+        {/* En móvil la cabecera no tiene sitio para el nombre de la sección,
+            así que lo encabeza el propio contenido. */}
+        <div className="rail-title rail-title-on-dark mb-5 md:hidden">{title}</div>
         {activeTab === "championship" && <SharedDashboardView canViewBudget={canViewBudget} escuderiaId={userData?.escuderia_id} />}
         {activeTab === "market" && (
           <div className="space-y-6">

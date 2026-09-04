@@ -23,14 +23,16 @@ import { SeasonReviewPanel } from "./SeasonReviewPanel";
 import { AdminUsersPanel } from "./AdminUsersPanel";
 import { AdminTeamManager } from "./AdminTeamManager";
 import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
+import { SplitIntroPanel } from "./SplitIntroPanel";
 
-type AdminTab = "results" | "economy" | "rivalries" | "roster" | "suggestions" | "tools";
+type AdminTab = "results" | "economy" | "rivalries" | "roster" | "production" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
   { id: "results", label: "Circuitos y resultados" },
   { id: "economy", label: "Economía" },
   { id: "rivalries", label: "Rivalidades" },
   { id: "roster", label: "Usuarios, equipos y pilotos" },
+  { id: "production", label: "Producción y vídeos" },
   { id: "suggestions", label: "Buzón de mejoras", pulse: true },
   { id: "tools", label: "Datos y mantenimiento" },
 ];
@@ -218,7 +220,7 @@ export function AdminDashboard() {
     setSavingVideoIntro(true);
     try {
       await updateDoc(doc(db, "splits", selectedSplitId), {
-        video_intro: videoIntroUrl.trim() || null,
+        video_intro: videoIntroUrl.trim(),
       });
       setMsg("Video de introducción guardado.");
       setTimeout(() => setMsg(""), 3000);
@@ -736,7 +738,7 @@ export function AdminDashboard() {
   };
 
   if (loadingSplits) return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+    <div className="dark min-h-[100dvh] bg-[#0a0a0a] flex items-center justify-center">
       <div className="text-center font-mono animate-pulse text-white/50">
         <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-[#e10600]" />
         Cargando temporada...
@@ -745,7 +747,7 @@ export function AdminDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-slate-100 px-3 md:px-4 pt-3 md:pt-4 pb-10">
+    <div className="dark min-h-[100dvh] bg-[#0a0a0a] text-slate-100 px-3 md:px-4 pt-3 md:pt-4 pb-10 safe-x">
       <div className="max-w-7xl mx-auto">
          <div className="flex items-center justify-between gap-3">
            <UserHeader title="Panel de Administración" />
@@ -827,7 +829,7 @@ export function AdminDashboard() {
               </div>
             </div>
 
-            {/* Video Intro del Split */}
+            {/* Video Intro del Split — atajo; la gestión de todas las intros está en «Producción y vídeos» */}
             <div className="mb-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 border-t border-white/[0.04] pt-3">
               <span className="text-[10px] font-mono uppercase text-white/40 shrink-0 w-20">Video Intro</span>
               <input
@@ -846,6 +848,9 @@ export function AdminDashboard() {
                 Guardar
               </button>
             </div>
+            <p className="-mt-1 mb-3 text-[11px] text-white/35">
+              Para ver y editar las intros de todos los splits a la vez, usa la pestaña «Producción y vídeos».
+            </p>
 
             {/* Logos de escuderías */}
             <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
@@ -955,6 +960,11 @@ export function AdminDashboard() {
           </section>
             <AdminUsersPanel />
           </div>
+        ) : adminTab === "production" ? (
+          <div className="space-y-6">
+            <SplitIntroPanel splits={splits} />
+            <MediaSyncPanel splits={splits} />
+          </div>
         ) : adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
         ) : adminTab === "tools" ? (
@@ -962,7 +972,6 @@ export function AdminDashboard() {
             <AuctionRoom splits={splits} splitId={selectedSplitId} />
             <SplitBuilderPanel splits={splits} />
             <OVRTrajectoryPanel splits={splits} />
-            <MediaSyncPanel splits={splits} />
             <SeasonReviewPanel splits={splits} />
             <AdminControlPanel />
             <DatabaseExplorer />

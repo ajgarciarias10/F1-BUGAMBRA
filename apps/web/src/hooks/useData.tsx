@@ -207,7 +207,8 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
     duos: splitData.duos ?? [],
     rivalries: splitData.rivalries,
     rivalidades_manual: splitData.rivalidades_manual,
-    video_intro: splitData.video_intro ?? undefined,
+    // "" significa "sin intro"; null o ausente significa "nunca se editó".
+    video_intro: splitData.video_intro === null ? undefined : splitData.video_intro,
     circuitos,
     equipos,
     roster,

@@ -37,18 +37,18 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
     <div className="space-y-7">
       <div className={`flex flex-col gap-4 border-b border-black/10 dark:border-white/[0.08] pb-5 ${darkMode ? "border-white/[0.08]" : ""}`}>
         <div>
-          <p className={`text-[9px] font-mono uppercase tracking-[0.35em] ${darkMode ? "text-white/50" : "text-black/35 dark:text-white/35"}`}>Archivo de carreras</p>
-          <h2 className={`mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] ${darkMode ? "text-white" : "text-black dark:text-white"}`}>Resultados por circuito</h2>
+          <p className={`text-[11px] md:text-[9px] md:font-mono md:uppercase md:tracking-[0.35em] ${darkMode ? "text-white/50" : "text-black/45 dark:text-white/45"}`}>Archivo de carreras</p>
+          <h2 className={`mt-1 text-xl md:text-3xl font-black uppercase tracking-[-0.03em] md:tracking-[-0.04em] ${darkMode ? "text-white" : "text-black dark:text-white"}`}>Resultados por circuito</h2>
         </div>
-        <div className="flex overflow-x-auto hide-scrollbar border border-black/10 dark:border-white/10 self-start max-w-full">
+        <div className="m-rail hide-scrollbar gap-2 md:gap-0 md:border md:border-black/10 md:dark:border-white/10 md:self-start md:max-w-full">
           {validSplits.map(split => (
             <button
               key={split.id}
               onClick={() => onSelectSplit(split.id)}
-              className={`shrink-0 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] transition-colors ${
+              className={`min-h-11 shrink-0 rounded-full md:rounded-none px-4 text-[12px] font-bold md:py-3 md:text-[10px] md:font-black md:uppercase md:tracking-[0.18em] transition-colors ${
                 currentSplitId === split.id
                   ? "bg-[#e10600] text-white"
-                  : darkMode ? "bg-white/[0.06] text-white/75 hover:bg-white/[0.12] hover:text-white" : "bg-black/[0.03] dark:bg-white/[0.03] text-black/65 dark:text-white/70 hover:text-black dark:hover:text-white"
+                  : darkMode ? "bg-white/[0.08] text-white/75 hover:bg-white/[0.14] hover:text-white" : "bg-black/[0.05] dark:bg-white/[0.06] text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white"
               }`}
             >
               {split.nombre}
@@ -63,7 +63,7 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
           <p className="mt-3 text-[10px] font-mono uppercase tracking-[0.3em] text-black/25 dark:text-white/25">Todavía no hay carreras cerradas en {currentSplit?.nombre}</p>
         </div>
       ) : (
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {circuitos.map(circuito => {
             const podio = [...(circuito.resultados || [])]
               .filter(r => r.racePos >= 1 && r.racePos <= 3)
@@ -72,7 +72,7 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
               <button
                 key={circuito.id}
                 onClick={() => setOpenId(circuito.id)}
-                className={`group relative overflow-hidden border p-5 text-left transition-all ${
+                className={`m-card group relative overflow-hidden border p-4 md:p-5 text-left transition-all active:scale-[0.99] ${
                   darkMode ? "border-white/10 bg-[#111217] text-white hover:-translate-y-0.5 hover:border-[#e10600]/50" : "border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] text-black dark:text-white hover:-translate-y-0.5 hover:border-[#e10600]/50"
                 }`}
               >
@@ -80,9 +80,9 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
                 <h3 className="text-lg font-black uppercase tracking-[-0.03em]">{circuito.nombre}</h3>
                 <div className="mt-3 space-y-1">
                   {podio.map(r => (
-                    <div key={r.pilotoId} className="flex items-center gap-2 text-[11px] font-mono">
-                      <span className="w-4 text-white/30">P{r.racePos}</span>
-                      <span className="truncate opacity-75">{nombreDe(currentSplit, r.pilotoId)}</span>
+                    <div key={r.pilotoId} className="flex items-center gap-2 text-[13px] md:text-[11px] md:font-mono">
+                      <span className="w-6 shrink-0 font-bold opacity-45">P{r.racePos}</span>
+                      <span className="truncate opacity-80">{nombreDe(currentSplit, r.pilotoId)}</span>
                     </div>
                   ))}
                   {podio.length === 0 && <span className="text-[10px] font-mono uppercase tracking-[0.2em] opacity-30">Sin podio registrado</span>}
@@ -175,23 +175,23 @@ function RaceDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 z-50 overflow-y-auto p-4 md:p-6 text-left backdrop-blur-sm" onClick={onClose}>
-      <div className="max-w-5xl mx-auto bg-[#0d0d0d] border border-white/[0.08] p-6 relative my-4" onClick={e => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-4 right-4 text-white/40 hover:text-white text-lg leading-none">✕</button>
-        <p className="text-[9px] font-mono uppercase tracking-[0.35em] text-[#e10600]">Resultados · {currentSplit?.nombre}</p>
+    <div className="fixed inset-0 bg-black/85 z-50 overflow-y-auto overscroll-contain p-0 md:p-6 text-left backdrop-blur-sm" onClick={onClose}>
+      <div className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl border-white/[0.08] bg-[#0d0d0d] p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6" onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} aria-label="Cerrar" className="sticky top-[max(0.5rem,env(safe-area-inset-top))] z-10 -mr-1 ml-auto grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-[#0d0d0d] text-white/60 hover:text-white md:absolute md:top-4 md:right-4 md:ml-0">✕</button>
+        <p className="text-[11px] font-bold text-[#e10600] md:font-mono md:text-[9px] md:uppercase md:tracking-[0.35em]">Resultados · {currentSplit?.nombre}</p>
         <h2 className="mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] text-white">{circuito.nombre}</h2>
 
         {/* ── Podio ── */}
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
           {podio.map(r => {
             const photo = getPilotPhoto(r.pilotoId);
             return (
-              <div key={r.pilotoId} className={`border p-4 text-center ${r.racePos === 1 ? "border-amber-400/40 bg-amber-400/[0.06]" : "border-white/10 bg-white/[0.02]"}`}>
-                <div className="w-16 h-16 mx-auto overflow-hidden bg-white/5 border border-white/10">
+              <div key={r.pilotoId} className={`m-card border p-2.5 text-center sm:p-4 ${r.racePos === 1 ? "border-amber-400/40 bg-amber-400/[0.06]" : "border-white/10 bg-white/[0.02]"}`}>
+                <div className="mx-auto h-14 w-14 overflow-hidden rounded-full border border-white/10 bg-white/5 sm:h-16 sm:w-16 sm:rounded-none">
                   {photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-white/20 font-black">{nombreDe(currentSplit, r.pilotoId).slice(0, 2).toUpperCase()}</div>}
                 </div>
-                <p className="mt-2 text-[9px] font-mono uppercase tracking-[0.2em] text-white/30">P{r.racePos}</p>
-                <p className="font-black uppercase text-white text-sm truncate">{nombreDe(currentSplit, r.pilotoId)}</p>
+                <p className="mt-2 text-[11px] font-bold text-white/40 sm:font-mono sm:text-[9px] sm:uppercase sm:tracking-[0.2em]">P{r.racePos}</p>
+                <p className="truncate text-[13px] font-black uppercase text-white sm:text-sm">{nombreDe(currentSplit, r.pilotoId)}</p>
               </div>
             );
           })}
@@ -229,8 +229,8 @@ function RaceDetailModal({
                       key={r.pilotoId}
                       disabled={!uid || votando === r.pilotoId}
                       onClick={() => votar(r.pilotoId)}
-                      className={`flex items-center justify-between gap-2 border p-2.5 text-left transition-colors disabled:opacity-40 ${
-                        seleccionado ? "border-amber-400/50 bg-amber-400/[0.08]" : "border-white/10 bg-white/[0.02] hover:border-amber-400/30"
+                      className={`m-row flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:opacity-40 md:rounded-none ${
+                        seleccionado ? "border-amber-400/50 bg-amber-400/[0.08]" : "border-white/10 bg-white/[0.02] hover:border-amber-400/30 active:bg-white/[0.06]"
                       }`}
                     >
                       <span className="flex items-center gap-2 min-w-0">
@@ -245,11 +245,11 @@ function RaceDetailModal({
               {!uid && <p className="mt-2 text-[10px] font-mono uppercase tracking-[0.22em] text-white/25">Inicia sesión para votar</p>}
 
               {isAdmin && (
-                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-4">
+                <div className="mt-4 flex flex-col gap-2 border-t border-white/[0.06] pt-4 sm:flex-row sm:flex-wrap sm:items-center">
                   <select
                     value={ganadorElegido}
                     onChange={e => setGanadorElegido(e.target.value)}
-                    className="bg-black/30 border border-white/10 px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
+                    className="min-h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-amber-400 sm:min-h-0 sm:w-auto sm:rounded-none sm:py-2 sm:text-xs"
                   >
                     <option value="">{propuesto ? `Más votado: ${nombreDe(currentSplit, propuesto)}` : "Elegir piloto..."}</option>
                     {candidatos.map(r => (
@@ -259,7 +259,7 @@ function RaceDetailModal({
                   <button
                     onClick={cerrarVotacion}
                     disabled={cerrando || (!ganadorElegido && !propuesto)}
-                    className="inline-flex items-center gap-2 bg-amber-500 text-black px-4 py-2 text-[10px] font-black uppercase tracking-wider disabled:opacity-40"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-bold text-black disabled:opacity-40 sm:min-h-0 sm:rounded-none sm:py-2 sm:text-[10px] sm:font-black sm:uppercase sm:tracking-wider"
                   >
                     {cerrando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     Cerrar votación y fijar ganador

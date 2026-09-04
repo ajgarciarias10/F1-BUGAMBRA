@@ -94,28 +94,28 @@ export function NextRaceWidget({ currentSplit }: NextRaceWidgetProps) {
   return (
     <div className="space-y-px">
       {/* ── MAIN CARD ── */}
-      <div className="border border-white/[0.08] bg-white/[0.02]">
+      <div className="m-card border border-white/[0.08] bg-white/[0.02]">
         <div className="grid lg:grid-cols-[1fr_auto] gap-0">
 
           {/* LEFT — circuit info */}
-          <div className="p-6 lg:p-8 border-b lg:border-b-0 lg:border-r border-white/[0.06]">
-            <p className="text-[9px] font-mono tracking-[0.4em] uppercase text-[#e10600] mb-3">
+          <div className="p-4 md:p-6 lg:p-8 border-b lg:border-b-0 lg:border-r border-white/[0.06]">
+            <p className="mb-2 text-[11px] font-bold text-[#e10600] md:mb-3 md:font-mono md:text-[9px] md:uppercase md:tracking-[0.4em]">
               {isCompleted ? "Última carrera" : "Próxima carrera"} · {currentSplit?.nombre}
             </p>
 
-            <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white leading-none mb-6">
+            <h2 className="mb-4 text-xl leading-tight font-black uppercase tracking-tight text-white md:mb-6 md:text-3xl md:leading-none">
               GP DE {nextCircuit.nombre.toUpperCase()}
             </h2>
 
             <div className="space-y-2.5">
               {dateLabel && (
-                <div className="flex items-center gap-2.5 text-xs font-mono text-white/50">
+                <div className="flex items-center gap-2.5 text-[13px] text-white/60 md:font-mono md:text-xs md:text-white/50">
                   <Calendar className="w-3.5 h-3.5 text-[#e10600] shrink-0" />
                   <span className="capitalize">{dateLabel}</span>
                 </div>
               )}
               {nextCircuit.hora && (
-                <div className="flex items-center gap-2.5 text-xs font-mono text-white/50">
+                <div className="flex items-center gap-2.5 text-[13px] text-white/60 md:font-mono md:text-xs md:text-white/50">
                   <Clock className="w-3.5 h-3.5 text-[#e10600] shrink-0" />
                   <span>{nextCircuit.hora} h · Hora local del paddock</span>
                 </div>
@@ -130,7 +130,7 @@ export function NextRaceWidget({ currentSplit }: NextRaceWidgetProps) {
           </div>
 
           {/* RIGHT — countdown */}
-          <div className="p-6 lg:p-8 flex flex-col justify-center">
+          <div className="p-4 md:p-6 lg:p-8 flex flex-col justify-center">
             {isCompleted ? (
               <div className="text-center">
                 <p className="text-[9px] font-mono tracking-[0.35em] uppercase text-white/25 mb-1">Estado</p>
@@ -156,9 +156,9 @@ export function NextRaceWidget({ currentSplit }: NextRaceWidgetProps) {
                     { val: timeLeft.minutes, label: "Min" },
                     { val: timeLeft.seconds, label: "Seg" },
                   ].map(({ val, label }) => (
-                    <div key={label} className="border border-white/[0.06] bg-black/20 py-3 px-1">
+                    <div key={label} className="rounded-xl border border-white/[0.06] bg-black/20 px-1 py-3 md:rounded-none">
                       <div className="text-xl font-black text-white tabular-nums leading-none">{String(val).padStart(2, "0")}</div>
-                      <div className="text-[8px] font-mono uppercase text-white/25 mt-1 tracking-widest">{label}</div>
+                      <div className="mt-1 text-[11px] text-white/35 md:font-mono md:text-[8px] md:uppercase md:tracking-widest md:text-white/25">{label}</div>
                     </div>
                   ))}
                 </div>
@@ -170,8 +170,8 @@ export function NextRaceWidget({ currentSplit }: NextRaceWidgetProps) {
 
       {/* ── VIDEO ── */}
       {videoId && (
-        <div className="border border-white/[0.08]">
-          <div className="px-6 py-3 border-b border-white/[0.06] flex items-center gap-3">
+        <div className="m-card mt-2 border border-white/[0.08] md:mt-0">
+          <div className="flex items-center gap-3 border-b border-white/[0.06] px-4 py-3 md:px-6">
             <span className="w-0.5 h-4 bg-[#e10600] shrink-0" />
             <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">
               Hotlap · GP de {nextCircuit.nombre}

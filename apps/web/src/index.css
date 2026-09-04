@@ -3,6 +3,18 @@
 /* Class-based dark mode: applies when ancestor has .dark class */
 @custom-variant dark (&:where(.dark, .dark *));
 
+:root {
+  /* Altura reservada por la barra de pestañas inferior en móvil.
+     Las pantallas la usan para su padding inferior; en escritorio es 0. */
+  --tabbar-height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  :root {
+    --tabbar-height: 0px;
+  }
+}
+
 html {
   background: #d7d7d7;
   color-scheme: light;
@@ -14,7 +26,8 @@ body {
   color: #111827;
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  /* dvh evita el salto al aparecer/ocultarse la barra del navegador móvil */
+  min-height: 100dvh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
@@ -88,6 +101,73 @@ a {
   touch-action: manipulation;
 }
 
+/* ── MÓVIL ──────────────────────────────────────────────────────────────────── */
+
+/* Safari en iOS hace zoom automático al enfocar un campo con menos de 16px.
+   Forzamos 16px en móvil para que el layout no salte al escribir. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Carruseles horizontales (selectores de temporada, filtros...) sin barra visible. */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Tablas anchas: scrollan dentro de su caja en vez de romper la página. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.table-scroll > table {
+  min-width: 32rem;
+}
+
+/* Espacio inferior para que la barra de pestañas nunca tape el contenido. */
+.pb-tabbar {
+  padding-bottom: calc(var(--tabbar-height) + 1.5rem);
+}
+
+/* Hueco para la cabecera fija. Tiene que seguir al notch: con un valor fijo, en
+   un iPhone con isla dinámica la cabecera crece y se come el contenido.
+   Solo en móvil, para no pisar los `md:pt-*` de cada pantalla. */
+@media (max-width: 767px) {
+  .pt-appbar {
+    padding-top: calc(3.5rem + max(0.75rem, env(safe-area-inset-top, 0px)) + 0.75rem);
+  }
+}
+
+.tabbar-sheet {
+  animation: tabbar-sheet-in 0.18s ease-out;
+}
+
+@keyframes tabbar-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabbar-sheet {
+    animation: none;
+  }
+}
+
 @supports (padding: max(0px)) {
   .safe-bottom {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
@@ -96,4 +176,108 @@ a {
   .safe-top {
     padding-top: max(0.75rem, env(safe-area-inset-top));
   }
+
+  /* Con viewport-fit=cover el contenido se mete bajo el notch en horizontal. */
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* ── LEGIBILIDAD EN MÓVIL ────────────────────────────────────────────────────
+   El diseño de escritorio usa micro-etiquetas de 8-10px en mayúsculas con mucho
+   tracking. En una pantalla de 360px eso se lee mal y resulta frío y "de
+   máquina". Aquí subimos el suelo tipográfico y aflojamos el interletraje solo
+   en móvil, sin tocar el diseño de escritorio ni cada componente uno a uno. */
+@media (max-width: 767px) {
+  .text-\[7px\],
+  .text-\[8px\],
+  .text-\[9px\] {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .text-\[10px\] {
+    font-size: 11.5px;
+    line-height: 1.35;
+  }
+
+  .text-\[11px\] {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  /* Tracking exagerado (>= 0.2em) reducido a algo legible a tamaño pequeño. */
+  [class*="tracking-[0.2"],
+  [class*="tracking-[0.25"],
+  [class*="tracking-[0.3"],
+  [class*="tracking-[0.35"],
+  [class*="tracking-[0.4"],
+  .tracking-widest {
+    letter-spacing: 0.07em;
+  }
+
+  /* Esquinas suaves en los contenedores principales: menos aspecto de tabla. */
+  .sport-panel {
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  }
+
+  /* Los iframes de vídeo se salían del contenedor redondeado. */
+  .sport-panel iframe {
+    border-radius: 0;
+  }
+}
+
+/* Tarjeta táctil: redondea en móvil y vuelve a esquina viva en escritorio, para
+   suavizar la lectura sin romper el lenguaje visual de la liga. Solo toca el
+   radio: el color y el borde los pone cada componente con sus clases. */
+.m-card {
+  border-radius: 0.875rem;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .m-card {
+    border-radius: 0;
+  }
+}
+
+/* Fila táctil: altura mínima cómoda para el pulgar (recomendación WCAG 2.5.5). */
+.m-row {
+  min-height: 3.25rem;
+}
+
+/* Carrusel de filtros que ocupa todo el ancho de la pantalla en móvil,
+   sangrando fuera del padding del contenedor para que no parezca cortado. */
+.m-rail {
+  display: flex;
+  /* El gap lo pone cada uso con clases de Tailwind: si se fijara aquí ganaría
+     siempre, por estar fuera de las capas, y no habría forma de anularlo. */
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  /* Sangra hasta el borde de la pantalla: coincide con el px-3 de los layouts. */
+  padding-inline: 0.75rem;
+  margin-inline: -0.75rem;
+}
+
+.m-rail > * {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .m-rail {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding-inline: 0;
+    margin-inline: 0;
+  }
+}
+
+/* Variante de rail-title para superficies oscuras que no cuelgan de .dark
+   (los dashboards de usuario tienen fondo negro sin la clase de tema). */
+.rail-title-on-dark {
+  color: #fff;
 }
