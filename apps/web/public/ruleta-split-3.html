@@ -14,6 +14,10 @@
     .auth-box h1 { margin: 8px 0; font-size: 25px; letter-spacing: -.04em; text-transform: uppercase; }
     .auth-box p { color: var(--muted); }
     .auth-box a { display: inline-block; margin-top: 12px; padding: 12px 16px; background: var(--red); color: #fff; font: 800 11px monospace; letter-spacing: .12em; text-decoration: none; text-transform: uppercase; }
+    .auth-box form { margin-top: 18px; }
+    .auth-box input { width: 100%; padding: 12px; border: 1px solid #ffffff24; background: #0b0c10; color: #fff; outline: none; }
+    .auth-box input:focus { border-color: var(--red); }
+    .auth-box form button { width: 100%; margin: 10px 0 0; }
     main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0 56px; }
     header { border-bottom: 1px solid #ffffff1c; margin-bottom: 28px; padding-bottom: 22px; }
     .eyebrow { color: #ff554d; font: 700 11px/1.2 monospace; letter-spacing: .28em; text-transform: uppercase; }
@@ -42,7 +46,7 @@
   </style>
 </head>
 <body>
-  <div id="auth-gate" class="auth-gate"><div class="auth-box"><div class="eyebrow">F1 Bugambra · acceso privado</div><h1>Ruleta de entrevistas</h1><p>Esta herramienta es privada. Inicia sesión con tu cuenta autorizada para continuar.</p><a href="/login?redirect=/ruleta-split-3.html">Ir al acceso</a></div></div>
+  <div id="auth-gate" class="auth-gate"><div class="auth-box"><div class="eyebrow">F1 Bugambra · acceso privado</div><h1>Ruleta de entrevistas</h1><p id="gate-message">Inicia sesión con tu cuenta autorizada o usa la clave privada.</p><a href="/login?redirect=/ruleta-split-3.html">Ir al acceso</a><form id="private-form"><input id="private-key" type="password" autocomplete="off" placeholder="Clave privada" aria-label="Clave privada" required><button type="submit">Entrar con clave</button></form></div></div>
   <main>
     <header>
       <div class="eyebrow">F1 Bugambra · herramienta de entrevista</div>
@@ -64,15 +68,25 @@
     });
     const auth = getAuth(firebaseApp);
     const privateEmail = "ajgarciarias@gmail.com";
+    const privateKeyHash = "bd4936f6d34108197199b74cef506083672e955afe582b388c54e8a9580056fd";
     const gate = document.querySelector("#auth-gate");
+    const enter = () => { document.body.classList.add("authorized"); gate.remove(); };
     onAuthStateChanged(auth, user => {
       if (user?.email?.toLowerCase() === privateEmail) {
-        document.body.classList.add("authorized");
-        gate.remove();
+        enter();
       } else {
         document.body.classList.remove("authorized");
-        gate.querySelector("p").textContent = user ? "Esta cuenta no tiene permiso para abrir la ruleta." : "Inicia sesión con tu cuenta autorizada para continuar.";
+        gate.querySelector("#gate-message").textContent = user ? "Esta cuenta no tiene permiso. Usa la clave privada." : "Inicia sesión con tu cuenta autorizada o usa la clave privada.";
       }
+    });
+    document.querySelector("#private-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const input = document.querySelector("#private-key");
+      const bytes = new TextEncoder().encode(input.value);
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      const hash = [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("");
+      if (hash === privateKeyHash) enter();
+      else { gate.querySelector("#gate-message").textContent = "Clave incorrecta."; input.value = ""; input.focus(); }
     });
 
     const teams = [
