@@ -23,8 +23,8 @@
     .eyebrow { color: #ff554d; font: 700 11px/1.2 monospace; letter-spacing: .28em; text-transform: uppercase; }
     h1 { margin: 8px 0 6px; font-size: clamp(28px, 5vw, 52px); letter-spacing: -.06em; text-transform: uppercase; }
     header p { color: var(--muted); margin: 0; max-width: 620px; }
-    .teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; }
-    .team { overflow: hidden; border: 1px solid #ffffff1c; background: #12151b; box-shadow: 0 18px 45px #0008; }
+    .teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 26px; }
+    .team { overflow: hidden; border: 1px solid #ffffff2b; background: #12151b; box-shadow: 0 18px 45px #0008; }
     .team-head { padding: 18px 18px 14px; border-bottom: 1px solid #ffffff12; }
     .team-head h2 { margin: 4px 0 0; font-size: 24px; letter-spacing: -.04em; text-transform: uppercase; }
     .team-head span { color: #ffffff66; font: 10px monospace; letter-spacing: .18em; text-transform: uppercase; }
@@ -90,9 +90,9 @@
     });
 
     const teams = [
-      { name: "Alfa Romero", pilots: [{ id: "piloto_carlos", name: "Carlos" }, { id: "piloto_dani", name: "Dani" }, { id: "piloto_mimic", name: "Mimic" }, { id: "piloto_pinilla", name: "Pinilla" }], colors: ["#e10600", "#f28c28", "#283593", "#16803c"] },
-      { name: "Roses", pilots: [{ id: "piloto_aparicio", name: "Aparicio" }, { id: "piloto_jose", name: "Jose" }, { id: "piloto_jota", name: "Jota" }, { id: "piloto_mesa", name: "Mesa" }], colors: ["#e10600", "#7c3aed", "#0891b2", "#be185d"] },
-      { name: "Zenith", pilots: [{ id: "piloto_fabi", name: "Fabi" }, { id: "piloto_moles", name: "Moles" }, { id: "piloto_pabliyo", name: "Pabliyo" }], colors: ["#e10600", "#2563eb", "#d97706"] }
+      { id: "equipo_alfa_romero", name: "Alfa Romero", pilots: [{ id: "piloto_carlos", name: "Carlos" }, { id: "piloto_dani", name: "Dani" }, { id: "piloto_mimic", name: "Mimic" }, { id: "piloto_pinilla", name: "Pinilla" }], colors: ["#e10600", "#f28c28", "#283593", "#16803c"] },
+      { id: "equipo_roses", name: "Roses", pilots: [{ id: "piloto_aparicio", name: "Aparicio" }, { id: "piloto_jose", name: "Jose" }, { id: "piloto_jota", name: "Jota" }, { id: "piloto_mesa", name: "Mesa" }], colors: ["#e10600", "#7c3aed", "#0891b2", "#be185d"] },
+      { id: "equipo_zenith", name: "Zenith", pilots: [{ id: "piloto_fabi", name: "Fabi" }, { id: "piloto_moles", name: "Moles" }, { id: "piloto_pabliyo", name: "Pabliyo" }], colors: ["#e10600", "#2563eb", "#d97706"] }
     ];
 
     const root = document.querySelector("#teams");
@@ -103,21 +103,29 @@
 
     async function loadPhotos() {
       const base = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0829043813/databases/development/documents";
+      const rosterResponses = await Promise.all(teams.map(team => fetch(`${base}/splits/split_3/equipos/${team.id}/pilotos?pageSize=100`)));
       const [pilotsResponse, usersResponse] = await Promise.all([
         fetch(`${base}/pilotos?pageSize=100`),
         fetch(`${base}/usuarios?pageSize=100`)
       ]);
-      const [pilots, users] = await Promise.all([pilotsResponse.json(), usersResponse.json()]);
-      (pilots.documents || []).forEach(document => {
-        const id = document.name.split("/").pop();
-        const photo = firestoreField(document, "foto_url");
-        if (photo) photoByPilot.set(id, photo);
-      });
+      const [pilots, users, ...rosters] = await Promise.all([pilotsResponse.json(), usersResponse.json(), ...rosterResponses.map(response => response.json())]);
       (users.documents || []).forEach(document => {
         const pilotId = firestoreField(document, "piloto_id");
         const photo = firestoreField(document, "foto_url");
-        if (pilotId && photo && !photoByPilot.has(pilotId)) photoByPilot.set(pilotId, photo);
+        if (pilotId && photo) photoByPilot.set(pilotId, photo);
       });
+      (pilots.documents || []).forEach(document => {
+        const id = document.name.split("/").pop();
+        const photo = firestoreField(document, "foto_url");
+        if (photo && !photoByPilot.has(id)) photoByPilot.set(id, photo);
+      });
+      rosters.forEach(roster => (roster.documents || []).forEach(document => {
+        const id = document.name.split("/").pop();
+        const photo = firestoreField(document, "foto_url");
+        if (photo && !photoByPilot.has(id)) photoByPilot.set(id, photo);
+      }));
+      document.querySelector("header p").textContent = "Una ruleta independiente por equipo. Elige un piloto y deja que el entrevistado hable de él.";
+      document.querySelector("footer").textContent = "Selecciona un piloto por equipo para la entrevista";
     }
 
     teams.forEach((team, teamIndex) => {
