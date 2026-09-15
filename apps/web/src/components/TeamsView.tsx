@@ -71,10 +71,10 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
   // El jeque se asigna a la escudería, no al split: los ids de equipo se mantienen entre
   // bloques, así que el mismo mapa sirve para cualquier split del archivo.
   const jequesPorEquipo = useMemo(() => {
-    const result: Record<string, Array<{ nombre: string; foto_url?: string }>> = {};
+    const result: Record<string, Array<{ uid: string; nombre: string; foto_url?: string; pilotoId?: string }>> = {};
     for (const usuario of usuarios) {
       if (usuario.rol !== "jeque" || !usuario.escuderia_id) continue;
-      (result[usuario.escuderia_id] ??= []).push({ nombre: usuario.nombre, foto_url: usuario.foto_url });
+      (result[usuario.escuderia_id] ??= []).push({ uid: usuario.uid, nombre: usuario.nombre, foto_url: usuario.foto_url, pilotoId: usuario.piloto_id || undefined });
     }
     return result;
   }, [usuarios]);
@@ -298,18 +298,6 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                           <div>
                             <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-[#e10600]">Alineación · {currentSplit.nombre}</span>
                             <h3 className="text-xl font-black uppercase tracking-[-0.03em]">{selectedTeam.nombre}</h3>
-                            {selectedJeques.length > 0 && (
-                              <span className="mt-1.5 flex flex-col gap-1">
-                                {selectedJeques.map((jeque, i) => (
-                                  <span key={i} className="flex items-center gap-1.5">
-                                    {jeque.foto_url
-                                      ? <img src={jeque.foto_url} alt="" className="w-5 h-5 shrink-0 object-cover" />
-                                      : <Crown className="w-3.5 h-3.5 shrink-0 text-white/35" />}
-                                    <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-white/50">Jeque · {jeque.nombre}</span>
-                                  </span>
-                                ))}
-                              </span>
-                            )}
                           </div>
                         </div>
                         <div className="flex gap-6">
@@ -317,6 +305,33 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                           <div><span className="block text-[8px] uppercase tracking-[0.2em] text-white/30">Media</span><strong className="text-2xl">{selectedAverage || "--"}</strong></div>
                         </div>
                       </div>
+                      {selectedJeques.length > 0 && (
+                        <div className="border-b border-white/[0.08] bg-[#0b0c10] p-4 md:p-5">
+                          <div className="mb-3 flex items-center gap-2">
+                            <Crown className="h-4 w-4 text-amber-300" />
+                            <span className="text-[9px] font-black uppercase tracking-[0.25em] text-amber-200/70">Dirección de la escudería</span>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {selectedJeques.map(jeque => {
+                              const photo = jeque.foto_url || (jeque.pilotoId ? getPilotPhoto(jeque.pilotoId) : "");
+                              return (
+                                <div key={jeque.uid} className="flex items-center gap-3 border border-amber-300/15 bg-amber-300/[0.04] p-3">
+                                  <div className="h-14 w-14 shrink-0 overflow-hidden border border-amber-300/20 bg-amber-300/10">
+                                    {photo
+                                      ? <img src={photo} alt={jeque.nombre} className="h-full w-full object-cover" />
+                                      : <Crown className="m-auto h-6 w-6 text-amber-200/45" />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-amber-200/45">Jeque</span>
+                                    <p className="truncate text-sm font-black uppercase text-white">{jeque.nombre}</p>
+                                    {!jeque.foto_url && jeque.pilotoId && <span className="text-[8px] text-white/35">Foto del perfil asociado</span>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                       <div className="grid gap-px bg-white/[0.06] sm:grid-cols-2 xl:grid-cols-4">
                         {selectedPilots
                           .slice()
