@@ -780,17 +780,27 @@ export function AdminDashboard() {
   return (
     <div className="dark min-h-[100dvh] bg-[#0a0a0a] text-slate-100 px-3 md:px-4 pt-3 md:pt-4 pb-10 safe-x">
       <div className="max-w-7xl mx-auto">
-         <div className="flex items-center justify-between gap-3">
-           <UserHeader title="Panel de Administración" />
-           {userData?.piloto_id && (
-             <button
-               onClick={() => { window.location.href = "/piloto"; }}
-               className="shrink-0 px-3 py-2 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 text-[10px] font-black uppercase tracking-wider"
-             >
-               Ir a mi panel de piloto
-             </button>
-           )}
-         </div>
+          <div className="flex items-center justify-between gap-3">
+            <UserHeader title="Panel de Administración" />
+            <div className="flex shrink-0 items-center gap-2">
+              <a
+                href="/ruleta-split-3.html"
+                target="_blank"
+                rel="noreferrer"
+                className="border border-red-500/30 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-red-300 hover:bg-red-500/10"
+              >
+                Ruleta
+              </a>
+              {userData?.piloto_id && (
+                <button
+                  onClick={() => { window.location.href = "/piloto"; }}
+                  className="shrink-0 px-3 py-2 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 text-[10px] font-black uppercase tracking-wider"
+                >
+                  Ir a mi panel de piloto
+                </button>
+              )}
+            </div>
+          </div>
 
         {/* Navigation Tabs */}
          <nav aria-label="Secciones de administración" className="mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-white/10 bg-zinc-950 p-1 sm:grid-cols-3 lg:grid-cols-8">
