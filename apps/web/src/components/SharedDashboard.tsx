@@ -36,6 +36,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   const teamLogoInputRef = useRef<HTMLInputElement>(null);
   const [updatingLogo, setUpdatingLogo] = useState(false);
   const [logoDragActive, setLogoDragActive] = useState(false);
+  const [logoError, setLogoError] = useState("");
 
   const getPilotPhoto = (pilotId: string) => {
     const matched = usuarios.find((u: any) => u.uid === pilotId || u.piloto_id === pilotId);
@@ -61,6 +62,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
 
   const handleUpdateTeamLogo = async (file: File) => {
     if (!activeSplitId || !escuderiaId || !miEscuderia) return;
+    setLogoError("");
     setUpdatingLogo(true);
     try {
       const compressed = await compressAndConvertImage(file, 256, 256, 0.75);
@@ -69,7 +71,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
       await updateDoc(teamRef, { logo_url: compressed });
     } catch (err: any) {
       console.error("Error updating team logo:", err);
-      alert("Error al actualizar el logo: " + err.message);
+      setLogoError(`No se ha podido actualizar el logo: ${err.message}`);
     } finally {
       setUpdatingLogo(false);
     }
@@ -524,6 +526,9 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
                 <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-[#e10600] font-black block mb-1">{canViewBudget ? "ESCUDERÍA OFICIAL DEL JEQUE" : "TU EQUIPO PARA ESTE SPLIT"}</span>
                 <h3 className="text-2xl font-black italic text-white uppercase tracking-tight">{miEscuderia.nombre}</h3>
                 <p className="text-[10px] text-white/40 uppercase font-mono mt-0.5">Visualizando logo oficial del {currentSplit?.nombre || activeSplitId}</p>
+                {logoError && (
+                  <p role="alert" className="mt-1.5 max-w-xs text-[10px] leading-relaxed text-[#ff8a85]">{logoError}</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-white/5 pt-4 md:pt-0">

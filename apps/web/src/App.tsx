@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DataProvider } from "./hooks/useData";
 import { PublicHome } from "./components/PublicHome";
 import { InstallApp, InstallBanner } from "./components/InstallApp";
+import { MarketLifecycleProvider } from "./components/MarketLifecycleProvider";
 
 const LoginRegister = lazy(() => import("./components/LoginRegister").then(module => ({ default: module.LoginRegister })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then(module => ({ default: module.AdminDashboard })));
@@ -39,7 +40,7 @@ function ScrollToTop() {
 }
 
 function DataRoutes() {
-  return <DataProvider><Outlet /></DataProvider>;
+  return <DataProvider><MarketLifecycleProvider><Outlet /></MarketLifecycleProvider></DataProvider>;
 }
 
 export default function App() {

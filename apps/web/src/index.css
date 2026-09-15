@@ -101,6 +101,34 @@ a {
   touch-action: manipulation;
 }
 
+/* Foco visible tanto sobre superficies oscuras como claras. */
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px #111827;
+}
+
+/* El formulario necesita etiquetas legibles, no microtexto editorial. */
+.auth-screen .auth-label {
+  color: #e4e4e7;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.auth-screen button:not([class*="bg-"]),
+.auth-screen a[href="/"],
+.auth-screen [class*="text-white/20"],
+.auth-screen [class*="text-white/30"],
+.auth-screen [class*="text-white/35"],
+.auth-screen [class*="text-white/40"] {
+  color: #a1a1aa;
+}
+
+.auth-screen button[aria-pressed="true"] { color: #fff; }
+.auth-screen button:disabled { cursor: wait; }
+.auth-screen form button[type="button"],
+.auth-screen a[href="/"] { font-size: 0.875rem; letter-spacing: normal; }
+
 /* ── MÓVIL ──────────────────────────────────────────────────────────────────── */
 
 /* Safari en iOS hace zoom automático al enfocar un campo con menos de 16px.

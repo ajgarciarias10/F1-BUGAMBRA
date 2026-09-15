@@ -42,9 +42,9 @@ const MAX_VISIBLE = 5;
 
 // Etiquetas cortas para que quepan en una columna de ~4rem sin cortarse.
 const SHORT_LABELS: Record<string, string> = {
-  clasificacion: "Clasific.",
+  clasificacion: "Clasificación",
   championship: "Mundial",
-  resultados: "Result.",
+  resultados: "Resultados",
   suggestions: "Mejoras",
   acumulado: "Ranking",
 };
@@ -57,10 +57,12 @@ export function MobileBottomTabs({
   tabs,
   activeTab,
   onTab,
+  scrollToTop = true,
 }: {
   tabs: MobileTabItem[];
   activeTab: string;
   onTab: (id: string) => void;
+  scrollToTop?: boolean;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -102,7 +104,7 @@ export function MobileBottomTabs({
     onTab(id);
     setSheetOpen(false);
     // Cambiar de pestaña sin volver arriba deja al usuario a media página.
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (scrollToTop) window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   };
 
   return (
@@ -160,13 +162,14 @@ export function MobileBottomTabs({
                 key={tab.id}
                 onClick={() => select(tab.id)}
                 aria-current={active ? "page" : undefined}
+                aria-label={tab.label}
                 className={`relative flex min-h-[3.75rem] flex-1 basis-0 flex-col items-center justify-center gap-1 px-1 transition-colors ${
-                  active ? "text-white" : "text-white/40 active:text-white/80"
+                  active ? "text-white" : "text-white/70 active:text-white"
                 }`}
               >
                 {active && <span className="absolute inset-x-2 top-0 h-0.5 bg-[#e10600]" />}
                 <Icon className={`h-5 w-5 ${active ? "text-[#e10600]" : ""}`} />
-                <span className="w-full truncate text-center text-[10px] font-black uppercase leading-none tracking-[0.02em]">
+                <span className="w-full break-words text-center text-[10px] font-bold leading-tight">
                   {SHORT_LABELS[tab.id] || tab.label}
                 </span>
               </button>

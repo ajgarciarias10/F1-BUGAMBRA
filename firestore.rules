@@ -208,20 +208,20 @@ service cloud.firestore {
       match /equipos/{teamId} {
         allow read: if true;
         allow create: if isAdmin() && isValidId(teamId);
-        allow update: if isSignedIn() && isValidId(teamId) && (isAdmin() || isJeque() || isJequeAfter());
+        allow update: if isAdmin() && isValidId(teamId);
         allow delete: if isAdmin() && isValidId(teamId);
 
         // 3.3. Pilotos Sub-collection (modelo antiguo)
         match /pilotos/{pilotId} {
           allow read: if true;
-          allow create, update, delete: if isSignedIn() && isValidId(pilotId) && (isAdmin() || isJeque());
+          allow create, update, delete: if isAdmin() && isValidId(pilotId);
         }
       }
 
       // 3.4. Roster Sub-collection (modelo plano nuevo)
       match /roster/{pilotoId} {
         allow read: if true;
-        allow create, update, delete: if isSignedIn() && isValidId(pilotoId) && (isAdmin() || isJeque());
+        allow create, update, delete: if isAdmin() && isValidId(pilotoId);
       }
 
       // 3.5. Subasta en vivo. La sala la abre y la adjudica el admin; los jeques solo
@@ -231,7 +231,15 @@ service cloud.firestore {
         allow create, delete: if isAdmin();
         allow update: if isSignedIn() && (
           isAdmin() ||
-          (isJeque() && incoming().diff(existing()).affectedKeys()
+          (isJeque() &&
+            incoming().puja_equipo_id == get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.escuderia_id &&
+            get(/databases/$(database)/documents/splits/$(splitId)).data.fichajes_abiertos == true &&
+            incoming().puja_actual is number &&
+            incoming().puja_actual <= get(/databases/$(database)/documents/splits/$(splitId)/equipos/$(incoming().puja_equipo_id)).data.presupuesto &&
+            (existing().estado == 'esperando_apertura' ||
+              (existing().estado == 'en_curso' && existing().termina_en >= request.time.toMillis() && incoming().puja_actual > existing().puja_actual)) &&
+            incoming().estado == 'en_curso' &&
+            incoming().diff(existing()).affectedKeys()
             .hasOnly(['estado', 'puja_actual', 'puja_equipo_id', 'puja_equipo_nombre',
                       'termina_en', 'prorrogada', 'actualizado_en']))
         );

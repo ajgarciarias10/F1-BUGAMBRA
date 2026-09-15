@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, updateDoc, writeBatch, runTransaction } from "firebase/firestore";
 import { db } from "./firebase";
 import { clausulaInicialDe, mantenerInicialDe } from "./economyService";
 import { OVR_DEBUT } from "../utils/splitResolver";
@@ -43,6 +43,7 @@ export async function leerCierreDeSplit(
   const equiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
   const equipos: EquipoAnterior[] = [];
   const fichas: FichaAnterior[] = [];
+  const pactosCobrados = new Map<string, number>();
 
   for (const equipoDoc of equiposSnap.docs) {
     const data = equipoDoc.data() as any;
@@ -60,6 +61,9 @@ export async function leerCierreDeSplit(
     const pilotosSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`));
     pilotosSnap.docs.forEach(pd => {
       const p = pd.data() as any;
+      if (p.pending_equipoId && Number.isFinite(p.pending_precio_compra)) {
+        pactosCobrados.set(p.pending_equipoId, (pactosCobrados.get(p.pending_equipoId) ?? 0) + p.pending_precio_compra);
+      }
       fichas.push({
         pilotoId: pd.id,
         nombre: p.nombre || pd.id,
@@ -74,6 +78,9 @@ export async function leerCierreDeSplit(
     });
   }
 
+  // El saldo vivo ya pagó los pactos: reconstruir el cierre ANTES del mercado
+  // permite descontar el roster de destino una sola vez, también sin Excel conciliado.
+  for (const equipo of equipos) if (!equipo.conciliado) equipo.saldoCierre = r1(equipo.saldoCierre + (pactosCobrados.get(equipo.id) ?? 0));
   return {
     equipos: equipos.sort((a, b) => a.nombre.localeCompare(b.nombre)),
     fichas: fichas.sort((a, b) => a.equipoNombre.localeCompare(b.equipoNombre) || a.nombre.localeCompare(b.nombre)),
@@ -87,6 +94,7 @@ export async function leerCierreDeSplit(
 // movimiento sin llevar la cuenta a mano y sin que sumar dos veces cambie el resultado.
 
 export interface AperturaDerivada {
+  splitAnteriorId?: string;
   equipoId: string;
   nombre: string;
   cierreAnterior: number;
@@ -95,6 +103,7 @@ export interface AperturaDerivada {
   mercado: number;
   apertura: number;
   aperturaActual: number | null;
+  cierreActual: number | null;
   desvio: number;
   detalle: string[];
 }
@@ -137,6 +146,9 @@ export async function derivarAperturas(
     let mercado = 0;
     for (const pilotoDoc of pilotosSnap.docs) {
       const ficha = pilotoDoc.data() as any;
+      // Una restauración copia la plantilla de cierre sin crear mercado. Las demás
+      // fichas sí forman el mercado, independientemente de cómo se registraron.
+      if (ficha.restaurado_desde === splitAnteriorId) continue;
       const precio = Number(ficha.precio_compra ?? 0);
       if (precio === 0) continue;
       // Un piloto de precio negativo se cobra en vez de pagarse.
@@ -145,8 +157,10 @@ export async function derivarAperturas(
     }
 
     const apertura = r1(cierre.saldoCierre + mercado);
-    const aperturaActual = typeof data.presupuesto_inicial === "number" ? data.presupuesto_inicial : null;
+    const aperturaActual = typeof data.presupuesto === "number" ? data.presupuesto : null;
+    const cierreActual = typeof data.presupuesto_inicial === "number" ? data.presupuesto_inicial : null;
     filas.push({
+      splitAnteriorId,
       equipoId: equipoDoc.id,
       nombre,
       cierreAnterior: cierre.saldoCierre,
@@ -154,6 +168,7 @@ export async function derivarAperturas(
       mercado,
       apertura,
       aperturaActual,
+      cierreActual,
       desvio: aperturaActual == null ? 0 : r1(apertura - aperturaActual),
       detalle,
     });
@@ -162,29 +177,39 @@ export async function derivarAperturas(
   return { filas: filas.sort((a, b) => a.nombre.localeCompare(b.nombre)), avisos };
 }
 
-// Escribe las aperturas derivadas. El presupuesto vivo se mueve lo mismo que la apertura,
-// no se iguala a ella: lo gastado y lo ingresado dentro del bloque tiene que sobrevivir.
+// Conciliar antes de empezar el split fija una fotografía reproducible: cierre anterior
+// como base y cierre + mercado como disponible. No se aplica con la temporada iniciada,
+// porque entonces sobrescribiría premios y movimientos posteriores al mercado.
 export async function aplicarAperturas(
   splitId: string,
   filas: AperturaDerivada[],
 ): Promise<{ ok: boolean; message: string }> {
   try {
-    const cambios = filas.filter(fila => fila.aperturaActual == null || fila.desvio !== 0);
+    const cambios = filas;
     if (cambios.length === 0) return { ok: true, message: "Las aperturas ya estaban derivadas: no hay nada que cambiar." };
 
-    const batch = writeBatch(db);
-    for (const fila of cambios) {
-      const equipoRef = doc(db, `splits/${splitId}/equipos`, fila.equipoId);
-      const snap = await getDoc(equipoRef);
+    await runTransaction(db, async batch => {
+    const [split, ...snapshots] = await Promise.all([
+      batch.get(doc(db, "splits", splitId)),
+      ...cambios.map(fila => batch.get(doc(db, `splits/${splitId}/equipos`, fila.equipoId))),
+    ]);
+    if (!split.exists()) throw new Error("El split no existe.");
+    if (split.data()?.temporada_iniciada) throw new Error("La temporada ya ha empezado: no se puede volver a aplicar el mercado.");
+    for (const [index, fila] of cambios.entries()) {
+      const snap = snapshots[index];
+      const equipoRef = snap.ref;
       const data = snap.data() as any;
-      const vivo = Number(data?.presupuesto ?? 0);
+      if (!snap.exists()) throw new Error(`La escudería ${fila.nombre} ya no existe.`);
+      const vivo = typeof data?.presupuesto === "number" ? data.presupuesto : null;
       const iniActual = typeof data?.presupuesto_inicial === "number" ? data.presupuesto_inicial : null;
+      if (vivo !== fila.aperturaActual || iniActual !== fila.cierreActual) throw new Error("El presupuesto ha cambiado desde la previsualización. Vuelve a calcularla.");
       batch.update(equipoRef, {
-        presupuesto_inicial: fila.apertura,
-        presupuesto: iniActual == null ? fila.apertura : r1(vivo + fila.apertura - iniActual),
+        presupuesto_inicial: fila.cierreAnterior,
+        presupuesto: fila.apertura,
+        ...(fila.splitAnteriorId ? { presupuesto_origen_splitId: fila.splitAnteriorId } : {}),
       });
     }
-    await batch.commit();
+    });
     return { ok: true, message: `Aperturas derivadas en ${cambios.length} escudería(s).` };
   } catch (error: any) {
     return { ok: false, message: `Error al aplicar las aperturas: ${error.message}` };
@@ -367,6 +392,7 @@ export async function crearSplit(
       const apertura = config.presupuestoDeArranque != null
         ? config.presupuestoDeArranque
         : oficial ?? derivado;
+      const presupuestoInicial = config.presupuestoDeArranque ?? equipo.saldoCierre;
 
       if (config.presupuestoDeArranque == null && oficial != null && r1(oficial - derivado) !== 0) {
         avisos.push(`${equipo.nombre}: la hoja dice ${oficial}M y de las operaciones salen ${derivado}M `
@@ -377,7 +403,8 @@ export async function crearSplit(
         id: equipo.id,
         nombre: equipo.nombre,
         presupuesto: apertura,
-        presupuesto_inicial: apertura,
+        presupuesto_inicial: presupuestoInicial,
+        ...(config.splitAnteriorId ? { presupuesto_origen_splitId: config.splitAnteriorId } : {}),
         puntos_constructores: 0,
         puntos_carreras: [],
       }, { merge: true });

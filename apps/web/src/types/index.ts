@@ -42,6 +42,10 @@ export interface Split {
    *  de esto (con nombre, equipo, rating...) para el cálculo económico. */
   rivalidades_manual?: Array<{ id: string; pilotoIds: string[] }>;
   video_intro?: string;
+  /** Si está activo, la subasta en vivo está disponible en la pestaña Mercado.
+   *  Si está desactivado, los jeques gestionan fichajes directos y presupuestos en Economía. */
+  mercado_subasta_activado?: boolean;
+  mercado_cerrado_por_plantillas?: boolean;
 }
 
 // ─── EQUIPOS (por split) ───────────────────────────────────────────────────────
@@ -52,6 +56,8 @@ export interface Equipo {
   presupuesto: number;
   puntos_constructores: number;
   logo_url?: string;
+  /** Máximo de pilotos permitidos en la plantilla para este split (default 4). */
+  plantilla_maxima?: number;
 }
 
 // ─── ROSTER (pilotos asignados a equipos por split) ───────────────────────────

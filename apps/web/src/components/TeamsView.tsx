@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useSearchParams } from "react-router";
 import { ChevronRight, Crown, Play, Shield, Users } from "lucide-react";
 import { useUsuarios } from "../hooks/useData";
 import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
+import { PilotDetailModal } from "./PilotDetailModal";
 
 interface TeamsViewProps {
   validSplits: any[];
@@ -10,6 +12,8 @@ interface TeamsViewProps {
   currentSplit: any;
   getPilotPhoto: (pilotId: string) => string;
   darkMode?: boolean;
+  /** Precios y valoración en la ficha del piloto. Fuera de la web pública. */
+  showEconomy?: boolean;
 }
 
 /**
@@ -45,9 +49,24 @@ function ratingAccent(rating: number): string {
   return "border-slate-600 bg-slate-800 text-slate-200";
 }
 
-export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto, darkMode = false }: TeamsViewProps) {
+export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto, darkMode = false, showEconomy = false }: TeamsViewProps) {
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const { usuarios } = useUsuarios();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // La ficha abierta vive en la URL, igual que la pestaña y la temporada: recargar o
+  // compartir el enlace lleva al mismo piloto en vez de a la portada.
+  const pilotoParam = searchParams.get("piloto") || "";
+  const abrirPiloto = (pilotoId: string) => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.set("piloto", pilotoId);
+    return next;
+  });
+  const cerrarPiloto = () => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.delete("piloto");
+    return next;
+  });
 
   // El jeque se asigna a la escudería, no al split: los ids de equipo se mantienen entre
   // bloques, así que el mismo mapa sirve para cualquier split del archivo.
@@ -90,6 +109,15 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
     : Math.min((Math.floor(indiceSeleccionado / columnas) + 1) * columnas, equipos.length) - 1;
   const selectedJeques = selectedTeam ? jequesPorEquipo[selectedTeam.id] || [] : [];
   const selectedPilots = selectedTeam ? pilotsByTeam[selectedTeam.id] || [] : [];
+  // Se busca en todo el plantel, no solo en el equipo desplegado: un enlace compartido
+  // debe abrir la ficha aunque quien lo reciba no tenga esa alineación abierta.
+  const pilotoAbierto = pilotoParam
+    ? (currentSplit?.roster || []).find((pilot: any) => pilot.pilotoId === pilotoParam)
+    : null;
+  const equipoDelPilotoAbierto = pilotoAbierto
+    ? equipos.find((team: any) => team.id === pilotoAbierto.equipoId) || null
+    : null;
+
   const selectedAverage = selectedPilots.length
     ? Math.round(selectedPilots.reduce((sum, pilot) => sum + (Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70), 0) / selectedPilots.length)
     : 0;
@@ -297,21 +325,29 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                             const photo = getPilotPhoto(pilot.pilotoId);
                             const rating = Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70;
                             return (
-                              <div key={pilot.pilotoId} className="m-row flex min-w-0 items-center gap-3 bg-[#101116] p-3 md:p-4">
+                              <button
+                                key={pilot.pilotoId}
+                                type="button"
+                                onClick={() => abrirPiloto(pilot.pilotoId)}
+                                aria-haspopup="dialog"
+                                aria-label={`Ver la ficha de ${pilot.nombre}`}
+                                className="m-row group flex min-w-0 items-center gap-3 bg-[#101116] p-3 text-left transition-colors hover:bg-[#15161b] active:scale-[0.99] md:p-4"
+                              >
                                 <div className="w-14 h-14 shrink-0 overflow-hidden bg-white/5 border border-white/10">
                                   {photo
-                                    ? <img src={photo} alt={pilot.nombre} className="w-full h-full object-cover" />
+                                    ? <img src={photo} alt="" className="w-full h-full object-cover" />
                                     : <div className="w-full h-full grid place-items-center text-sm font-black text-white/20">{pilot.nombre?.slice(0, 2).toUpperCase()}</div>}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   {pilot.rookie && <span className="text-[7px] font-black uppercase tracking-[0.2em] text-sky-300">Rookie</span>}
                                   <p className="font-black uppercase truncate text-sm">{pilot.nombre}</p>
-                                  <span className="text-[8px] font-mono text-white/30">{pilot.puntos_piloto || 0} PTS</span>
+                                  <span className="text-[8px] font-mono text-white/30">{pilot.puntos_piloto || 0} PTS · Ver ficha</span>
                                 </div>
                                 <div className={`w-14 h-14 shrink-0 border grid place-items-center ${ratingAccent(rating)}`}>
                                   <div className="text-center"><strong className="block text-xl leading-none tabular-nums">{rating}</strong><span className="text-[7px] font-black tracking-[0.18em]">OVR</span></div>
                                 </div>
-                              </div>
+                                <ChevronRight className="w-4 h-4 shrink-0 text-white/25 transition-colors group-hover:text-[#e10600]" />
+                              </button>
                             );
                           })}
                         {selectedPilots.length === 0 && (
@@ -329,6 +365,17 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
           </div>
 
         </>
+      )}
+
+      {pilotoAbierto && (
+        <PilotDetailModal
+          pilot={pilotoAbierto}
+          team={equipoDelPilotoAbierto}
+          split={currentSplit}
+          getPilotPhoto={getPilotPhoto}
+          showEconomy={showEconomy}
+          onClose={cerrarPiloto}
+        />
       )}
     </div>
   );

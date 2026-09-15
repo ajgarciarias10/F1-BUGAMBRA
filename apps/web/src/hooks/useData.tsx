@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { collection, collectionGroup, onSnapshot } from "firebase/firestore";
 import { db } from "../services/firebase";
 import type { Usuario, Piloto, SplitView, Circuito, Equipo, PilotInRoster, RosterEntry } from "../types";
@@ -200,6 +200,10 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
     nombre: splitData.nombre ?? sid,
     orden: splitData.orden ?? 0,
     fichajes_abiertos: splitData.fichajes_abiertos ?? false,
+    // Sin esta línea el interruptor de la subasta se guardaba en Firestore pero nadie lo
+    // leía: `derivarSplit` copia campo a campo, así que lo que no esté aquí no existe.
+    mercado_subasta_activado: splitData.mercado_subasta_activado ?? false,
+    mercado_cerrado_por_plantillas: splitData.mercado_cerrado_por_plantillas ?? false,
     activo: splitData.activo ?? false,
     completado: splitData.completado ?? false,
     temporada_iniciada: splitData.temporada_iniciada ?? false,
@@ -219,13 +223,31 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
 function useSplitsSource() {
   const [raw, setRaw] = useState<RawState>(rawVacio);
   const [loading, setLoading] = useState(true);
+  const [failedSources, setFailedSources] = useState<string[]>([]);
+  const [cachedSources, setCachedSources] = useState<string[]>([]);
+  const [slow, setSlow] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt(value => value + 1), []);
 
   useEffect(() => {
     let cancelado = false;
+    setRaw(rawVacio());
+    setLoading(true);
+    setFailedSources([]);
+    setCachedSources(["splits", "equipos", "circuitos", "roster", "pilotos"]);
+    setSlow(false);
+    const timer = window.setTimeout(() => setSlow(true), 8000);
     const listos = new Set<string>();
-    const marcarListo = (clave: string) => {
+    const terminar = (clave: string) => {
       listos.add(clave);
       if (listos.size === 5) setLoading(false);
+    };
+    const marcarListo = (clave: string, fromCache: boolean) => {
+      setFailedSources(previous => previous.filter(source => source !== clave));
+      setCachedSources(previous => fromCache
+        ? [...new Set([...previous, clave])]
+        : previous.filter(source => source !== clave));
+      terminar(clave);
     };
 
     // Un listener que falla también "termina". Si no, basta con que Firestore
@@ -233,10 +255,13 @@ function useSplitsSource() {
     // en "Cargando temporada" eternamente, sin decir nunca qué ha pasado.
     const marcarFallido = (clave: string) => (err: unknown) => {
       console.warn(`useSplits (${clave}) error:`, err);
-      if (!cancelado) marcarListo(clave);
+      if (!cancelado) {
+        setFailedSources(previous => [...new Set([...previous, clave])]);
+        terminar(clave);
+      }
     };
 
-    const unsubSplits = onSnapshot(collection(db, "splits"), snap => {
+    const unsubSplits = onSnapshot(collection(db, "splits"), { includeMetadataChanges: true }, snap => {
       if (cancelado) return;
       setRaw(prev => {
         const splits = new Map(prev.splits);
@@ -246,10 +271,10 @@ function useSplitsSource() {
         });
         return { ...prev, splits };
       });
-      marcarListo("splits");
+      marcarListo("splits", snap.metadata.fromCache);
     }, marcarFallido("splits"));
 
-    const unsubEquipos = onSnapshot(collectionGroup(db, "equipos"), snap => {
+    const unsubEquipos = onSnapshot(collectionGroup(db, "equipos"), { includeMetadataChanges: true }, snap => {
       if (cancelado) return;
       setRaw(prev => {
         let equipos = prev.equipos;
@@ -260,10 +285,10 @@ function useSplitsSource() {
         });
         return { ...prev, equipos };
       });
-      marcarListo("equipos");
+      marcarListo("equipos", snap.metadata.fromCache);
     }, marcarFallido("equipos"));
 
-    const unsubCircuitos = onSnapshot(collectionGroup(db, "circuitos"), snap => {
+    const unsubCircuitos = onSnapshot(collectionGroup(db, "circuitos"), { includeMetadataChanges: true }, snap => {
       if (cancelado) return;
       setRaw(prev => {
         let circuitos = prev.circuitos;
@@ -274,10 +299,10 @@ function useSplitsSource() {
         });
         return { ...prev, circuitos };
       });
-      marcarListo("circuitos");
+      marcarListo("circuitos", snap.metadata.fromCache);
     }, marcarFallido("circuitos"));
 
-    const unsubRoster = onSnapshot(collectionGroup(db, "roster"), snap => {
+    const unsubRoster = onSnapshot(collectionGroup(db, "roster"), { includeMetadataChanges: true }, snap => {
       if (cancelado) return;
       setRaw(prev => {
         let rosterFlat = prev.rosterFlat;
@@ -288,13 +313,13 @@ function useSplitsSource() {
         });
         return { ...prev, rosterFlat };
       });
-      marcarListo("roster");
+      marcarListo("roster", snap.metadata.fromCache);
     }, marcarFallido("roster"));
 
     // collectionGroup("pilotos") engancha a la vez el catálogo global (pilotos/{id}, en raíz)
     // y las fichas de roster (splits/{}/equipos/{}/pilotos/{id}): hay que separarlas por la
     // ruta del documento o se mezclan pilotos globales con fichas de equipo.
-    const unsubPilotos = onSnapshot(collectionGroup(db, "pilotos"), snap => {
+    const unsubPilotos = onSnapshot(collectionGroup(db, "pilotos"), { includeMetadataChanges: true }, snap => {
       if (cancelado) return;
       setRaw(prev => {
         let pilotosPorEquipo = prev.pilotosPorEquipo;
@@ -314,14 +339,15 @@ function useSplitsSource() {
         });
         return { ...prev, pilotosPorEquipo, pilotosGlobales };
       });
-      marcarListo("pilotos");
+      marcarListo("pilotos", snap.metadata.fromCache);
     }, marcarFallido("pilotos"));
 
     return () => {
       cancelado = true;
+      window.clearTimeout(timer);
       unsubSplits(); unsubEquipos(); unsubCircuitos(); unsubRoster(); unsubPilotos();
     };
-  }, []);
+  }, [attempt]);
 
   const splits = useMemo(() => {
     const entradas = [...raw.splits.entries()].sort(([aid, a], [bid, b]) => {
@@ -332,22 +358,23 @@ function useSplitsSource() {
     return heredarEscudos(entradas.map(([sid, data]) => derivarSplit(sid, data, raw)));
   }, [raw]);
 
-  return { splits, loading };
+  return { splits, loading, error: failedSources.length > 0, fromCache: cachedSources.length > 0, slow, retry };
 }
 
 interface DataContextValue {
   splits: SplitView[];
   loadingSplits: boolean;
+  splitStatus: { error: boolean; fromCache: boolean; slow: boolean; retry: () => void };
   usuarios: Usuario[];
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const { splits, loading: loadingSplits } = useSplitsSource();
+  const { splits, loading: loadingSplits, ...splitStatus } = useSplitsSource();
   const { usuarios } = useUsuariosSource();
   return (
-    <DataContext.Provider value={{ splits, loadingSplits, usuarios }}>
+    <DataContext.Provider value={{ splits, loadingSplits, splitStatus, usuarios }}>
       {children}
     </DataContext.Provider>
   );
@@ -356,7 +383,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 export function useSplits() {
   const data = useContext(DataContext);
   if (!data) throw new Error("useSplits debe usarse dentro de DataProvider");
-  return { splits: data.splits, loading: data.loadingSplits };
+  return { splits: data.splits, loading: data.loadingSplits, ...data.splitStatus };
 }
 
 export function useUsuarios() {

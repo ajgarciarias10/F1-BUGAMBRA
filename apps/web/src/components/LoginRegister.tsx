@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
@@ -15,6 +15,7 @@ import { auth } from "../services/auth";
 import { Navigate, Link } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { authFeedback } from "../utils/authFeedback";
 
 interface PendingGoogleLink {
   credential: AuthCredential;
@@ -66,6 +67,16 @@ export function LoginRegister() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [pendingGoogleLink, setPendingGoogleLink] = useState<PendingGoogleLink | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [operation, setOperation] = useState<"email" | "google" | "reset" | null>(null);
+  const emailInput = useRef<HTMLInputElement>(null);
+
+  const changeMode = (login: boolean) => {
+    if (loading) return;
+    setIsLogin(login);
+    setError(""); setSuccess(""); setPendingGoogleLink(null);
+    setShowPassword(false);
+  };
 
   if (user && userData && !(loading && pendingGoogleLink)) {
     if (userData.rol === "admin") return <Navigate to="/admin" replace />;
@@ -76,6 +87,8 @@ export function LoginRegister() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+    setOperation("email");
     setLoading(true);
     setError("");
     setSuccess("");
@@ -97,8 +110,9 @@ export function LoginRegister() {
           await provisionProfile(credential.user, normalizedEmail);
         }
       } else {
+        if (password.length < 6) throw new Error("La contraseña debe tener al menos 6 caracteres.");
         if (password !== confirmPassword) throw new Error("Las contraseñas no coinciden.");
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
         try {
           const normalizedEmail = email.trim().toLowerCase();
           await provisionProfile(cred.user, normalizedEmail);
@@ -113,13 +127,16 @@ export function LoginRegister() {
       }
     } catch (err: any) {
       if (isLogin && auth.currentUser) await auth.signOut();
-      setError(err.message || "Error al autenticar");
+      setError(authFeedback(err));
     } finally {
       setLoading(false);
+      setOperation(null);
     }
   };
 
   const handleGoogleAuth = async () => {
+    if (loading) return;
+    setOperation("google");
     setLoading(true);
     setError("");
     setSuccess("");
@@ -143,7 +160,7 @@ export function LoginRegister() {
 
       if (existingProfile && existingProfile.id !== result.user.uid) {
         await auth.signOut();
-        setError("Firebase ha creado dos identidades para el mismo correo. Activa el modo de una cuenta por email o solicita al administrador que las unifique.");
+        setError("No se ha podido vincular Google con tu cuenta. Accede con correo y contraseña o solicita ayuda a la administración de la liga.");
         return;
       }
 
@@ -161,38 +178,41 @@ export function LoginRegister() {
           return;
         }
       }
-      if (err.code === "auth/operation-not-allowed") {
-        setError("El acceso con Google todavía no está habilitado en Firebase Authentication.");
-        return;
-      }
-      if (err.code === "auth/unauthorized-domain") {
-        setError("Este dominio debe añadirse a los dominios autorizados de Firebase Authentication.");
-        return;
-      }
       if (err.code !== "auth/popup-closed-by-user") {
         if (auth.currentUser) await auth.signOut();
-        setError(err.message || "Error al acceder con Google");
+        setError(authFeedback(err));
+      } else {
+        setSuccess(authFeedback(err));
       }
     } finally {
       setLoading(false);
+      setOperation(null);
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!email) { setError("Introduce tu correo primero."); return; }
+    if (loading) return;
+    setError(""); setSuccess("");
+    if (!email.trim() || !emailInput.current?.checkValidity()) {
+      setError("Introduce un correo válido en el campo Correo para recuperar la contraseña.");
+      emailInput.current?.focus();
+      return;
+    }
+    setOperation("reset");
     setLoading(true); setError(""); setSuccess("");
     try {
-      await sendPasswordResetEmail(auth, email);
-      setSuccess("Correo de recuperación enviado. Revisa tu bandeja.");
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      setSuccess("Solicitud enviada. Si el correo tiene una cuenta, recibirás un enlace de recuperación. Revisa también la carpeta de spam.");
     } catch (err: any) {
-      setError(err.message || "Error al enviar el correo");
+      setError(authFeedback(err));
     } finally {
       setLoading(false);
+      setOperation(null);
     }
   };
 
   return (
-    <div className="dark min-h-[100dvh] bg-[#0a0a0a] flex font-sans">
+    <div className="auth-screen dark min-h-[100dvh] bg-[#0a0a0a] flex font-sans">
       {/* Left — Editorial */}
       <div className="hidden lg:flex w-1/2 flex-col justify-between p-16 border-r border-white/[0.06]">
         <Link to="/" className="flex items-center gap-3 group">
@@ -230,13 +250,17 @@ export function LoginRegister() {
           {/* Tab toggle */}
           <div className="mb-8 grid grid-cols-2 border-b border-white/10 lg:mb-10 lg:flex">
             <button
-              onClick={() => setIsLogin(true)}
+              onClick={() => changeMode(true)}
+              disabled={loading}
+              aria-pressed={isLogin}
               className={`-mb-px min-h-12 border-b-2 text-sm font-bold uppercase tracking-[0.12em] transition-all lg:mr-8 lg:min-h-0 lg:pb-3 lg:text-xs lg:tracking-[0.25em] ${isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
             >
               Acceder
             </button>
             <button
-              onClick={() => { setIsLogin(false); setPendingGoogleLink(null); }}
+              onClick={() => changeMode(false)}
+              disabled={loading}
+              aria-pressed={!isLogin}
               className={`-mb-px min-h-12 border-b-2 text-sm font-bold uppercase tracking-[0.12em] transition-all lg:min-h-0 lg:pb-3 lg:text-xs lg:tracking-[0.25em] ${!isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
             >
               Registrarse
@@ -244,12 +268,12 @@ export function LoginRegister() {
           </div>
 
           {success && (
-            <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-[13px] text-emerald-400 lg:rounded-none lg:font-mono lg:text-xs lg:uppercase lg:tracking-wider">
+            <div role="status" className="mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300">
               {success}
             </div>
           )}
           {error && (
-            <div className="mb-6 rounded-xl border border-[#e10600]/20 bg-[#e10600]/5 p-4 text-[13px] text-[#e10600] lg:rounded-none lg:font-mono lg:text-xs lg:uppercase lg:tracking-wider">
+            <div role="alert" className="mb-6 rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-200">
               {error}
             </div>
           )}
@@ -260,12 +284,12 @@ export function LoginRegister() {
             disabled={loading}
             className="flex min-h-14 w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-white/[0.04] text-sm font-bold uppercase tracking-[0.1em] text-white transition-colors hover:border-white/30 hover:bg-white/[0.08] disabled:opacity-40 lg:min-h-0 lg:rounded-none lg:py-3.5 lg:text-xs lg:tracking-[0.18em]"
           >
-            {loading ? (
+            {operation === "google" ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[12px] font-black normal-case text-[#4285f4]">G</span>
             )}
-            Continuar con Google
+            {operation === "google" ? "Conectando con Google…" : "Continuar con Google"}
           </button>
 
           <div className="my-7 flex items-center gap-3">
@@ -274,10 +298,16 @@ export function LoginRegister() {
             <span className="h-px flex-1 bg-white/[0.08]" />
           </div>
 
-          <form onSubmit={handleAuth} className="space-y-6">
+          <form onSubmit={handleAuth} aria-busy={loading} className="space-y-6">
             <div>
-              <label className="mb-2 block text-[12px] font-semibold text-white/55 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.3em] lg:text-white/40">Correo</label>
+              <label htmlFor="auth-email" className="auth-label mb-2 block">Correo</label>
               <input
+                ref={emailInput}
+                id="auth-email"
+                name="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                readOnly={loading}
                 required
                 type="email"
                 className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
@@ -291,32 +321,48 @@ export function LoginRegister() {
             </div>
 
             <div>
-              <label className="mb-2 block text-[12px] font-semibold text-white/55 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.3em] lg:text-white/40">Contraseña</label>
+              <label htmlFor="auth-password" className="auth-label mb-2 block">Contraseña</label>
               <input
-                required={isLogin}
-                type="password"
+                id="auth-password"
+                name="password"
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                required
+                minLength={isLogin ? undefined : 6}
+                aria-describedby={!isLogin ? "password-help" : undefined}
+                readOnly={loading}
+                type={showPassword ? "text" : "password"}
                 className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
               />
+              {!isLogin && <p id="password-help" className="mt-2 text-sm text-white/75">Usa al menos 6 caracteres. Una contraseña larga protege mejor tu cuenta.</p>}
+              <button type="button" onClick={() => setShowPassword(value => !value)} aria-pressed={showPassword} className="mt-2 min-h-11 text-sm text-white/80 underline underline-offset-4">
+                {showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              </button>
               {isLogin && (
                 <button
                   type="button"
                   onClick={handleForgotPassword}
+                  disabled={loading}
                   className="mt-2 min-h-11 text-[13px] text-white/45 transition-colors hover:text-[#e10600] lg:min-h-0 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.2em]"
                 >
-                  ¿Olvidaste tu contraseña?
+                  {operation === "reset" ? "Enviando recuperación…" : "¿Olvidaste tu contraseña?"}
                 </button>
               )}
             </div>
 
             {!isLogin && (
               <div>
-                <label className="mb-2 block text-[12px] font-semibold text-white/55 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.3em] lg:text-white/40">Confirmar contraseña</label>
+                <label htmlFor="auth-confirm" className="auth-label mb-2 block">Confirmar contraseña</label>
                 <input
+                  id="auth-confirm"
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  minLength={6}
+                  readOnly={loading}
                   required
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
                   placeholder="••••••••"
                   value={confirmPassword}
@@ -330,7 +376,7 @@ export function LoginRegister() {
               disabled={loading}
               className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#e10600] text-sm font-bold uppercase tracking-[0.15em] text-white transition-colors hover:bg-red-700 disabled:opacity-40 lg:min-h-0 lg:rounded-none lg:py-4 lg:text-xs lg:tracking-[0.3em]"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : pendingGoogleLink && isLogin ? "Entrar y vincular Google" : (isLogin ? "Entrar" : "Crear cuenta")}
+              {operation === "email" ? <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> {isLogin ? "Accediendo…" : "Creando cuenta…"}</> : pendingGoogleLink && isLogin ? "Entrar y vincular Google" : (isLogin ? "Entrar" : "Crear cuenta")}
             </button>
           </form>
 

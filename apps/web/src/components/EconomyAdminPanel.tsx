@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment, runTransaction } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment, runTransaction, serverTimestamp, deleteField } from "firebase/firestore";
+import { EconomyRulesPanel } from "./EconomyRulesPanel";
+import { SplitRestorePanel } from "./SplitRestorePanel";
 import { db } from "../services/firebase";
 import {
-  procesarEconomiaCarrera, ficharPiloto, recalcularCurvaPreciosSplit,
+  procesarEconomiaCarrera, revertirEconomiaCarrera, ficharPiloto, recalcularCurvaPreciosSplit,
   mantenerInicialDe, clausulaInicialDe,
   calcularPuntosPosicion,
   calcularMillonesRivalidadClasificacion, calcularMillonesRivalidadCarrera,
@@ -11,6 +13,10 @@ import {
 } from "../services/economyService";
 import { aplicarAperturas, derivarAperturas, type AperturaDerivada } from "../services/splitBuilder";
 import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
+import { resolveTransferView, type TransferView } from "../utils/transferView";
+import { presupuestoTrasCambiarPrecio } from "../utils/presupuesto";
+import { economyRules } from "../utils/economyRules";
+import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -95,8 +101,13 @@ function ratingColor(r: number): string {
   return "text-white/30";
 }
 
-const TIPO_LABEL: Record<TipoFichaje, string> = { subasta: "SUB", clausula: "CL", mantener: "MNT" };
-const TIPO_COLORS: Record<TipoFichaje, string> = {
+const TIPO_LABEL: Record<TipoFichaje | "fichaje", string> = { subasta: "SUB", clausula: "CL", mantener: "MNT", fichaje: "FIC" };
+// «Pactado» describe solo el pacto que todavía no se ha aplicado. Un traspaso ya
+// escrito en el split siguiente también es una operación cerrada, aunque su ficha
+// de este split ya no esté congelada.
+const OPERACION_LABEL = { pactado: "pactado", registrado: "fichado", pendiente: "pendiente" } as const;
+const TIPO_COLORS: Record<TipoFichaje | "fichaje", string> = {
+  fichaje: "bg-emerald-500/20 text-emerald-300",
   subasta: "bg-[#e10600]/20 text-[#e10600]/80",
   clausula: "bg-orange-500/20 text-orange-300/80",
   mantener: "bg-blue-500/20 text-blue-300/80",
@@ -163,24 +174,29 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   // ─── HELPERS DE PRESUPUESTO ──────────────────────────────────────────────────
 
+  /**
+   * Presupuesto disponible de una escudería, con el precio de un piloto sustituido.
+   *
+   * El presupuesto guardado ya refleja TODO lo cobrado: los fichajes de este split
+   * y los pactos confirmados, que descuentan en el momento de hacerse. Esta función
+   * lo recalculaba desde cero como `inicial − coste de la plantilla − pactos
+   * entrantes`, y eso cobraba dos veces: el inicial es el presupuesto heredado, es
+   * decir, lo que quedó DESPUÉS de pagar a esa plantilla en el split anterior.
+   * El resultado era que el presupuesto «anterior a los acuerdos» aparecía con el
+   * coste de cada fichaje restado, y al editar un precio ese cálculo se guardaba.
+   *
+   * Ahora solo se aplica la diferencia del precio que se está editando.
+   */
   function getTeamPresupuesto(teamId: string, overridePilotId?: string, overridePrice?: number): number | null {
     const team = teams.find(t => t.id === teamId);
-    if (!team || team.presupuesto_inicial == null) return null;
-    const teamCurrentCost = pilots
-      .filter(p => p.equipoId === teamId)
-      .reduce((sum, p) => {
-        const price = overridePilotId === p.id ? (overridePrice ?? 0) : (p.precio_compra || 0);
-        return sum + price;
-      }, 0);
-    const pendingIncomingCost = pilots
-      .filter(p => p.pending_equipoId === teamId && p.pending_precio_compra != null && p.pending_equipoId !== p.equipoId)
-      .reduce((sum, p) => sum + (p.pending_precio_compra ?? 0), 0);
-    return Math.round((team.presupuesto_inicial - teamCurrentCost - pendingIncomingCost) * 10) / 10;
+    if (!team || team.presupuesto == null) return null;
+    if (!overridePilotId) return Math.round(team.presupuesto * 10) / 10;
+    const pilot = pilots.find(p => p.id === overridePilotId);
+    if (!pilot || pilot.equipoId !== teamId) return Math.round(team.presupuesto * 10) / 10;
+    return presupuestoTrasCambiarPrecio(team.presupuesto, pilot.precio_compra || 0, overridePrice ?? 0);
   }
 
-  function pendingBudgetDelta(price: number): number {
-    return price < 0 ? Math.abs(price) : -price;
-  }
+
 
   // ─── CARGA DE DATOS ──────────────────────────────────────────────────────────
 
@@ -198,6 +214,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           id: d.id, nombre: data.nombre || d.id, ts: toMs(data.fecha),
           orden: data.numero_carrera ?? 0, completado: !!data.completado,
           economia_procesada: !!data.economia_procesada, resultados: data.resultados,
+          economia_reglas_aplicadas: data.economia_reglas_aplicadas,
         };
       });
       const sortedCircs = [...rawCircs].sort((a, b) => {
@@ -310,6 +327,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
       for (const c of rawCircs) {
         if (!c.completado || !c.economia_procesada || !Array.isArray(c.resultados)) continue;
         const resultados: any[] = c.resultados;
+        const rules = economyRules(c.economia_reglas_aplicadas ?? splitDoc.data()?.economia_config);
+        const { pole: M_POLE, vuelta_rapida: M_VUELTA_RAPIDA, sin_sancionados: M_SIN_SANCIONADOS,
+          participacion: M_PARTICIPACION, puntos_factor: M_PUNTOS_FACTOR, solo: M_SOLO_POR_CARRERA } = rules;
 
         const participatingTeams = new Set<string>();
         const dirtyTeams = new Set<string>();
@@ -359,11 +379,11 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
           [...members].sort((a: any, b: any) => a.qualyPos - b.qualyPos).forEach((member: any, index) => {
             const team = newTeams.find(t => t.id === member.teamId);
-            if (team) team.ingresos_rivalidades += calcularMillonesRivalidadClasificacion(index + 1, members.length);
+            if (team) team.ingresos_rivalidades += (group.members.length === 2 ? rules.rivalidad_duo_clasificacion : rules.rivalidad_clasificacion)[index] ?? 0;
           });
           [...members].sort((a: any, b: any) => a.racePos - b.racePos).forEach((member: any, index) => {
             const team = newTeams.find(t => t.id === member.teamId);
-            if (team) team.ingresos_rivalidades += calcularMillonesRivalidadCarrera(index + 1, members.length);
+            if (team) team.ingresos_rivalidades += (group.members.length === 2 ? rules.rivalidad_duo_carrera : rules.rivalidad_carrera)[index] ?? 0;
           });
         }
       }
@@ -442,16 +462,26 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   }
 
   async function savePresupuestoInicial(team: TeamRow, rawVal: string) {
-    const val = parseFloat(rawVal);
-    if (isNaN(val)) return;
+    const val = Number(rawVal.replace(",", "."));
+    if (!rawVal.trim() || !Number.isFinite(val)) return;
     setSavingBudget(team.id);
-    const presupuesto = team.presupuesto_inicial == null
-      ? val
-      : Math.round((team.presupuesto + val - team.presupuesto_inicial) * 10) / 10;
-    await updateDoc(doc(db, `splits/${selectedSplitId}/equipos`, team.id), { presupuesto_inicial: val, presupuesto });
+    try {
+    await runTransaction(db, async tx => {
+      const ref = doc(db, `splits/${selectedSplitId}/equipos`, team.id);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error("La escudería no existe.");
+      const data = snap.data();
+      const anterior = typeof data.presupuesto_inicial === "number" ? data.presupuesto_inicial : null;
+      // Si falta el metadato histórico se rellena sin volver a ingresar todo el saldo.
+      const delta = anterior == null ? 0 : val - anterior;
+      tx.update(ref, { presupuesto_inicial: val, ...(delta ? { presupuesto: increment(delta) } : {}) });
+      if (delta) tx.set(doc(collection(db, "transacciones")), { splitId: selectedSplitId, equipoId: team.id, equipo: team.nombre,
+        tipo: "ajuste", cantidad: Math.abs(delta), esIngreso: delta >= 0, descripcion: "Ajuste administrativo del presupuesto inicial", fecha: serverTimestamp() });
+    });
     setEditingBudget(prev => { const n = { ...prev }; delete n[team.id]; return n; });
     await loadData(selectedSplitId);
-    setSavingBudget(null);
+    } catch (error: any) { setProcessLog([error.message]); }
+    finally { setSavingBudget(null); }
   }
 
   async function recalcularPrecios() {
@@ -472,31 +502,15 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   }
 
   async function resetEconomia() {
-    if (!confirm(`¿Resetear toda la economía de ${selectedSplitId}?`)) return;
+    if (!confirm(`¿Revertir las liquidaciones de carreras de ${selectedSplitId}, empezando por la última? Los fichajes y ajustes se conservan.`)) return;
     setLoading(true);
     setProcessLog([]);
     try {
-      const [circSnap, equiposSnap] = await Promise.all([
-        getDocs(collection(db, `splits/${selectedSplitId}/circuitos`)),
-        getDocs(collection(db, `splits/${selectedSplitId}/equipos`)),
-      ]);
-      const b1 = writeBatch(db);
-      for (const equipoDoc of equiposSnap.docs) {
-        const pilotosSnap = await getDocs(collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`));
-        pilotosSnap.docs.forEach(d => b1.update(d.ref, {
-          precio_compra: 0, clausula_actual: 0, mantener_actual: 0,
-          clausula_inicial_split: 0, mantener_inicial_split: 0,
-          precio_carrera_anterior: 0, historial_precios: {},
-          congelado: false, congelado_en: null, tipo_fichaje: null,
-          pending_equipoId: null, pending_precio_compra: null, pending_tipo_fichaje: null,
-        }));
+      for (const circuit of [...circuits].reverse().filter(c => c.economia_procesada)) {
+        const result = await revertirEconomiaCarrera(selectedSplitId, circuit.id);
+        if (!result.ok) throw new Error(result.message);
+        setProcessLog(prev => [...prev, result.message]);
       }
-      equiposSnap.docs.forEach(d => b1.update(d.ref, { presupuesto: 0, presupuesto_inicial: 0 }));
-      await b1.commit();
-      const b2 = writeBatch(db);
-      circSnap.docs.forEach(d => b2.update(d.ref, { economia_procesada: false }));
-      await b2.commit();
-      setProcessLog(["✓ Reset completo"]);
       await loadData(selectedSplitId);
     } catch (err: any) {
       setProcessLog([`Error: ${err.message}`]);
@@ -507,31 +521,103 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   async function savePrecio(pilot: PilotRow, rawVal: string) {
     if (pilot.congelado) return;
-    const newPrecio = parseFloat(rawVal);
-    if (isNaN(newPrecio)) return;
+    const newPrecio = Number(rawVal.replace(",", "."));
+    if (!rawVal.trim() || !Number.isFinite(newPrecio)) return;
     setSavingId(pilot.id);
-    // Un precio negativo divide en vez de multiplicar, conservando el signo (Excel T2/T3).
-    const isNegativo = newPrecio < 0;
-    const mantenerInicial = Math.round((isNegativo ? newPrecio / 3 : newPrecio * 3) * 10) / 10;
-    const clausulaInicial = Math.round((isNegativo ? newPrecio / 2 : newPrecio * 2) * 10) / 10;
-    await updateDoc(doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
+    try {
+    const mantenerInicial = mantenerInicialDe(newPrecio);
+    const clausulaInicial = clausulaInicialDe(newPrecio);
+    await runTransaction(db, async tx => {
+      const ref = doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error("La ficha ya no existe.");
+      const data = snap.data();
+      if (data.pending_equipoId || Object.keys(data.historial_precios ?? {}).length) throw new Error("Deshaz primero los pactos y las liquidaciones de carreras antes de cambiar el precio de compra.");
+      if (data.ultima_operacion_id) throw new Error("Para corregir el importe, deshaz el alta y vuelve a registrarla. Así se compensa el cobro original.");
+      tx.update(ref, {
       precio_compra: newPrecio, mantener_actual: mantenerInicial, clausula_actual: clausulaInicial,
       mantener_inicial_split: mantenerInicial, clausula_inicial_split: clausulaInicial,
       precio_carrera_anterior: mantenerInicial, historial_precios: {},
+      ...(data.clausula_manual != null ? { clausula_actual: data.clausula_manual } : {}),
+      });
+      tx.set(doc(collection(db, "transacciones")), { splitId: pilot.splitId, equipoId: pilot.equipoId, equipo: pilot.equipoNombre,
+        piloto: pilot.nombre, tipo: "ajuste", cantidad: 0, esIngreso: true,
+        descripcion: `Corrección de valoración: ${data.precio_compra ?? 0}M → ${newPrecio}M; sin cobro`, fecha: serverTimestamp() });
     });
-    const newPresupuesto = getTeamPresupuesto(pilot.equipoId, pilot.id, newPrecio);
-    if (newPresupuesto != null) {
-      await updateDoc(doc(db, `splits/${pilot.splitId}/equipos`, pilot.equipoId), { presupuesto: newPresupuesto });
-    } else {
-      const team = teams.find(t => t.id === pilot.equipoId);
-      if (team) {
-        const delta = newPrecio - pilot.precio_compra;
-        await updateDoc(doc(db, `splits/${pilot.splitId}/equipos`, pilot.equipoId), { presupuesto: Math.round((team.presupuesto - delta) * 10) / 10 });
-      }
-    }
     setEditing(prev => { const n = { ...prev }; delete n[pilot.id]; return n; });
     await loadData(pilot.splitId);
-    setSavingId(null);
+    } catch (error: any) { setProcessLog([error.message]); }
+    finally { setSavingId(null); }
+  }
+
+  /**
+   * Saca al piloto de su escudería y lo deja como agente libre en ese mismo split.
+   *
+   * Hasta ahora no había forma de corregir una ficha mal puesta: si el piloto no
+   * tenía pacto, el botón de la fila solo llevaba al split siguiente, y la papelera
+   * únicamente aparecía en las fichas legacy. Una renovación escrita por error se
+   * quedaba ahí para siempre.
+   *
+   * No toca presupuestos —liberar no devuelve lo invertido— ni ningún otro split.
+   */
+  /**
+   * Saca al piloto de su escudería y lo deja como agente libre en ese mismo split.
+   *
+   * No mueve dinero, y es deliberado: en este modelo el gasto va atado al PACTO,
+   * no a la ficha. Cobrar o devolver aquí el `precio_compra` inventaría un
+   * movimiento que nadie hizo —una ficha puede estar mal puesta sin que se haya
+   * pagado nunca por ella—. Quien mueve dinero es pactar y deshacer el pacto.
+   *
+   * Hasta ahora esta acción no existía: si el piloto no tenía pacto pendiente, el
+   * botón de la fila solo llevaba al split siguiente y la papelera aparecía únicamente
+   * en las fichas legacy, así que una ficha escrita por error se quedaba para siempre.
+   */
+  async function liberarPiloto(pilot: PilotRow) {
+    if (pilot.equipoId === "agente_libre") return;
+    const splitNombre = splits.find((s: any) => s.id === pilot.splitId)?.nombre ?? pilot.splitId;
+    if (!confirm(
+      `¿Sacar a ${pilot.nombre} de ${pilot.equipoNombre} y dejarlo como agente libre en ${splitNombre}?\n\n` +
+      `Su ficha pasa a agentes libres con precio 0 y sin pacto.\n` +
+      `No se toca ningún presupuesto: el dinero solo se mueve al pactar un fichaje o al deshacerlo.\n` +
+      `No se toca ningún otro split.\n\n` +
+      `¿Continuar?`
+    )) return;
+
+    setDeletingId(pilot.id);
+    try {
+      const origenRef = doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
+      await runTransaction(db, async transaction => {
+        const ficha = await transaction.get(origenRef);
+        if (!ficha.exists()) throw new Error(`${pilot.nombre} ya no está en ${pilot.equipoNombre}.`);
+        if (ficha.data().pending_equipoId) throw new Error("Deshaz primero el pacto pendiente para recuperar su importe.");
+        transaction.set(doc(db, `splits/${pilot.splitId}/equipos`, "agente_libre"), { nombre: "Agentes libres" }, { merge: true });
+        transaction.set(doc(db, `splits/${pilot.splitId}/equipos/agente_libre/pilotos`, pilot.id), {
+          ...ficha.data(),
+          equipoId:                "agente_libre",
+          precio_compra:           0,
+          mantener_actual:         0,
+          clausula_actual:         0,
+          mantener_inicial_split:  0,
+          clausula_inicial_split:  0,
+          precio_carrera_anterior: 0,
+          historial_precios:       {},
+          tipo_fichaje:            "subasta",
+          congelado:               false,
+          congelado_en:            null,
+          pending_equipoId:        null,
+          pending_precio_compra:   null,
+          pending_tipo_fichaje:    null,
+          pending_fichas_previas:  null,
+        });
+        transaction.delete(origenRef);
+      });
+      setProcessLog([`${pilot.nombre} ya figura como agente libre en ${splitNombre}. Su ficha en ${pilot.equipoNombre} se ha retirado. Ningún presupuesto se ha movido.`]);
+      await loadData(pilot.splitId);
+    } catch (err: any) {
+      setProcessLog([`No se ha podido liberar a ${pilot.nombre}: ${err.message}`]);
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function deleteLegacy(pilot: PilotRow) {
@@ -550,118 +636,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     const idx = sorted.findIndex((s: any) => s.id === currentSplitId);
     if (idx < 0 || idx >= sorted.length - 1) return null;
     return sorted[idx + 1].id;
-  }
-
-  async function propagateToNextSplit(
-    pilot: PilotRow,
-    targetEquipoId: string,
-    pendingPrice: number,
-    tipo: TipoFichaje
-  ) {
-    const nextSplitId = getNextSplitId(pilot.splitId);
-    if (!nextSplitId) return;
-
-    const isFreeze = pendingPrice === -110;
-    // Los tres tipos acaban en la misma puja del día de mercado, así que el precio del
-    // siguiente split es lo que se pagó, sin descuentos: mantener no es una renovación
-    // privada, es ganar la puja sobre tu propio piloto.
-    const nextPrecioCompra = isFreeze ? pilot.precio_compra : pendingPrice;
-    // Un precio negativo divide en vez de multiplicar, conservando el signo (Excel T2/T3).
-    const nextMantener = isFreeze ? pilot.mantener_actual : mantenerInicialDe(nextPrecioCompra);
-    const nextClausula = isFreeze ? pilot.clausula_actual : clausulaInicialDe(nextPrecioCompra);
-
-    // Si el piloto estaba en otro equipo en el siguiente split, borrarlo de allí
-    const nextEquiposSnap = await getDocs(collection(db, `splits/${nextSplitId}/equipos`));
-    for (const eqDoc of nextEquiposSnap.docs) {
-      if (eqDoc.id === targetEquipoId) continue;
-      const pRef = doc(db, `splits/${nextSplitId}/equipos/${eqDoc.id}/pilotos`, pilot.id);
-      const pSnap = await getDoc(pRef);
-      if (pSnap.exists()) { await deleteDoc(pRef); break; }
-    }
-
-    // Escribir el piloto en el equipo destino del siguiente split
-    const nextRef = doc(db, `splits/${nextSplitId}/equipos/${targetEquipoId}/pilotos`, pilot.id);
-    const existingSnap = await getDoc(nextRef);
-    const base = existingSnap.exists()
-      ? existingSnap.data()
-      : {
-          pilotoId: pilot.id,
-          rating_piloto: pilot.rating_piloto,
-          rating_base: pilot.rating_piloto,
-          puntos_piloto: 0, victorias: 0, podios: 0,
-          poles: 0, dnfs: 0, carreras_limpias: 0,
-        };
-
-    await setDoc(nextRef, {
-      ...base,
-      equipoId:                targetEquipoId,
-      tipo_fichaje:            tipo,
-      precio_compra:           nextPrecioCompra,
-      mantener_actual:         nextMantener,
-      clausula_actual:         nextClausula,
-      mantener_inicial_split:  nextMantener,
-      clausula_inicial_split:  nextClausula,
-      precio_carrera_anterior: nextMantener,
-      historial_precios:       {},
-      congelado:               isFreeze,
-      congelado_en:            null,
-      pending_equipoId:        null,
-      pending_precio_compra:   null,
-      pending_tipo_fichaje:    null,
-    });
-  }
-
-  async function revertFromNextSplit(pilot: PilotRow, prevPendingEquipoId: string) {
-    const nextSplitId = getNextSplitId(pilot.splitId);
-    if (!nextSplitId) return;
-
-    const fichajedRef = doc(db, `splits/${nextSplitId}/equipos/${prevPendingEquipoId}/pilotos`, pilot.id);
-    const fichajedSnap = await getDoc(fichajedRef);
-    if (!fichajedSnap.exists()) return;
-
-    if (prevPendingEquipoId !== pilot.equipoId) {
-      // Fichaje cross-team: eliminar del nuevo equipo y restaurar en el original.
-      // El precio de compra vuelve a ser el del split de origen, así que mantener y
-      // cláusula se rederivan de él: arrastrar los valores de cierre dejaría al piloto
-      // con una curva que no cuadra con su precio.
-      await deleteDoc(fichajedRef);
-      await setDoc(doc(db, `splits/${nextSplitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id), {
-        pilotoId:                pilot.id,
-        equipoId:                pilot.equipoId,
-        rating_piloto:           pilot.rating_piloto,
-        rating_base:             pilot.rating_piloto,
-        tipo_fichaje:            pilot.tipo_fichaje ?? null,
-        puntos_piloto: 0, victorias: 0, podios: 0,
-        poles: 0, dnfs: 0, carreras_limpias: 0,
-        precio_compra:           pilot.precio_compra,
-        mantener_actual:         mantenerInicialDe(pilot.precio_compra),
-        clausula_actual:         clausulaInicialDe(pilot.precio_compra),
-        mantener_inicial_split:  mantenerInicialDe(pilot.precio_compra),
-        clausula_inicial_split:  clausulaInicialDe(pilot.precio_compra),
-        precio_carrera_anterior: mantenerInicialDe(pilot.precio_compra),
-        historial_precios:       {},
-        congelado:               false,
-        congelado_en:            null,
-        pending_equipoId:        null,
-        pending_precio_compra:   null,
-        pending_tipo_fichaje:    null,
-      });
-    } else {
-      // Renovación same-team: revertir al precio del split actual, con su curva rederivada.
-      await updateDoc(fichajedRef, {
-        precio_compra:           pilot.precio_compra,
-        mantener_actual:         mantenerInicialDe(pilot.precio_compra),
-        clausula_actual:         clausulaInicialDe(pilot.precio_compra),
-        mantener_inicial_split:  mantenerInicialDe(pilot.precio_compra),
-        clausula_inicial_split:  clausulaInicialDe(pilot.precio_compra),
-        precio_carrera_anterior: mantenerInicialDe(pilot.precio_compra),
-        historial_precios:       {},
-        congelado:               false,
-        pending_equipoId:        null,
-        pending_precio_compra:   null,
-        pending_tipo_fichaje:    null,
-      });
-    }
   }
 
   // ─── ALTA MANUAL EN EL SPLIT ─────────────────────────────────────────────────
@@ -743,6 +717,11 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   // ─── SISTEMA DE FICHAJES ─────────────────────────────────────────────────────
 
   function handleFichar(pilot: PilotRow) {
+    const transfer = transferViews.get(pilot.id);
+    if (transfer?.origen === "siguiente" && nextSplit) {
+      setSelectedSplitId(nextSplit.id);
+      return;
+    }
     if (pilot.congelado) {
       deshacerFichaje(pilot);
     } else {
@@ -767,75 +746,49 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   }
 
   async function deshacerFichaje(pilot: PilotRow) {
-    const pilotRef = doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
-    const revertedTeamId = await runTransaction(db, async transaction => {
-      const currentPilot = await transaction.get(pilotRef);
-      if (!currentPilot.exists()) throw new Error("El piloto ya no existe en este equipo.");
-      const data = currentPilot.data();
-      const pendingTeamId = data.pending_equipoId as string | undefined;
-      const pendingPrice = data.pending_precio_compra as number | undefined;
-      const teamRef = pendingTeamId && pendingTeamId !== "agente_libre"
-        ? doc(db, `splits/${pilot.splitId}/equipos`, pendingTeamId)
-        : null;
-      if (teamRef) await transaction.get(teamRef);
-      if (teamRef && pendingPrice != null) {
-        transaction.update(teamRef, { presupuesto: increment(-pendingBudgetDelta(pendingPrice)) });
-      }
-      transaction.update(pilotRef, {
-        congelado: false, congelado_en: null,
-        pending_equipoId: null, pending_precio_compra: null, pending_tipo_fichaje: null,
-      });
-      return pendingTeamId ?? null;
-    });
-    if (revertedTeamId) await revertFromNextSplit(pilot, revertedTeamId);
-    await loadData(pilot.splitId);
+    const nextSplitId = getNextSplitId(pilot.splitId);
+    const nextSplitNombre = splits.find((s: any) => s.id === nextSplitId)?.nombre ?? "el siguiente split";
+    if (!confirm(
+      `¿Deshacer el fichaje de ${pilot.nombre}?\n\n` +
+      `Se anula el pacto de este split y se devuelve el importe al presupuesto del equipo que fichaba.` +
+      (nextSplitId
+        ? `\nEn ${nextSplitNombre} vuelve al estado que tenía antes del pacto. Si el pacto es antiguo y no quedó guardado ese estado, se le retirará de ${nextSplitNombre} y se te avisará.`
+        : "") +
+      `\n\n¿Continuar?`
+    )) return;
+
+    setDeletingId(pilot.id);
+    try {
+      const resultado = await anularPacto(pilot.splitId, pilot.equipoId, pilot.id, nextSplitId);
+      setProcessLog([`Pacto de ${pilot.nombre} anulado y movimiento económico compensado.`,
+        ...(resultado === "sin-foto" ? ["El pacto antiguo no guardó la ficha anterior: revisa la plantilla del split de destino."] : [])]);
+      await loadData(pilot.splitId);
+    } catch (error: any) {
+      setProcessLog([`No se ha anulado el pacto: ${error.message}`]);
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function confirmFichaje() {
     if (!fichajeModal || !fichajeEquipoId) return;
-    const pendingPrice = parseFloat(pendingPrecioCompra || "0");
-    if (Number.isNaN(pendingPrice)) return;
+    const pendingPrice = Number(pendingPrecioCompra.replace(",", "."));
+    if (!pendingPrecioCompra.trim() || !Number.isFinite(pendingPrice)) return;
 
     setConfirmingFichaje(true);
     try {
       const pilot = fichajeModal;
       const lastDone = [...circuits].filter(c => c.completado).at(-1);
-      const splitId = pilot.splitId;
-      const newDelta = pendingBudgetDelta(pendingPrice);
-      const pilotRef = doc(db, `splits/${splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
-      await runTransaction(db, async transaction => {
-        const currentPilot = await transaction.get(pilotRef);
-        if (!currentPilot.exists()) throw new Error("El piloto ya no existe en este equipo.");
-        const currentData = currentPilot.data();
-        const existingPendingTeam = currentData.pending_equipoId as string | undefined;
-        const existingPendingPrice = currentData.pending_precio_compra as number | undefined;
-        const teamIds = [...new Set([existingPendingTeam, fichajeEquipoId].filter((id): id is string => !!id && id !== "agente_libre"))];
-        const teamRefs = teamIds.map(teamId => doc(db, `splits/${splitId}/equipos`, teamId));
-        await Promise.all(teamRefs.map(teamRef => transaction.get(teamRef)));
-
-        const deltas = new Map<string, number>();
-        if (existingPendingTeam && existingPendingPrice != null && existingPendingTeam !== "agente_libre") {
-          deltas.set(existingPendingTeam, -pendingBudgetDelta(existingPendingPrice));
-        }
-        if (fichajeEquipoId !== "agente_libre") {
-          deltas.set(fichajeEquipoId, (deltas.get(fichajeEquipoId) ?? 0) + newDelta);
-        }
-        deltas.forEach((delta, teamId) => {
-          if (delta !== 0) transaction.update(doc(db, `splits/${splitId}/equipos`, teamId), { presupuesto: increment(delta) });
-        });
-        transaction.update(pilotRef, {
-          congelado: true,
-          congelado_en: lastDone?.id ?? null,
-          pending_equipoId: fichajeEquipoId,
-          pending_precio_compra: pendingPrice,
-          pending_tipo_fichaje: fichajeTipo,
-        });
+      await guardarPacto({
+        splitId: pilot.splitId, nextSplitId: getNextSplitId(pilot.splitId), equipoOrigenId: pilot.equipoId,
+        pilotoId: pilot.id, equipoDestinoId: fichajeEquipoId, precio: pendingPrice,
+        tipo: fichajeTipo, circuitoId: lastDone?.id ?? null,
       });
-
-      await propagateToNextSplit(pilot, fichajeEquipoId, pendingPrice, fichajeTipo);
 
       setFichajeModal(null);
       setPendingPrecioCompra("");
+    } catch (error: any) {
+      setProcessLog([`No se ha guardado el pacto: ${error.message}`]);
     } finally {
       setConfirmingFichaje(false);
     }
@@ -845,9 +798,15 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   // ─── DERIVED STATE ───────────────────────────────────────────────────────────
 
   // Pilotos del catálogo global que aún no tienen ficha en este split.
-  const altaCandidates = globalPilots.filter(gp => !pilots.some(p => p.id === gp.id));
+  const altaCandidates = globalPilots.filter(gp => !pilots.some(p => p.id === gp.id && p.equipoId !== "agente_libre"));
 
   const visiblePilots = showLegacy ? pilots : pilots.filter(p => !p.isLegacy);
+  const selectedIndex = activeSplits.findIndex(split => split.id === selectedSplitId);
+  const nextSplit = selectedIndex >= 0 ? activeSplits[selectedIndex + 1] : undefined;
+  const transferViews = new Map<string, TransferView | null>(pilots.map(pilot => [
+    pilot.id,
+    resolveTransferView({ ...pilot, pilotoId: pilot.id }, nextSplit?.roster ?? []),
+  ]));
   const legacyCount = pilots.filter(p => p.isLegacy).length;
   const grouped = visiblePilots.reduce<Record<string, PilotRow[]>>((acc, p) => {
     (acc[p.equipoNombre] = acc[p.equipoNombre] || []).push(p);
@@ -858,6 +817,8 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   return (
     <div className="space-y-10">
+      {selectedSplitId && <EconomyRulesPanel key={selectedSplitId} splitId={selectedSplitId} />}
+      {selectedSplitId && <SplitRestorePanel key={`restore-${selectedSplitId}`} splitId={selectedSplitId} splits={splits} onRestored={() => loadData(selectedSplitId)} />}
 
       {/* ── CONTROLES ── */}
       <div className="flex items-center justify-between flex-wrap gap-4 border-b border-white/[0.06] pb-6">
@@ -954,7 +915,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
             <button onClick={previsualizarAperturas} disabled={derivando}
               className="ml-auto flex items-center gap-1.5 border border-white/10 px-2.5 py-1 text-[9px] font-mono uppercase tracking-widest text-white/40 hover:text-emerald-300 hover:border-emerald-300/30 transition-colors disabled:opacity-40">
               {derivando ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-              Derivar apertura desde {splitAnteriorId}
+              Conciliar mercado desde {splitAnteriorId}
             </button>
           )}
         </div>
@@ -968,7 +929,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           <div className="mb-4 border border-emerald-300/25 bg-emerald-300/[0.03]">
             <div className="px-4 py-3 border-b border-white/[0.06]">
               <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-300/70">
-                Apertura derivada de {splitAnteriorId}
+                Conciliación de mercado desde {splitAnteriorId}
               </p>
               <p className="mt-1 text-[10px] font-mono text-white/35">
                 Cierre del bloque anterior menos lo que costó el mercado, tomado del precio de compra de cada ficha.
@@ -981,7 +942,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                     <th className="py-2 px-4 text-left font-normal">Escudería</th>
                     <th className="py-2 px-4 text-right font-normal">Cierre {splitAnteriorId}</th>
                     <th className="py-2 px-4 text-right font-normal">Mercado</th>
-                    <th className="py-2 px-4 text-right font-normal">Apertura</th>
+                    <th className="py-2 px-4 text-right font-normal">Saldo derivado</th>
                     <th className="py-2 px-4 text-right font-normal">Actual</th>
                     <th className="py-2 px-4 text-right font-normal">Desvío</th>
                   </tr>
@@ -1026,7 +987,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
               <button onClick={confirmarAperturas} disabled={derivando}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest bg-emerald-500 hover:bg-emerald-400 text-black transition-colors disabled:opacity-40">
                 {derivando && <Loader2 className="w-3 h-3 animate-spin" />}
-                Aplicar aperturas
+                Conciliar mercado
               </button>
             </div>
           </div>
@@ -1037,7 +998,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
               <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[0.25em] text-white/25 font-normal">
                 <th className="py-3 px-4 text-left font-normal">Escudería</th>
                 <th className="py-3 px-4 text-right font-normal">Inicial</th>
-                <th className="py-3 px-4 text-right font-normal">Fichajes</th>
+                <th className="py-3 px-4 text-right font-normal">Fichajes / ajustes</th>
                 <th className="py-3 px-4 text-right font-normal text-emerald-500/50">+ Rival.</th>
                 <th className="py-3 px-4 text-right font-normal text-emerald-500/50">+ Premios</th>
                 <th className="py-3 px-4 text-right font-normal">Total disp.</th>
@@ -1088,6 +1049,27 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                     </td>
                     <td className={`py-3 px-4 text-right font-black font-mono text-sm tabular-nums ${act < 0 ? "text-[#e10600]" : "text-white"}`}>
                       {r1(act)}M
+                      <button className="block ml-auto text-[9px] text-sky-300" disabled={isSavingB} onClick={async () => {
+                        const raw = prompt("Ajuste del saldo (M): positivo para devolver/ingresar, negativo para descontar.", "0");
+                        if (raw === null || !raw.trim()) return;
+                        const delta = Number(raw.replace(",", "."));
+                        if (!Number.isFinite(delta) || delta === 0) return;
+                        const motivo = prompt("Motivo o referencia del movimiento que corriges:");
+                        if (!motivo?.trim()) return;
+                        setSavingBudget(t.id);
+                        try {
+                          await runTransaction(db, async tx => {
+                            const ref = doc(db, `splits/${selectedSplitId}/equipos`, t.id);
+                            const snap = await tx.get(ref);
+                            if (!snap.exists()) throw new Error("La escudería ya no existe.");
+                            tx.update(ref, { presupuesto: increment(delta) });
+                            tx.set(doc(collection(db, "transacciones")), { splitId: selectedSplitId, equipoId: t.id, equipo: t.nombre,
+                              tipo: "ajuste", cantidad: Math.abs(delta), esIngreso: delta > 0, descripcion: motivo.trim(), fecha: serverTimestamp() });
+                          });
+                          await loadData(selectedSplitId);
+                        } catch (error: any) { setProcessLog([error.message]); }
+                        finally { setSavingBudget(null); }
+                      }}>Ajustar saldo</button>
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-white/50 text-xs">{t.puntos_constructores}</td>
                   </tr>
@@ -1130,7 +1112,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
                 {viewMode === "precios" && (
                   <>
-                    <th className="py-3 px-3 text-right font-normal min-w-[80px]">Próx. split</th>
+                    <th className="py-3 px-3 text-right font-normal min-w-[80px]">{nextSplit?.nombre || "Próx. split"}</th>
                     {circuits.map(c => (
                       <th key={c.id} className="py-3 px-3 text-right font-normal min-w-[80px] whitespace-nowrap">
                         <span className={c.economia_procesada ? "text-white/70" : c.completado ? "text-white/40" : "text-white/20"}>
@@ -1192,16 +1174,21 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                     const isSaving = savingId === pilot.id;
                     const isDeleting = deletingId === pilot.id;
                     const isFichado = pilot.congelado;
-                    const destTeamId = pilot.pending_equipoId;
-                    const destTeam = destTeamId ? teams.find(t => t.id === destTeamId) : null;
+                    const transfer = transferViews.get(pilot.id);
+                    const estadoOperacion = transfer?.estado ?? (isFichado ? "pactado" : null);
+                    // Pacto que sigue escrito aquí aunque el traspaso ya esté registrado en el
+                    // split siguiente: continúa reservando presupuesto en este split.
+                    const pactoSinLimpiar = transfer?.origen === "actual" && transfer.estado === "registrado";
+                    const destTeamId = transfer?.equipoId;
+                    const destTeam = destTeamId ? (nextSplit?.equipos?.find((team: any) => team.id === destTeamId) ?? teams.find(t => t.id === destTeamId)) : null;
                     const isRenovacion = destTeamId === pilot.equipoId;
-                    const tipoActivo = pilot.pending_tipo_fichaje ?? pilot.tipo_fichaje;
+                    const tipoActivo = transfer?.tipo;
 
                     return (
                       <tr key={pilot.id}
                         className={`border-b border-white/[0.04] hover:bg-white/[0.015] transition-colors ${
                           pilot.isLegacy ? "opacity-35" : ""
-                        } ${isFichado ? "bg-amber-500/[0.025]" : ""}`}>
+                        } ${estadoOperacion ? "bg-amber-500/[0.025]" : ""}`}>
 
                         {/* ── Nombre + badge de fichaje ── */}
                         <td className="py-2.5 px-3 sticky left-0 bg-inherit max-w-[160px]">
@@ -1209,7 +1196,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                             <div className="min-w-0">
                               <span className="font-bold text-white/90 truncate text-[11px] block">{pilot.nombre}</span>
                               {pilot.isLegacy && <span className="text-[8px] text-[#e10600]/40">legacy</span>}
-                              {isFichado && (
+                               {transfer && (
                                 <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                                   {isRenovacion ? (
                                     <span className="text-[8px] text-sky-300/70 font-mono">↺ Renovado</span>
@@ -1221,17 +1208,28 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                                       </span>
                                     </>
                                   )}
-                                  {tipoActivo && (
+                                   {tipoActivo && (
                                     <span className={`text-[7px] px-1 py-px font-bold uppercase tracking-wide ${TIPO_COLORS[tipoActivo]}`}>
                                       {TIPO_LABEL[tipoActivo]}
                                     </span>
-                                  )}
+                                   )}
+                                   <span className={`block w-full text-[9px] ${transfer.estado === "pendiente" ? "text-amber-300" : "text-emerald-300"}`}>
+                                     {transfer.estado === "registrado" ? `Registrado en ${nextSplit?.nombre || "el siguiente split"}` : transfer.estado === "pendiente" ? `Pendiente en ${nextSplit?.nombre}` : "Pactado desde este split"}
+                                   </span>
+                                   {pactoSinLimpiar && (
+                                     <span className="block w-full text-[9px] text-amber-300"
+                                       title="El traspaso ya está registrado en el split siguiente, pero esta ficha conserva el pacto: el presupuesto disponible del equipo de destino en este split se sigue calculando con ese importe descontado. Ojo, el aspa de esta fila no limpia el resto: cancela el traspaso y devuelve al piloto a su equipo anterior en el split siguiente.">
+                                       Pacto sin limpiar: aún reserva presupuesto aquí
+                                     </span>
+                                   )}
                                 </div>
                               )}
                             </div>
 
                             {/* Botón Fichar / Deshacer */}
-                            {isFichado ? (
+                             {transfer?.origen === "siguiente" ? (
+                               <button type="button" onClick={() => nextSplit && setSelectedSplitId(nextSplit.id)} title={`Consultar el fichaje guardado en ${nextSplit?.nombre}`} className="shrink-0 min-h-8 px-1 text-[10px] font-bold text-sky-300">Ver →</button>
+                             ) : isFichado ? (
                               <button
                                 onClick={() => handleFichar(pilot)}
                                 title="Deshacer fichaje"
@@ -1244,10 +1242,57 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                                 title="Fichar piloto"
                                 className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 border border-white/[0.08] text-white/20 hover:text-amber-300 hover:border-amber-300/30 transition-colors text-[7px] uppercase tracking-wide font-bold">
                                 <ArrowRightLeft className="w-2.5 h-2.5" />
-                                Fichar
+                                Pactar próximo split
                               </button>
                             )}
                           </div>
+                          {pilot.equipoId === "agente_libre" && <button type="button" className="block text-[9px] text-emerald-300 mt-1" onClick={() => {
+                            openAltaModal(); setAltaPilotoId(pilot.id);
+                          }}>Fichar en este split</button>}
+                          {pilot.equipoId !== "agente_libre" && (
+                            <button type="button" disabled={isDeleting} onClick={() => liberarPiloto(pilot)}
+                              title={`Sacar a ${pilot.nombre} de ${pilot.equipoNombre} y dejarlo como agente libre en este split`}
+                              className="mt-0.5 text-[8px] font-mono uppercase tracking-wide text-white/20 hover:text-[#e10600] disabled:opacity-40 transition-colors">
+                              {isDeleting ? "liberando…" : "liberar"}
+                            </button>
+                          )}
+                          <button type="button" disabled={isDeleting} className="block text-[9px] text-sky-300 mt-1"
+                            onClick={async () => {
+                              if (!confirm(`¿Deshacer el alta de ${pilot.nombre} y compensar su importe?`)) return;
+                              setDeletingId(pilot.id);
+                              try {
+                                await deshacerAlta(pilot.splitId, pilot.equipoId, pilot.id);
+                                await loadData(pilot.splitId);
+                                setProcessLog(["Fichaje anulado: saldo compensado y ficha anterior restaurada."]);
+                              } catch (error: any) { setProcessLog([error.message]); }
+                              finally { setDeletingId(null); }
+                            }}>Deshacer alta</button>
+                          <button type="button" className="block text-[9px] text-sky-300 mt-1"
+                            onClick={async () => {
+                              const raw = prompt("Nueva cláusula (M). Deja el campo vacío para retirar el ajuste manual y recuperar la cláusula automática.", String(pilot.clausula_actual));
+                              if (raw === null) return;
+                              const importe = Number(raw.replace(",", "."));
+                              if (!Number.isFinite(importe)) return;
+                              const retirar = !raw.trim();
+                              const motivo = prompt("Motivo del ajuste de cláusula:");
+                              if (!motivo?.trim()) return;
+                              try {
+                                const ref = doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
+                                await runTransaction(db, async tx => {
+                                  const snap = await tx.get(ref);
+                                  if (!snap.exists()) throw new Error("La ficha ya no existe.");
+                                  const anterior = snap.data();
+                                  const nuevo = retirar ? (anterior.clausula_sin_ajuste ?? anterior.clausula_actual ?? 0) : importe;
+                                  tx.update(ref, { clausula_actual: nuevo,
+                                    clausula_manual: retirar ? deleteField() : importe,
+                                    clausula_sin_ajuste: retirar ? deleteField() : (anterior.clausula_sin_ajuste ?? anterior.clausula_actual ?? 0) });
+                                  tx.set(doc(collection(db, "transacciones")), { splitId: pilot.splitId, equipoId: pilot.equipoId,
+                                    equipo: pilot.equipoNombre, piloto: pilot.nombre, tipo: "ajuste", cantidad: 0, esIngreso: true,
+                                    descripcion: `Cláusula: ${anterior.clausula_actual ?? 0}M → ${nuevo}M${retirar ? " (ajuste retirado)" : ""}. ${motivo}`, fecha: serverTimestamp() });
+                                });
+                                await loadData(pilot.splitId);
+                              } catch (error: any) { setProcessLog([error.message]); }
+                            }}>Ajustar cláusula</button>
                         </td>
 
                         {/* Precio editable */}
@@ -1255,7 +1300,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                           {isFichado ? (
                             <div className="space-y-0.5">
                               <span className="text-white/40 block">{r1(pilot.precio_compra)}M</span>
-                              <span className="text-amber-300/50 text-[8px] font-mono block">pactado</span>
+                              <span className="text-amber-300/50 text-[8px] font-mono block">{OPERACION_LABEL[estadoOperacion!]}</span>
                             </div>
                           ) : editVal !== undefined ? (
                             <div className="flex items-center justify-end gap-1">
@@ -1271,11 +1316,14 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                                 className="text-white/25 hover:text-white/60 px-0.5">✕</button>
                             </div>
                           ) : (
-                            <span className="cursor-pointer text-white/40 hover:text-white transition-colors group"
-                              onClick={() => setEditing(prev => ({ ...prev, [pilot.id]: String(pilot.precio_compra) }))}>
-                              {r1(pilot.precio_compra)}M
-                              <span className="ml-1 text-white/20 group-hover:text-white/50 text-[9px]">✎</span>
-                            </span>
+                            <div className="space-y-0.5">
+                              <span className="cursor-pointer text-white/40 hover:text-white transition-colors group"
+                                onClick={() => setEditing(prev => ({ ...prev, [pilot.id]: String(pilot.precio_compra) }))}>
+                                {r1(pilot.precio_compra)}M
+                                <span className="ml-1 text-white/20 group-hover:text-white/50 text-[9px]">✎</span>
+                              </span>
+                              {estadoOperacion && <span className="text-amber-300/50 text-[8px] font-mono block">{OPERACION_LABEL[estadoOperacion]}</span>}
+                            </div>
                           )}
                         </td>
 
@@ -1284,11 +1332,10 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                           <>
                             {/* Próx. split */}
                             <td className="py-2.5 px-3 text-right">
-                              {pilot.pending_precio_compra != null ? (() => {
-                                const pp = pilot.pending_precio_compra;
-                                const ppAbs = Math.abs(pp);
-                                const nextM  = pp < 0 ? Math.round(ppAbs / 3 * 10) / 10 : Math.round(pp * 3 * 10) / 10;
-                                const nextCl = pp < 0 ? Math.round(ppAbs / 2 * 10) / 10 : Math.round(pp * 2 * 10) / 10;
+                              {transfer ? (() => {
+                                const pp = transfer.precio;
+                                const nextM = mantenerInicialDe(pp);
+                                const nextCl = clausulaInicialDe(pp);
                                 return (
                                   <div className="space-y-0.5">
                                     <span className={`block tabular-nums font-bold text-[10px] ${cellBg(nextM)}`}>{r1(nextM)}</span>
@@ -1296,7 +1343,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                                     <span className="block text-amber-300/50 text-[8px] font-mono">({r1(pp)}M)</span>
                                   </div>
                                 );
-                              })() : <span className="text-white/30">—</span>}
+                              })() : <span className="text-white/40 text-[9px]">Sin registro</span>}
                             </td>
 
                             {/* Historial por circuito */}
@@ -1329,7 +1376,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
                             {/* Mant./Claus. actual */}
                             <td className="py-2.5 px-3 text-right border-l border-white/[0.04]">
-                              {isFichado ? (
+                              {estadoOperacion ? (
                                 <div>
                                   <span className={`block tabular-nums font-black text-[11px] ${cellBg(pilot.mantener_actual)}`}>
                                     {r1(pilot.mantener_actual)}
@@ -1337,7 +1384,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                                   <span className={`block tabular-nums text-[9px] mt-0.5 ${cellBg(pilot.clausula_actual)}`}>
                                     {r1(pilot.clausula_actual)}
                                   </span>
-                                  <span className="text-[7px] text-amber-400/50 font-mono">ptdo</span>
+                                  <span className="text-[7px] text-amber-400/50 font-mono">{OPERACION_LABEL[estadoOperacion]}</span>
                                 </div>
                               ) : (
                                 <>
@@ -1569,7 +1616,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                   <>
                     <span>Cláusula mínima:</span>
                     <span className="text-orange-300/80 font-black">{fichajeModal.clausula_actual}M</span>
-                    <span className="ml-auto text-white/15">el dinero NO va al otro jeque</span>
+                    <span className="ml-auto text-white/15">cobro al vendedor según las reglas del split</span>
                   </>
                 )}
                 {fichajeTipo === "mantener" && (

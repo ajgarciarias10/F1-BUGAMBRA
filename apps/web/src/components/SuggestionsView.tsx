@@ -16,6 +16,7 @@ import {
   MessageCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { useConfirm } from "./Feedback";
 
 interface SuggestionsViewProps {
   isAdmin?: boolean;
@@ -74,6 +75,7 @@ const STATUS_CONFIG = {
 
 export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
   const { user, userData } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState({ text: "", type: "" });
@@ -194,7 +196,13 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
   };
 
   const handleDeleteSuggestion = async (sugId: string) => {
-    if (!window.confirm("¿Estás seguro de que quieres eliminar esta sugerencia? Esta acción no se puede deshacer.")) return;
+    const ok = await confirm({
+      title: "Eliminar sugerencia",
+      body: "La sugerencia y sus votos se borran para siempre. No se puede deshacer.",
+      confirmLabel: "Eliminar",
+      tone: "peligro",
+    });
+    if (!ok) return;
     try {
       await deleteDoc(doc(db, "mejoras", sugId));
       showMsg("Sugerencia eliminada permanentemente.", "success");
@@ -615,6 +623,7 @@ export function SuggestionsView({ isAdmin = false }: SuggestionsViewProps) {
         </div>
       </div>
 
+      {confirmDialog}
     </div>
   );
 }

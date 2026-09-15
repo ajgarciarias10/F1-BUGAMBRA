@@ -4,8 +4,9 @@ import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { Image, MessageCircle, Send, Video } from "lucide-react";
 import { compressAndConvertImage } from "../utils/imageHelper";
+import { StatusBanner } from "./Feedback";
 
-interface PaddockPost { id: string; author: string; authorPhoto?: string; text: string; mediaUrl?: string; mediaType?: "image" | "video"; createdAt: string; }
+interface PaddockPost { id: string; author: string; authorPhoto?: string; text: string; mediaUrl?: string; mediaType?: "image" | "video"; createdAt: string; kind?: string; splitName?: string; }
 
 export function PaddockForum({ readOnly = false }: { readOnly?: boolean }) {
   const { user, userData } = useAuth();
@@ -14,14 +15,20 @@ export function PaddockForum({ readOnly = false }: { readOnly?: boolean }) {
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
   const [publishing, setPublishing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [published, setPublished] = useState(false);
 
   useEffect(() => onSnapshot(query(collection(db, "paddock_posts"), orderBy("createdAt", "desc")), snapshot => {
     setPosts(snapshot.docs.map(item => ({ id: item.id, ...item.data() })) as PaddockPost[]);
-  }), []);
+    setLoading(false);
+  }, () => { setLoading(false); setError("No se pudo cargar el paddock. Comprueba tu conexión y vuelve a entrar."); }), []);
 
   const publish = async () => {
     if (!user || !userData || (!text.trim() && !mediaUrl)) return;
     setPublishing(true);
+    setError("");
+    setPublished(false);
     try {
       await addDoc(collection(db, "paddock_posts"), {
         author: userData.nombre || "Piloto",
@@ -33,13 +40,18 @@ export function PaddockForum({ readOnly = false }: { readOnly?: boolean }) {
         authorId: user.uid,
       });
       setText(""); setMediaUrl("");
+      setPublished(true);
+    } catch {
+      setError("No se ha podido publicar. Tu mensaje sigue aquí: inténtalo de nuevo.");
     } finally { setPublishing(false); }
   };
 
   const attachImage = async (file: File) => {
     if (!file.type.startsWith("image/")) return;
-    setMediaUrl(await compressAndConvertImage(file, 900, 900, 0.8));
-    setMediaType("image");
+    try {
+      setMediaUrl(await compressAndConvertImage(file, 900, 900, 0.8));
+      setMediaType("image");
+    } catch { setError("No se pudo adjuntar la foto. Prueba con otra imagen."); }
   };
 
   return <section className="space-y-5">
@@ -48,8 +60,13 @@ export function PaddockForum({ readOnly = false }: { readOnly?: boolean }) {
       <h2 className="mt-2 text-xl font-black uppercase md:text-2xl">El muro de la parrilla</h2>
       <p className="mt-1 text-[13px] leading-relaxed text-black/55 dark:text-white/50 md:text-sm">Publica tus declaraciones, reacciones y rumores. El paddock te está leyendo.</p>
     </header>
+    {error && <StatusBanner message={error} tone="error" onDismiss={() => setError("")} />}
+    {published && <StatusBanner message="¡Ya estás en la conversación! Tu mensaje está publicado." tone="exito" onDismiss={() => setPublished(false)} />}
     {!readOnly && <div className="m-card border border-black/10 bg-white/70 p-4 dark:border-white/10 dark:bg-[#111217]">
-      <textarea value={text} onChange={event => setText(event.target.value)} placeholder="¿Qué se comenta en tu box?" maxLength={500} className="w-full min-h-28 resize-y rounded-xl border border-black/15 bg-white/70 p-3 text-base text-black outline-none focus:border-[#e10600] dark:border-white/10 dark:bg-black/30 dark:text-white md:rounded-none md:text-sm" />
+      <label htmlFor="paddock-message" className="mb-2 block text-sm font-bold">Tu voz en el paddock</label>
+      <p className="mb-3 text-sm text-black/55 dark:text-white/60">No hace falta una crónica: una frase basta para empezar.</p>
+      <div className="mb-3 flex flex-wrap gap-2">{["¡Hola, paddock! Soy ", "Nuestro objetivo para este split es ", "Mi favorito para la próxima carrera es "].map(prompt => <button key={prompt} type="button" disabled={!!text || publishing} onClick={() => { setText(prompt); document.getElementById("paddock-message")?.focus(); }} className="min-h-11 rounded-full border border-black/15 px-3 text-xs font-bold dark:border-white/20 disabled:opacity-40">{prompt.startsWith("¡Hola") ? "👋 Presentarme" : prompt.startsWith("Nuestro") ? "🏁 Objetivo del equipo" : "🏆 Mi pronóstico"}</button>)}</div>
+      <textarea id="paddock-message" value={text} onChange={event => setText(event.target.value)} placeholder="¿Qué se comenta en tu box?" maxLength={500} className="w-full min-h-28 resize-y rounded-xl border border-black/15 bg-white/70 p-3 text-base text-black outline-none focus:border-[#e10600] dark:border-white/10 dark:bg-black/30 dark:text-white md:rounded-none md:text-sm" />
       <div className="mt-3 grid gap-2 md:flex md:flex-wrap md:items-center">
         <label className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-[13px] font-bold text-black/70 hover:text-black dark:text-white/70 dark:hover:text-white md:min-h-0 md:justify-start md:rounded-none md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-wider"><Image className="w-4 h-4" /> Foto<input type="file" accept="image/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) attachImage(file); }} /></label>
         <input value={mediaType === "video" ? mediaUrl : ""} onChange={event => { setMediaUrl(event.target.value); setMediaType("video"); }} placeholder="URL de vídeo" className="min-h-12 w-full flex-1 rounded-xl border border-black/15 bg-white/70 px-3 text-black outline-none focus:border-[#e10600] dark:border-white/10 dark:bg-black/30 dark:text-white md:min-h-0 md:w-auto md:min-w-48 md:rounded-none md:py-2 md:text-xs" />
@@ -58,7 +75,10 @@ export function PaddockForum({ readOnly = false }: { readOnly?: boolean }) {
       </div>
       {mediaUrl && mediaType === "image" && <img src={mediaUrl} alt="Vista previa" className="mt-3 max-h-72 max-w-full object-contain border border-white/10" />}
     </div>}
+    {loading && <p role="status" className="py-6 text-center text-sm text-black/55 dark:text-white/60">Cargando la conversación…</p>}
+    {!loading && !error && posts.length === 0 && <p className="rounded-xl border border-dashed border-black/15 p-6 text-center text-sm dark:border-white/20">La conversación empieza contigo. {readOnly ? "Entra con tu cuenta para saludar a la parrilla." : "Preséntate o comparte tu pronóstico para la próxima carrera."}</p>}
     <div className="space-y-3">{posts.map(post => <article key={post.id} className="m-card border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.02]">
+      {post.kind === "team_welcome" && <p className="mb-3 text-sm font-bold text-emerald-600 dark:text-emerald-300">🏁 Plantilla completa · {post.splitName}</p>}
       <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full overflow-hidden bg-black/10 border border-black/10 dark:bg-white/10 dark:border-white/10">{post.authorPhoto ? <img src={post.authorPhoto} alt="" className="w-full h-full object-cover" /> : null}</div><div><p className="font-black uppercase text-sm">{post.author}</p><time className="text-[12px] text-black/45 dark:text-white/40 md:font-mono md:text-[9px]">{new Date(post.createdAt).toLocaleString("es-ES")}</time></div></div>
       {post.text && <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed text-black/80 dark:text-white/80 md:text-sm">{post.text}</p>}
       {post.mediaUrl && (post.mediaType === "video" ? <a href={post.mediaUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-[#e10600] md:min-h-0 md:text-xs"><Video className="w-4 h-4" /> Ver vídeo</a> : <img src={post.mediaUrl} alt="Publicación del paddock" loading="lazy" className="mt-3 max-h-96 max-w-full rounded-xl object-contain md:rounded-none" />)}

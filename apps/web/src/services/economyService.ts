@@ -4,6 +4,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { TipoTransaccion } from "../types";
+import { economyRules } from "../utils/economyRules";
 
 // ─── CONSTANTES ECONÓMICAS ────────────────────────────────────────────────────
 
@@ -22,11 +23,6 @@ export const M_PUNTOS_FACTOR    = 0.1;
 export const M_SOLO_POR_CARRERA = 1.5;
 export const M_RIVALIDAD_CLASIF = 1;
 export const M_RIVALIDAD_CARRERA = 2;
-
-// El dinero de una cláusula se retira del sistema: la escudería que pierde al piloto no
-// cobra nada. Confirmado contra los saldos de cierre del Split 2, donde Alfa Romero y Roses
-// cuadran al decimal solo sin ese abono. En true se le pagaría al vendedor.
-export const CLAUSULA_LA_COBRA_EL_VENDEDOR: boolean = false;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -113,6 +109,7 @@ export function curvaPreciosBloque(
 
 type TransactionLog = {
   equipo: string;
+  equipoId?: string;
   tipo: TipoTransaccion;
   piloto?: string;
   cantidad: number;
@@ -162,6 +159,7 @@ export async function ficharPiloto(params: {
   pilotName: string;
   tipo: "fichaje" | "clausula" | "subasta";
   precio: number;
+  adjudicacion?: { sala: Record<string, any>; forzar: boolean };
 }): Promise<{ success: boolean; message: string }> {
   const { splitId, teamId, teamName, pilotoId, pilotName, tipo, precio } = params;
 
@@ -173,10 +171,35 @@ export async function ficharPiloto(params: {
     const nuevaMantener = mantenerInicialDe(precio);
     const nuevaClausula = clausulaInicialDe(precio);
 
+    if (!Number.isFinite(precio) || teamId === "agente_libre") throw new Error("Equipo o importe no válido.");
     const teamRef = doc(db, `splits/${splitId}/equipos`, teamId);
-
-    // Buscar doc actual del piloto (puede estar en otro equipo)
-    const current = await findPilotEntry(splitId, pilotoId);
+    const teams = await getDocs(collection(db, `splits/${splitId}/equipos`));
+    const locationRefs = [...new Set([...teams.docs.map(d => d.id), "agente_libre", teamId])]
+      .map(id => doc(db, `splits/${splitId}/equipos/${id}/pilotos`, pilotoId));
+    const operationRef = doc(collection(db, `splits/${splitId}/transfers`));
+    await runTransaction(db, async transaction => {
+    const [team, locations, split, room] = await Promise.all([
+      transaction.get(teamRef), Promise.all(locationRefs.map(ref => transaction.get(ref))),
+      transaction.get(doc(db, "splits", splitId)),
+      params.adjudicacion ? transaction.get(doc(db, `splits/${splitId}/subasta`, "sala")) : Promise.resolve(null),
+    ]);
+    if (!team.exists()) throw new Error("La escudería no existe.");
+    if (precio > 0 && Number(team.data().presupuesto ?? 0) < precio) throw new Error("Presupuesto insuficiente.");
+    if (room) {
+      const sala = room.data();
+      if (!sala || sala.estado !== "en_curso" || sala.pilotoId !== pilotoId || sala.puja_equipo_id !== teamId || sala.puja_actual !== precio || sala.modo !== "real") throw new Error("La subasta ha cambiado o ya fue adjudicada.");
+      if (!params.adjudicacion!.forzar && sala.termina_en > Date.now()) throw new Error("La subasta todavía tiene tiempo.");
+    }
+    const existing = locations.filter(s => s.exists());
+    if (existing.length > 1) throw new Error("El piloto tiene fichas duplicadas. Corrige su plantilla antes de fichar.");
+    const snapshot = existing[0];
+    const current = snapshot ? { ref: snapshot.ref, data: snapshot.data()!, equipoId: snapshot.ref.parent.parent!.id } : null;
+    if (current?.equipoId === teamId && !room) throw new Error("El piloto ya pertenece a esta escudería.");
+    if (tipo === "fichaje" && current && current.equipoId !== "agente_libre") throw new Error("El piloto ya tiene equipo; registra una cláusula o un pacto, no otra alta libre.");
+    if (current?.data.pending_equipoId) throw new Error("Deshaz primero el pacto pendiente del piloto.");
+    const roster = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
+    const vendedorId = split.data()?.economia_config?.clausula_al_vendedor === true && tipo === "clausula" && current && current.equipoId !== "agente_libre" && precio > 0 ? current.equipoId : null;
+    const seller = vendedorId ? await transaction.get(doc(db, `splits/${splitId}/equipos`, vendedorId)) : null;
 
     const priceFields = {
       equipoId:               teamId,
@@ -187,20 +210,28 @@ export async function ficharPiloto(params: {
       clausula_inicial_split: nuevaClausula,
       precio_carrera_anterior: nuevaMantener,
       historial_precios:      {},
+      tipo_fichaje: tipo,
+      ultima_operacion_id: operationRef.id,
+      congelado: false,
+      congelado_en: null,
+      participa_hasta: null,
+      clausula_manual: null,
+      clausula_sin_ajuste: null,
+      restaurado_desde: null,
     };
 
     const newRef = doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotoId);
 
     if (current && current.equipoId !== teamId) {
       // Mover de equipo: preservar datos existentes + actualizar precios
-      await setDoc(newRef, { ...current.data, ...priceFields });
-      await deleteDoc(current.ref);
+      transaction.set(newRef, { ...current.data, ...priceFields });
+      transaction.delete(current.ref);
     } else if (current) {
       // Mismo equipo: solo actualizar precios
-      await updateDoc(current.ref, priceFields);
+      transaction.update(current.ref, priceFields);
     } else {
       // Piloto sin doc en este split: crear con stats en 0
-      await setDoc(newRef, {
+      transaction.set(newRef, {
         pilotoId,
         rating_piloto: 70,
         puntos_piloto: 0, victorias: 0, podios: 0,
@@ -209,20 +240,19 @@ export async function ficharPiloto(params: {
       });
     }
 
-    await updateDoc(teamRef, { presupuesto: increment(delta) });
+    transaction.update(teamRef, { presupuesto: increment(delta) });
 
     // Abono al vendedor, desactivado por regla de liga. Solo contaría si el piloto sale de
     // otro equipo: clausular a uno propio nunca mueve dinero entre escuderías.
-    const equipoVendedorId = CLAUSULA_LA_COBRA_EL_VENDEDOR && tipo === "clausula" && current && current.equipoId !== teamId && current.equipoId !== "agente_libre"
-      ? current.equipoId
-      : null;
+    const equipoVendedorId = vendedorId;
     let nombreVendedor = "";
     if (equipoVendedorId && !esPrecioNegativo) {
       const vendedorRef  = doc(db, `splits/${splitId}/equipos`, equipoVendedorId);
-      const vendedorSnap = await getDoc(vendedorRef);
+      const vendedorSnap = seller!;
       nombreVendedor = vendedorSnap.data()?.nombre || equipoVendedorId;
-      await updateDoc(vendedorRef, { presupuesto: increment(precioAbs) });
-      await logTx({
+      transaction.update(vendedorRef, { presupuesto: increment(precioAbs) });
+      transaction.set(doc(db, "transacciones", `${operationRef.id}__vendedor`), transactionPayload({
+        equipoId: equipoVendedorId,
         equipo:      nombreVendedor,
         tipo:        "clausula",
         piloto:      pilotName,
@@ -230,10 +260,11 @@ export async function ficharPiloto(params: {
         esIngreso:   true,
         splitId,
         descripcion: `Cláusula cobrada: ${teamName} se lleva a ${pilotName} → +${precioAbs}M`,
-      });
+      }));
     }
 
-    await logTx({
+    transaction.set(doc(db, "transacciones", operationRef.id), transactionPayload({
+      equipoId: teamId,
       equipo:      teamName,
       tipo:        esPrecioNegativo ? "piloto_negativo" : tipo,
       piloto:      pilotName,
@@ -244,12 +275,24 @@ export async function ficharPiloto(params: {
         ? `Piloto precio negativo — ingreso al fichar: +${precioAbs}M`
         : `${tipo.charAt(0).toUpperCase() + tipo.slice(1)}: −${precioAbs}M → mantener ${nuevaMantener}M / cláusula ${nuevaClausula}M`
           + (nombreVendedor ? ` · pagados a ${nombreVendedor}` : ""),
+    }));
+    transaction.set(operationRef, {
+      pilotoId, teamId, precio, tipo, estado: "aplicada", fecha: serverTimestamp(),
+      equipoOrigenId: current?.equipoId ?? null, fichaAnterior: current?.data ?? null,
+      vendedorId, vendedorDelta: vendedorId ? precio : 0,
+    });
+    if (room) transaction.update(room.ref, {
+      estado: "adjudicada", adjudicacion: {
+        equipoId: teamId, equipoNombre: teamName, precio, vendedorId,
+        vendedorNombre: seller?.data()?.nombre ?? null, modo: "real", desierta: false,
+      }, actualizado_en: serverTimestamp(),
+    });
     });
 
     return {
       success: true,
       message: `${esPrecioNegativo ? "Ingreso" : "Gasto"}: ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}M | Valoración: ${nuevaMantener}M / ${nuevaClausula}M`
-        + (nombreVendedor ? ` | ${nombreVendedor} cobra +${precioAbs}M` : ""),
+        ,
     };
   } catch (error: any) {
     return { success: false, message: `Error al fichar: ${error.message}` };
@@ -346,6 +389,12 @@ export async function procesarEconomiaCarrera(
       // alguien corrigió los resultados de verdad entre medias, runTransaction ya reintenta
       // solo — es la garantía nativa de Firestore, no hace falta reimplementarla a mano.
       const resultadosTx: any[] = currentCircuit.data()?.resultados ?? [];
+      if (!currentCircuit.data()?.acta_cerrada || !resultadosTx.length || resultadosTx.filter(r => r.qualyPos === 1).length !== 1 || resultadosTx.filter(r => r.fastestLap === true).length !== 1 || resultadosTx.some(r => typeof r.isClean !== "boolean")) {
+        throw new Error("El acta o los resultados han cambiado: revisa y cierra el acta.");
+      }
+      const rules = economyRules(currentSplit.data()?.economia_config);
+      const { pole: M_POLE, vuelta_rapida: M_VUELTA_RAPIDA, sin_sancionados: M_SIN_SANCIONADOS,
+        participacion: M_PARTICIPACION, puntos_factor: M_PUNTOS_FACTOR, solo: M_SOLO_POR_CARRERA } = rules;
 
       const teamById: Record<string, { ref: any; nombre: string }> = {};
       teamDocs.forEach(teamDoc => {
@@ -378,6 +427,7 @@ export async function procesarEconomiaCarrera(
         earnings[teamId] = (earnings[teamId] || 0) + amount;
         txQueue.push({
           equipo: teamById[teamId]?.nombre ?? teamId,
+          equipoId: teamId,
           tipo, piloto, cantidad: amount, esIngreso: true,
           carrera: circuitName, descripcion,
         });
@@ -387,14 +437,15 @@ export async function procesarEconomiaCarrera(
       const participatingTeams = new Set<string>();
       for (const raceResult of resultadosTx) {
         const teamId = raceResult.equipoId ?? teamByPilot[raceResult.pilotoId];
-        if (!teamId) continue;
+        if (!teamId || teamId === "agente_libre") continue;
+        if (!teamById[teamId]) throw new Error(`No existe la escudería ${teamId} del resultado.`);
         participatingTeams.add(teamId);
         if (!raceResult.isClean) dirtyTeams.add(teamId);
       }
 
       for (const raceResult of resultadosTx) {
         const teamId = raceResult.equipoId ?? teamByPilot[raceResult.pilotoId];
-        if (!teamId) continue;
+        if (!teamId || teamId === "agente_libre") continue;
 
         const nombre = pilotNombre[raceResult.pilotoId] || raceResult.pilotoId;
         const isDNF = raceResult.racePos === 99;
@@ -419,7 +470,7 @@ export async function procesarEconomiaCarrera(
           .map((member: any) => {
             const raceResult = resultadosTx.find((entry: any) => entry.pilotoId === member.id);
             const teamId = raceResult?.equipoId ?? teamByPilot[member.id];
-            if (!raceResult || !teamId) return null;
+            if (!raceResult || !teamId || teamId === "agente_libre") return null;
             return {
               pilotoId: member.id,
               qualyPos: raceResult.qualyPos,
@@ -432,11 +483,11 @@ export async function procesarEconomiaCarrera(
 
         if (members.length < 2) continue;
         [...members].sort((a: any, b: any) => a.qualyPos - b.qualyPos).forEach((member: any, index) => {
-          const prize = calcularMillonesRivalidadClasificacion(index + 1, members.length);
+          const prize = (group.members.length === 2 ? rules.rivalidad_duo_clasificacion : rules.rivalidad_clasificacion)[index] ?? 0;
           if (prize > 0) add(member.teamId, prize, "rivalidad", member.nombre, `Rivalidad clasificación P${index + 1}: +${prize}M`);
         });
         [...members].sort((a: any, b: any) => a.racePos - b.racePos).forEach((member: any, index) => {
-          const prize = calcularMillonesRivalidadCarrera(index + 1, members.length);
+          const prize = (group.members.length === 2 ? rules.rivalidad_duo_carrera : rules.rivalidad_carrera)[index] ?? 0;
           if (prize > 0) add(member.teamId, prize, "rivalidad", member.nombre, `Rivalidad carrera P${index + 1}: +${prize}M`);
         });
       }
@@ -490,10 +541,13 @@ export async function procesarEconomiaCarrera(
         } else {
           decayLog.push({ nombre, mantenerAntes: mantenerEstaCarrera, mantenerDespues: proximo.mantener, clausulaDespues: proximo.clausula, congelado: false });
           pilotPriceUpdates.push({ ref, data: {
-            clausula_actual: proximo.clausula,
+            clausula_actual: d.clausula_manual ?? proximo.clausula,
+            ...(d.clausula_manual != null ? { clausula_sin_ajuste: proximo.clausula } : {}),
             mantener_actual: proximo.mantener,
             precio_carrera_anterior: mantenerEstaCarrera,
-            [`historial_precios.${circuitoId}`]: { carrera: circuitName, mantener: vigente.mantener, clausula: vigente.clausula },
+            [`historial_precios.${circuitoId}`]: { carrera: circuitName, mantener: vigente.mantener, clausula: d.clausula_manual ?? vigente.clausula,
+              anterior: { mantener_actual: d.mantener_actual ?? 0, clausula_actual: d.clausula_actual ?? 0, precio_carrera_anterior: d.precio_carrera_anterior ?? 0,
+                ...(d.clausula_manual != null ? { clausula_sin_ajuste: d.clausula_sin_ajuste ?? vigente.clausula } : {}) } },
           } });
         }
       }
@@ -506,7 +560,7 @@ export async function procesarEconomiaCarrera(
         const logRef = doc(db, "transacciones", `${splitId}__${circuitoId}__${index}`);
         transaction.set(logRef, transactionPayload({ ...entry, splitId, circuitoId }));
       });
-      transaction.update(circuitoRef, { economia_procesada: true });
+      transaction.update(circuitoRef, { economia_procesada: true, economia_reglas_aplicadas: rules, economia_version: increment(1) });
 
       return { applied: true as const, earnings, txQueue, decayLog, teamById };
     });
@@ -591,20 +645,33 @@ export async function revertirEconomiaCarrera(
       getDocs(query(collection(db, "transacciones"), where("splitId", "==", splitId), where("circuitoId", "==", circuitoId))),
     ]);
 
+    const pilotSnapshots = await Promise.all(equiposSnap.docs.map(team => getDocs(collection(db, `splits/${splitId}/equipos/${team.id}/pilotos`))));
+    return await runTransaction(db, async batch => {
+    const [freshCircuit, freshCalendar, freshTeams, freshLogs, freshPilots] = await Promise.all([
+      batch.get(circuitoRef),
+      Promise.all(calendarioSnap.docs.map(s => batch.get(s.ref))),
+      Promise.all(equiposSnap.docs.map(s => batch.get(s.ref))),
+      Promise.all(txSnap.docs.map(s => batch.get(s.ref))),
+      Promise.all(pilotSnapshots.flatMap(s => s.docs).map(s => batch.get(s.ref))),
+    ]);
+    if (!freshCircuit.data()?.economia_procesada) throw new Error("La economía ya está revertida.");
+    if (freshCircuit.data()?.economia_version !== circuitoData.economia_version) throw new Error("La liquidación ha cambiado. Recarga antes de revertir.");
+    const laterIds = new Set(calendario.slice(indice + 1).map(c => c.id));
+    if (freshCalendar.some(c => laterIds.has(c.id) && c.data()?.economia_procesada)) throw new Error("Revierte primero la carrera posterior.");
+    if (!freshLogs.length || freshLogs.some(s => !s.exists())) throw new Error("Faltan movimientos originales; revisa la conciliación antes de revertir.");
     const teamIdByName: Record<string, string> = {};
-    equiposSnap.docs.forEach(d => { teamIdByName[(d.data() as any).nombre || d.id] = d.id; });
+    freshTeams.forEach(d => { if (d.exists()) teamIdByName[d.data()!.nombre || d.id] = d.id; });
 
     // Todas las entradas que procesarEconomiaCarrera registra son ingresos (esIngreso
     // siempre true, ver el closure add() más arriba); revertir siempre resta.
     const refund: Record<string, number> = {};
-    txSnap.docs.forEach(txDoc => {
+    freshLogs.forEach(txDoc => {
       const data = txDoc.data() as any;
-      const teamId = teamIdByName[data.equipo];
-      if (!teamId) return;
-      refund[teamId] = (refund[teamId] || 0) + Number(data.cantidad || 0);
+      const teamId = data.equipoId ?? teamIdByName[data.equipo];
+      if (!teamId || !freshTeams.some(t => t.id === teamId && t.exists())) throw new Error(`No se encuentra el equipo de ${data.equipo}.`);
+      refund[teamId] = (refund[teamId] || 0) + Number(data.cantidad || 0) * (data.esIngreso ? 1 : -1);
     });
 
-    const batch = writeBatch(db);
     for (const [teamId, total] of Object.entries(refund)) {
       if (total === 0) continue;
       batch.update(doc(db, `splits/${splitId}/equipos`, teamId), { presupuesto: increment(-total) });
@@ -612,9 +679,8 @@ export async function revertirEconomiaCarrera(
     txSnap.docs.forEach(txDoc => batch.delete(txDoc.ref));
 
     let pilotosRestaurados = 0;
-    for (const equipoDoc of equiposSnap.docs) {
-      const pilotosSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`));
-      for (const pd of pilotosSnap.docs) {
+      for (const pd of freshPilots) {
+        if (!pd.exists()) continue;
         const d = pd.data() as any;
         const entry = d.historial_precios?.[circuitoId];
         if (!entry) continue;
@@ -636,13 +702,13 @@ export async function revertirEconomiaCarrera(
           mantener_actual: entry.mantener,
           clausula_actual: entry.clausula,
           precio_carrera_anterior: precioCarreraAnterior,
+          ...(entry.anterior ?? {}),
+          ...(d.clausula_manual != null ? { clausula_actual: d.clausula_manual } : {}),
           [`historial_precios.${circuitoId}`]: deleteField(),
         });
       }
-    }
 
     batch.update(circuitoRef, { economia_procesada: false });
-    await batch.commit();
 
     return {
       ok: true,
@@ -650,6 +716,7 @@ export async function revertirEconomiaCarrera(
         + `${Object.keys(refund).length} equipo(s) reembolsados, ${txSnap.docs.length} movimiento(s) borrados, `
         + `${pilotosRestaurados} piloto(s) con precio restaurado.`,
     };
+    });
   } catch (error: any) {
     return { ok: false, message: `Error al revertir la economía: ${error.message}` };
   }
@@ -712,7 +779,8 @@ export async function recalcularCurvaPreciosSplit(
           mantener_inicial_split:  mantenerInicialDe(precioCompra),
           clausula_inicial_split:  clausulaInicialDe(precioCompra),
           mantener_actual:         cierre.mantener,
-          clausula_actual:         cierre.clausula,
+          clausula_actual:         d.clausula_manual ?? cierre.clausula,
+          ...(d.clausula_manual != null ? { clausula_sin_ajuste: cierre.clausula } : {}),
           precio_carrera_anterior: cierre.mantener,
         });
         pilotos++;

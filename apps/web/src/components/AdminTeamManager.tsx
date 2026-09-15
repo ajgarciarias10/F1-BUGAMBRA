@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { deleteDoc, doc, setDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
+import { useConfirm } from "./Feedback";
 
 export function AdminTeamManager({ splitId, teams, roster, splits, onSelectSplit }: { splitId: string; teams: any[]; roster: any[]; splits: any[]; onSelectSplit: (id: string) => void }) {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [message, setMessage] = useState("");
+  const { confirm, confirmDialog } = useConfirm();
 
   const normalizeTeamName = (name: string) => name.replace(/\s+\d+\s*$/, "").replace(/\s+/g, " ").trim();
   const teamId = (name: string) => normalizeTeamName(name).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -32,7 +34,13 @@ export function AdminTeamManager({ splitId, teams, roster, splits, onSelectSplit
 
   const removeTeam = async (team: any) => {
     if (roster.some(pilot => pilot.equipoId === team.id)) { setMessage("No puedes borrar un equipo que todavía tiene pilotos."); return; }
-    if (!window.confirm(`¿Borrar ${team.nombre} del split?`)) return;
+    const ok = await confirm({
+      title: `Borrar ${team.nombre}`,
+      body: "La escudería desaparece de este split. Su presupuesto y su logo se pierden.",
+      confirmLabel: "Borrar equipo",
+      tone: "peligro",
+    });
+    if (!ok) return;
     await deleteDoc(doc(db, `splits/${splitId}/equipos`, team.id));
     setMessage(`Equipo ${team.nombre} eliminado.`);
   };
@@ -49,5 +57,6 @@ export function AdminTeamManager({ splitId, teams, roster, splits, onSelectSplit
     </div>)}</div>
     {message && <p className="mt-3 text-[10px] text-emerald-300">{message}</p>}
     {!teams.length && <p className="text-xs text-white/30">No hay equipos creados en este split.</p>}
+    {confirmDialog}
   </section>;
 }

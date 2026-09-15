@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from "react";
+﻿import React, { lazy, Suspense, useState, useEffect, useMemo } from "react";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { processRace, RaceResult, revertirCarreraCompleta, recalcSplitPoints } from "../services/raceProcessor";
@@ -7,34 +7,34 @@ import { db } from "../services/firebase";
 import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch } from "firebase/firestore";
 import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { isSplitUnlocked, buildRivalryTable } from "../utils/splitResolver";
+import { isSplitUnlocked } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
-import { AdminRivalryControlPanel } from "./RivalryPanels";
 import { EconomyAdminPanel } from "./EconomyAdminPanel";
 import { StorageImageUpload } from "./StorageImageUpload";
-import { DatabaseExplorer } from "./DatabaseExplorer";
-import { AdminControlPanel } from "./AdminControlPanel";
-import { MediaSyncPanel } from "./MediaSyncPanel";
-import { OVRTrajectoryPanel } from "./OVRTrajectoryPanel";
-import { SplitBuilderPanel } from "./SplitBuilderPanel";
 import { AuctionRoom } from "./AuctionRoom";
+import { comenzarTemporada } from "../services/auctionService";
 import { useAuth } from "../contexts/AuthContext";
-import { SeasonReviewPanel } from "./SeasonReviewPanel";
 import { AdminUsersPanel } from "./AdminUsersPanel";
 import { AdminTeamManager } from "./AdminTeamManager";
+import { StatusBanner } from "./Feedback";
 import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 import { SplitIntroPanel } from "./SplitIntroPanel";
+import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
+import { PaddockAdminPanel } from "./PaddockAdminPanel";
 
-type AdminTab = "results" | "economy" | "rivalries" | "roster" | "production" | "suggestions" | "tools";
+const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
 
-const ADMIN_TABS: Array<{ id: AdminTab; label: string; pulse?: boolean }> = [
-  { id: "results", label: "Circuitos y resultados" },
-  { id: "economy", label: "Economía" },
-  { id: "rivalries", label: "Rivalidades" },
-  { id: "roster", label: "Usuarios, equipos y pilotos" },
-  { id: "production", label: "Producción y vídeos" },
-  { id: "suggestions", label: "Buzón de mejoras", pulse: true },
-  { id: "tools", label: "Datos y mantenimiento" },
+type AdminTab = "results" | "economy" | "rivalries" | "roster" | "paddock" | "production" | "suggestions" | "tools";
+
+const ADMIN_TABS: Array<{ id: AdminTab; label: string; description: string }> = [
+  { id: "results", label: "Carreras", description: "Programa la carrera, introduce los resultados y cierra el acta para liquidar su economía." },
+  { id: "economy", label: "Economía y fichajes", description: "Gestiona los traspasos, contratos y presupuestos de cada split." },
+  { id: "rivalries", label: "Rivalidades", description: "Define los grupos de pilotos que compiten por los premios de rivalidad." },
+  { id: "roster", label: "Equipos y usuarios", description: "Gestiona las escuderías, las cuentas y sus roles." },
+  { id: "paddock", label: "Paddock", description: "Revisa el OK completo y publica las bienvenidas oficiales con una foto." },
+  { id: "production", label: "Vídeos", description: "Publica o cambia el vídeo de presentación de cada split." },
+  { id: "suggestions", label: "Sugerencias", description: "Revisa las propuestas de la comunidad y actualiza su estado." },
+  { id: "tools", label: "Datos y mantenimiento", description: "Controla el split destacado, los fichajes, la subasta y el inicio de temporada." },
 ];
 
 const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
@@ -73,6 +73,7 @@ export function AdminDashboard() {
   const { usuarios } = useUsuarios();
   const { splits: rawSplits, loading: loadingSplits } = useSplits();
   const splits = rawSplits;
+  const marketLifecycleError = useMarketLifecycleStatus();
   const [selectedSplitId, setSelectedSplitId] = useState("");
 
   const currentRawSplit = useMemo(() => rawSplits.find(s => s.id === selectedSplitId), [rawSplits, selectedSplitId]);
@@ -87,21 +88,11 @@ export function AdminDashboard() {
   const [msg, setMsg] = useState("");
   const [plantilla, setPlantilla] = useState<any[]>([]);
   const [adminTab, setAdminTab] = useState<AdminTab>("results");
-  const [videoIntroUrl, setVideoIntroUrl] = useState("");
-  const [savingVideoIntro, setSavingVideoIntro] = useState(false);
+  const [showSplitBuilder, setShowSplitBuilder] = useState(false);
   const [logoEdits, setLogoEdits] = useState<Record<string, string>>({});
   const [savingLogo, setSavingLogo] = useState<string | null>(null);
   const [photoEdits, setPhotoEdits] = useState<Record<string, string>>({});
   const [savingPhoto, setSavingPhoto] = useState<string | null>(null);
-  const [resetPointsLoading, setResetPointsLoading] = useState(false);
-  const [savingRivalries, setSavingRivalries] = useState(false);
-  const [rivalriesMsg, setRivalriesMsg] = useState("");
-
-  // ─── MIGRACIONES AUTOMÁTICAS AL MONTAR ───────────────────────────────────────
-  // Se ejecutan UNA SOLA VEZ. Cada función tiene su propia guardia interna
-  // y se omite silenciosamente si ya no es necesaria.
-  // ─────────────────────────────────────────────────────────────────────────────
-  // ─────────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     let isSubscribed = true;
@@ -166,12 +157,11 @@ export function AdminDashboard() {
   const [numeroCarrera, setNumeroCarrera] = useState<number>(1);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
-  // Sync video intro URL + clear logo edits when selected split changes
+  // Los borradores de imagen pertenecen únicamente al split seleccionado.
   useEffect(() => {
-    const split = splits.find(s => s.id === selectedSplitId);
-    setVideoIntroUrl(split?.video_intro ?? "");
     setLogoEdits({});
-  }, [selectedSplitId, splits]);
+    setPhotoEdits({});
+  }, [selectedSplitId]);
 
   const handleSaveTeamLogo = async (teamId: string, logoUrl: string) => {
     if (!selectedSplitId) return;
@@ -215,36 +205,19 @@ export function AdminDashboard() {
     }
   };
 
-  const handleSaveVideoIntro = async () => {
-    if (!selectedSplitId) return;
-    setSavingVideoIntro(true);
-    try {
-      await updateDoc(doc(db, "splits", selectedSplitId), {
-        video_intro: videoIntroUrl.trim(),
-      });
-      setMsg("Video de introducción guardado.");
-      setTimeout(() => setMsg(""), 3000);
-    } catch (err: any) {
-      setMsg("Error: " + err.message);
-    } finally {
-      setSavingVideoIntro(false);
-    }
-  };
-
   // Auto-select next circuit on load or when splits change
   useEffect(() => {
-    if (splits.length > 0 && !selectedCircuitoId) {
-      for (const split of splits) {
-        const next = getNextCircuitOfSplit(split.circuitos);
-        if (next) {
-          setSelectedSplitId(split.id);
-          setSelectedCircuitoId(next.id);
-          setIsEditingFinished(false);
-          break;
-        }
-      }
-    }
-  }, [splits]);
+    if (selectedSplitId || !splits.length) return;
+    const initialSplit = splits.find(split => split.activo && split.id !== "global")
+      || splits.find(split => split.id !== "global" && !split.completado)
+      || splits.find(split => split.id !== "global");
+    if (initialSplit) setSelectedSplitId(initialSplit.id);
+  }, [splits, selectedSplitId]);
+
+  useEffect(() => {
+    if (!currentRawSplit || currentRawSplit.circuitos.some(circuit => circuit.id === selectedCircuitoId)) return;
+    setSelectedCircuitoId(getNextCircuitOfSplit(currentRawSplit.circuitos)?.id || "");
+  }, [currentRawSplit, selectedCircuitoId]);
 
   // Load existing results if editing
   useEffect(() => {
@@ -346,9 +319,30 @@ export function AdminDashboard() {
       const currentSplit = splits.find(s => s.id === selectedSplitId);
       const finalVal = !(currentSplit?.fichajes_abiertos);
       const ref = doc(db, "splits", selectedSplitId);
-      await updateDoc(ref, { fichajes_abiertos: finalVal });
+      await updateDoc(ref, { fichajes_abiertos: finalVal, mercado_cerrado_por_plantillas: false });
       setMsg(`Ventana de fichajes ${finalVal ? "ABIERTA" : "CERRADA"} para ${currentSplit?.nombre || "Split"}.`);
       setTimeout(() => setMsg(""), 4000);
+    } catch (err: any) {
+      setMsg("Error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // El interruptor vivía en la vista del jeque, donde no servía de nada: las reglas de
+  // Firestore solo dejan escribir el documento del split al admin, así que la casilla se
+  // revertía sola y sin mensaje. Aquí, junto al resto de interruptores del split, sí manda.
+  const handleToggleSubasta = async () => {
+    if (!selectedSplitId) return;
+    setLoading(true);
+    try {
+      const currentSplit = splits.find(s => s.id === selectedSplitId);
+      const finalVal = !(currentSplit?.mercado_subasta_activado);
+      await updateDoc(doc(db, "splits", selectedSplitId), { mercado_subasta_activado: finalVal });
+      setMsg(finalVal
+        ? `Subasta en vivo ACTIVADA en ${currentSplit?.nombre || "el split"}: la pestaña Mercado abre la sala de pujas.`
+        : `Subasta en vivo DESACTIVADA en ${currentSplit?.nombre || "el split"}: los jeques fichan directamente desde Mercado.`);
+      setTimeout(() => setMsg(""), 5000);
     } catch (err: any) {
       setMsg("Error: " + err.message);
     } finally {
@@ -362,14 +356,14 @@ export function AdminDashboard() {
     try {
       const currentSplit = splits.find(s => s.id === selectedSplitId);
       const isActivo = currentSplit?.activo ?? false;
-      // Si se va a activar, desactivar todos los demás primero
+      const batch = writeBatch(db);
       if (!isActivo) {
-        const batch = splits.filter(s => s.id !== "global" && s.activo);
-        for (const s of batch) {
-          await updateDoc(doc(db, "splits", s.id), { activo: false });
+        for (const s of splits.filter(s => s.id !== "global" && s.activo)) {
+          batch.update(doc(db, "splits", s.id), { activo: false });
         }
       }
-      await updateDoc(doc(db, "splits", selectedSplitId), { activo: !isActivo });
+      batch.update(doc(db, "splits", selectedSplitId), { activo: !isActivo });
+      await batch.commit();
       setMsg(`Split ${currentSplit?.nombre} ${!isActivo ? "ACTIVADO" : "DESACTIVADO"} en la web pública.`);
       setTimeout(() => setMsg(""), 4000);
     } catch (err: any) {
@@ -377,6 +371,25 @@ export function AdminDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStartSplit = () => {
+    if (!currentRawSplit || loading) return;
+    const splitId = currentRawSplit.id;
+    setConfirmModal({
+      isOpen: true,
+      title: `Comenzar ${currentRawSplit.nombre}`,
+      message: "Se cerrará el mercado de este split y pasará a ser el split activo de la liga.",
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          const result = await comenzarTemporada(splitId);
+          setMsg(result.ok ? result.message : `Error: ${result.message}`);
+        } catch (error: any) {
+          setMsg(`Error al comenzar el split: ${error.message}`);
+        } finally { setLoading(false); }
+      },
+    });
   };
 
   const handleSyncSplitRosters = (splitId: string) => {
@@ -427,9 +440,10 @@ export function AdminDashboard() {
                id: prevTeamDoc.id,
                nombre: teamData.nombre || prevTeamDoc.id,
                presupuesto: inheritedBudget,
-               presupuesto_inicial: inheritedBudget,
-               presupuesto_arrastre: inheritedBudget,
-               puntos_constructores: 0
+                presupuesto_inicial: inheritedBudget,
+                presupuesto_arrastre: inheritedBudget,
+                presupuesto_origen_splitId: prevSplit.id,
+                puntos_constructores: 0
             }, { merge: true });
           }
           await setDoc(doc(db, `splits/${splitId}/equipos`, "agente_libre"), {
@@ -762,21 +776,24 @@ export function AdminDashboard() {
          </div>
 
         {/* Navigation Tabs */}
-        <div className="hide-scrollbar sticky top-2 z-40 mb-4 flex gap-1 overflow-x-auto rounded-3xl border border-white/10 bg-zinc-950/85 p-1 shadow-2xl shadow-black/30 backdrop-blur-xl">
+         <nav aria-label="Secciones de administración" className="mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-white/10 bg-zinc-950 p-1 sm:grid-cols-3 lg:grid-cols-8">
           {ADMIN_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setAdminTab(tab.id)}
-              className={`relative min-h-11 shrink-0 cursor-pointer rounded-2xl px-4 text-[12px] font-bold transition-all md:py-2 md:font-mono md:text-[10px] md:uppercase md:tracking-wider ${
+              aria-current={adminTab === tab.id ? "page" : undefined}
+              className={`min-h-12 cursor-pointer rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
                 adminTab === tab.id
-                  ? `text-white bg-[#e10600] shadow-lg shadow-red-950/30 ${tab.pulse ? "animate-pulse" : ""}`
-                  : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
+                  ? "text-white bg-[#e10600] shadow-lg shadow-red-950/30"
+                   : "text-white/65 hover:text-white hover:bg-white/[0.04]"
               }`}
             >
               {tab.label}
             </button>
           ))}
-        </div>
+        </nav>
+
+        <p className="mb-5 text-sm leading-relaxed text-white/60">{ADMIN_TABS.find(tab => tab.id === adminTab)?.description}</p>
 
         {adminTab === "rivalries" ? (
           <AdminRivalriesPanel splits={splits} />
@@ -785,72 +802,15 @@ export function AdminDashboard() {
         ) : adminTab === "roster" ? (
           <div className="space-y-6">
             <AdminTeamManager splitId={selectedSplitId} teams={currentRawSplit?.equipos || []} roster={currentRawSplit?.roster || []} splits={splits} onSelectSplit={(id: string) => setSelectedSplitId(id)} />
-          {/* MOVER PILOTOS */}
-          <section className="bg-white/[0.03] border border-white/10 p-4 relative overflow-hidden">
+            <AdminUsersPanel />
+            {msg && <StatusBanner message={msg} tone={msg.toLowerCase().includes("error") ? "error" : "exito"} onDismiss={() => setMsg("")} />}
+          <details className="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+            <summary className="min-h-8 cursor-pointer text-sm font-bold">Fotos de pilotos y escudos de {currentRawSplit?.nombre || "este split"}</summary>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
               <div>
-                <h2 className="text-sm font-black italic tracking-tighter text-white flex items-center gap-2.5">
-                  <span className="w-1 h-5 bg-[#e10600] block" />
-                  Edición de equipos y pilotos
-                </h2>
-                <p className="text-[9px] text-white/40 uppercase tracking-widest mt-1 font-mono">
-                  Gestión de transferencias, logos y fotos del split
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-white/[0.02] p-1.5 border border-white/5">
-                  <span className="text-[9px] font-mono uppercase text-white/40">MERCADO:</span>
-                  <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                    splits.find(s => s.id === selectedSplitId)?.fichajes_abiertos
-                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                    : "bg-red-500/20 text-red-500 border border-red-500/30"
-                  }`}>
-                    {splits.find(s => s.id === selectedSplitId)?.fichajes_abiertos ? "Abierto" : "Cerrado"}
-                  </span>
-                  <button onClick={handleToggleFichajes}
-                    className="px-2.5 py-0.5 bg-white/10 hover:bg-white/25 text-[9px] uppercase font-bold tracking-wider transition-colors">
-                    Cambiar
-                  </button>
-                </div>
-                <div className="flex items-center gap-1.5 bg-white/[0.02] p-1.5 border border-white/5">
-                  <span className="text-[9px] font-mono uppercase text-white/40">WEB PÚBLICA:</span>
-                  <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                    splits.find(s => s.id === selectedSplitId)?.activo
-                    ? "bg-[#e10600]/20 text-[#e10600] border border-[#e10600]/30"
-                    : "bg-white/5 text-white/30 border border-white/10"
-                  }`}>
-                    {splits.find(s => s.id === selectedSplitId)?.activo ? "Activo" : "Oculto"}
-                  </span>
-                  <button onClick={handleSetSplitActivo}
-                    className="px-2.5 py-0.5 bg-white/10 hover:bg-white/25 text-[9px] uppercase font-bold tracking-wider transition-colors">
-                    {splits.find(s => s.id === selectedSplitId)?.activo ? "Desactivar" : "Activar"}
-                  </button>
-                </div>
+                <p className="mt-2 text-sm text-white/60">Sube una imagen o pega su enlace para actualizar la ficha.</p>
               </div>
             </div>
-
-            {/* Video Intro del Split — atajo; la gestión de todas las intros está en «Producción y vídeos» */}
-            <div className="mb-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 border-t border-white/[0.04] pt-3">
-              <span className="text-[10px] font-mono uppercase text-white/40 shrink-0 w-20">Video Intro</span>
-              <input
-                type="url"
-                value={videoIntroUrl}
-                onChange={e => setVideoIntroUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-3 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
-              />
-              <button
-                onClick={handleSaveVideoIntro}
-                disabled={savingVideoIntro}
-                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1.5"
-              >
-                {savingVideoIntro ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                Guardar
-              </button>
-            </div>
-            <p className="-mt-1 mb-3 text-[11px] text-white/35">
-              Para ver y editar las intros de todos los splits a la vez, usa la pestaña «Producción y vídeos».
-            </p>
 
             {/* Logos de escuderías */}
             <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
@@ -942,39 +902,83 @@ export function AdminDashboard() {
               )}
             </div>
 
+          </details>
             {!isSelectedSplitInitialized && selectedSplitId !== "split_1" && (
               <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div>
-                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">⚠️ Split no inicializado</h4>
+                  <h4 className="text-sm font-bold text-amber-400">Este split todavía no tiene pilotos</h4>
                   <p className="text-[10px] text-white/60 mt-0.5 max-w-2xl">
-                    Este split hereda dinámicamente el plantel del anterior. Inicialízalo para poder mover pilotos de forma independiente.
+                    Copia la plantilla del split anterior para empezar a gestionar sus fichajes.
                   </p>
                 </div>
-                <button onClick={() => handleSyncSplitRosters(selectedSplitId)}
-                  className="bg-amber-500 hover:bg-amber-600 text-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider shrink-0 transition-colors cursor-pointer">
-                  Inicializar Split
+                  <button onClick={() => handleSyncSplitRosters(selectedSplitId)} disabled={loading}
+                    className="min-h-11 rounded-lg bg-amber-500 hover:bg-amber-600 text-black px-3 text-sm font-bold shrink-0 transition-colors cursor-pointer disabled:opacity-40">
+                    Copiar plantilla anterior
                 </button>
               </div>
             )}
 
-          </section>
-            <AdminUsersPanel />
           </div>
+        ) : adminTab === "paddock" ? (
+          <PaddockAdminPanel splits={splits} />
         ) : adminTab === "production" ? (
-          <div className="space-y-6">
-            <SplitIntroPanel splits={splits} />
-            <MediaSyncPanel splits={splits} />
-          </div>
+          <SplitIntroPanel splits={splits} />
         ) : adminTab === "suggestions" ? (
           <SuggestionsView isAdmin={true} />
         ) : adminTab === "tools" ? (
           <div className="space-y-6">
-            <AuctionRoom splits={splits} splitId={selectedSplitId} />
-            <SplitBuilderPanel splits={splits} />
-            <OVRTrajectoryPanel splits={splits} />
-            <SeasonReviewPanel splits={splits} />
-            <AdminControlPanel />
-            <DatabaseExplorer />
+            <section className="rounded-2xl border border-white/15 bg-white/[0.04] p-5 space-y-5">
+              <div>
+                <h2 className="text-lg font-black">Mercado y subasta</h2>
+                <p className="mt-1 text-sm text-white/60">1. Elige el split. 2. Abre los fichajes. 3. Activa la subasta si quieres usar pujas.</p>
+              </div>
+              <label className="block text-sm font-bold">Split que quieres gestionar
+                <select value={selectedSplitId} onChange={event => setSelectedSplitId(event.target.value)} disabled={loading} className="mt-2 block min-h-12 w-full rounded-xl border border-white/20 bg-[#151515] px-3 text-white">
+                  {splits.filter(split => split.id !== "global").map(split => <option key={split.id} value={split.id}>{split.nombre}</option>)}
+                </select>
+              </label>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+                <div>
+                  <p className="text-sm font-bold">{currentRawSplit?.activo ? "Split destacado en la web" : "Este split no es el destacado"}</p>
+                  <p className="mt-1 text-sm text-white/60">El split destacado es el que se muestra primero al entrar.</p>
+                </div>
+                <button type="button" onClick={handleSetSplitActivo} disabled={loading || !currentRawSplit} className="min-h-11 rounded-xl border border-white/20 px-4 text-sm font-bold hover:bg-white/10 disabled:opacity-40">
+                  {currentRawSplit?.activo ? "Quitar destacado" : "Destacar este split"}
+                </button>
+              </div>
+              {currentRawSplit?.tipo !== "individual" && !currentRawSplit?.completado && !currentRawSplit?.temporada_iniciada ? <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  { label: "Ventana de fichajes", checked: currentRawSplit?.fichajes_abiertos === true, action: handleToggleFichajes, description: "Permite las operaciones de mercado de este split." },
+                  { label: "Subasta en vivo", checked: currentRawSplit?.mercado_subasta_activado === true, action: handleToggleSubasta, description: "Activada: sala de pujas. Desactivada: fichaje directo." },
+                ].map(control => <button key={control.label} type="button" role="switch" aria-checked={control.checked} aria-label={control.label} disabled={loading || !currentRawSplit || currentRawSplit.tipo === "individual"} onClick={control.action} className="rounded-xl border border-white/15 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-40">
+                  <span className="flex items-center justify-between gap-3"><span className="font-bold">{control.label}</span><span aria-hidden="true" className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors ${control.checked ? "bg-emerald-500" : "bg-white/20"}`}><span className={`h-5 w-5 rounded-full bg-white transition-transform ${control.checked ? "translate-x-5" : ""}`} /></span></span>
+                  <span className="mt-2 block text-sm text-white/65">{control.checked ? "Activada" : "Desactivada"} · {control.description}</span>
+                </button>)}
+              </div> : <p className="text-sm text-white/60">{currentRawSplit?.tipo === "individual" ? "Este split individual no utiliza mercado de equipos." : "El mercado de preparación ya está cerrado para este split."}</p>}
+              <p className="text-sm text-white/60">Con tu sesión de admin abierta, las bienvenidas y el cierre por plantillas completas se gestionan automáticamente.</p>
+              {currentRawSplit?.mercado_cerrado_por_plantillas && <StatusBanner tone="exito" message="Todas las plantillas están completas. Mercado cerrado para este split." />}
+              {msg && <StatusBanner message={msg} tone={msg.startsWith("Error") ? "error" : "exito"} onDismiss={() => setMsg("")} />}
+              {marketLifecycleError && <StatusBanner message={marketLifecycleError} tone="error" />}
+            </section>
+            {currentRawSplit?.mercado_subasta_activado && currentRawSplit.tipo !== "individual" && !currentRawSplit.completado && !currentRawSplit.temporada_iniciada && (
+              <AuctionRoom key={selectedSplitId} splits={splits} splitId={selectedSplitId} />
+            )}
+            <section className="rounded-2xl border border-white/10 p-5 space-y-4">
+              <h2 className="text-lg font-black">Temporada</h2>
+              {currentRawSplit && currentRawSplit.tipo !== "individual" && !currentRawSplit.completado && !currentRawSplit.temporada_iniciada && (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-white/60">Cuando termine el mercado, comienza {currentRawSplit.nombre}.</p>
+                  <button type="button" disabled={loading} onClick={handleStartSplit} className="min-h-11 rounded-xl bg-[#e10600] px-4 text-sm font-bold disabled:opacity-40">Comenzar split</button>
+                </div>
+              )}
+              {currentRawSplit?.temporada_iniciada && <p className="text-sm text-emerald-300">{currentRawSplit.nombre} ya ha comenzado. Gestiona sus carreras desde «Carreras».</p>}
+              <button type="button" aria-expanded={showSplitBuilder} aria-controls="admin-split-builder" onClick={() => setShowSplitBuilder(true)} disabled={showSplitBuilder} className="min-h-11 rounded-xl border border-white/20 px-4 text-sm font-bold hover:bg-white/10 disabled:opacity-40">Preparar siguiente split o temporada</button>
+              {showSplitBuilder && <div id="admin-split-builder">
+                <Suspense fallback={<p role="status" className="py-4 text-sm text-white/60">Cargando preparación del split…</p>}>
+                  <SplitBuilderPanel splits={splits} onClose={() => setShowSplitBuilder(false)} />
+                </Suspense>
+              </div>}
+            </section>
           </div>
          ) : (
            <>
@@ -1120,37 +1124,6 @@ export function AdminDashboard() {
           </div>
         </div>
         
-        {currentRawSplit && (
-          <div>
-            <AdminRivalryControlPanel split={currentRawSplit} />
-            <div className="mt-3 flex items-center gap-3">
-              <button
-                onClick={async () => {
-                  if (!currentRawSplit || !selectedSplitId) return;
-                  setSavingRivalries(true);
-                  setRivalriesMsg("");
-                  try {
-                    const rivalries = buildRivalryTable(currentRawSplit);
-                    await updateDoc(doc(db, "splits", selectedSplitId), { rivalries });
-                    setRivalriesMsg("Rivalidades guardadas correctamente.");
-                  } catch (e: any) {
-                    setRivalriesMsg(`Error: ${e.message}`);
-                  } finally {
-                    setSavingRivalries(false);
-                  }
-                }}
-                disabled={savingRivalries}
-                className="px-4 py-2 bg-[#e10600] hover:bg-[#c10500] disabled:opacity-50 text-white text-xs font-bold uppercase tracking-widest transition-colors"
-              >
-                {savingRivalries ? "Guardando…" : "Guardar Rivalidades"}
-              </button>
-              {rivalriesMsg && (
-                <span className="text-xs font-mono text-white/60">{rivalriesMsg}</span>
-              )}
-            </div>
-          </div>
-        )}
-
         <section className="bg-white/[0.03] border border-white/10 p-4 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[#e10600]/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
 
@@ -1216,41 +1189,6 @@ export function AdminDashboard() {
                 </button>
               )}
 
-              {isEconomiaProcesada && (
-                <button
-                  disabled={revirtiendoEconomia || !esUltimaCarreraProcesada}
-                  title={esUltimaCarreraProcesada ? "" : "Hay una carrera posterior con economía procesada: revierte primero esa."}
-                  onClick={handleRevertirEconomia}
-                  className="px-4 py-1.5 rounded-sm border border-orange-500/40 text-orange-400 text-[10px] font-black uppercase hover:bg-orange-500/10 transition-all disabled:opacity-40 flex items-center gap-1.5"
-                >
-                  {revirtiendoEconomia ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                  {revirtiendoEconomia ? "Revirtiendo..." : "Revertir Economía"}
-                </button>
-              )}
-
-              {isActaCerrada && !isEconomiaProcesada && (
-                <button
-                  disabled={reabriendoActa}
-                  onClick={handleReabrirActa}
-                  className="px-4 py-1.5 rounded-sm border border-sky-500/40 text-sky-400 text-[10px] font-black uppercase hover:bg-sky-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {reabriendoActa ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                  {reabriendoActa ? "Reabriendo..." : "Reabrir Acta"}
-                </button>
-              )}
-
-              {isEditingFinished && (!isEconomiaProcesada || esUltimaCarreraProcesada) && (
-                <button
-                  disabled={deshaciendoCarrera}
-                  title="Revierte economía, puntos, rating y el estado del acta de esta carrera, todo de una vez"
-                  onClick={handleDeshacerCarrera}
-                  className="px-4 py-1.5 rounded-sm border border-red-500/40 text-red-400 text-[10px] font-black uppercase hover:bg-red-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {deshaciendoCarrera ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                  {deshaciendoCarrera ? "Deshaciendo..." : "Deshacer Carrera"}
-                </button>
-              )}
-
               <button
                 onClick={handleSubmit}
                 disabled={loading || isActaCerrada}
@@ -1264,49 +1202,24 @@ export function AdminDashboard() {
             </div>
           </div>
 
-          {/* Acciones sobre puntos del split */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.04] pt-3 mt-2">
-            <span className="text-[9px] font-mono text-white/20 uppercase tracking-widest mr-1">Split:</span>
-            <button
-              onClick={async () => {
-                if (!selectedSplitId) return;
-                if (!confirm(`¿Resetear puntos y circuitos de ${selectedSplitId}? Los resultados se conservan.`)) return;
-                setResetPointsLoading(true);
-                try {
-                  const [equiposSnap, circSnap] = await Promise.all([
-                    getDocs(collection(db, `splits/${selectedSplitId}/equipos`)),
-                    getDocs(collection(db, `splits/${selectedSplitId}/circuitos`)),
-                  ]);
-                  const b1 = writeBatch(db);
-                  for (const equipoDoc of equiposSnap.docs) {
-                    const pilotosSnap = await getDocs(
-                      collection(db, `splits/${selectedSplitId}/equipos/${equipoDoc.id}/pilotos`)
-                    );
-                    pilotosSnap.docs.forEach(d => b1.update(d.ref, {
-                      puntos_piloto: 0, victorias: 0, podios: 0,
-                      poles: 0, dnfs: 0, carreras_limpias: 0,
-                    }));
-                  }
-                  await b1.commit();
-                  const b2 = writeBatch(db);
-                  circSnap.docs.forEach(d => b2.update(d.ref, {
-                    completado: false, economia_procesada: false,
-                  }));
-                  await b2.commit();
-                  setMsg("Puntos y circuitos reseteados. Resultados conservados.");
-                  setTimeout(() => setMsg(""), 5000);
-                } catch (err: any) {
-                  setMsg("Error reset: " + err.message);
-                } finally {
-                  setResetPointsLoading(false);
-                }
-              }}
-              disabled={resetPointsLoading || !selectedSplitId}
-              className="px-3 py-1 bg-[#e10600]/[0.06] hover:bg-[#e10600]/15 border border-[#e10600]/20 text-[9px] uppercase font-bold tracking-wider text-[#e10600]/60 hover:text-[#e10600] transition-colors disabled:opacity-40 flex items-center gap-1"
-            >
-              {resetPointsLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
-              Reset circuitos
-            </button>
+          <details className="mt-3 rounded-xl border border-white/10 p-3">
+            <summary className="min-h-8 cursor-pointer text-sm font-bold text-white/70">Corregir una carrera o recalcular el split</summary>
+            <p className="mt-2 text-sm text-white/60">Para editar un acta cerrada, revierte primero su economía y después reabre el acta.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {isEconomiaProcesada && <button
+                disabled={revirtiendoEconomia || !esUltimaCarreraProcesada}
+                title={esUltimaCarreraProcesada ? "" : "Hay una carrera posterior con economía procesada: revierte primero esa."}
+                onClick={handleRevertirEconomia}
+                className="min-h-11 rounded-lg border border-orange-500/40 px-3 text-sm font-bold text-orange-300 disabled:opacity-40"
+              >{revirtiendoEconomia ? "Revirtiendo…" : "Revertir economía"}</button>}
+              {isActaCerrada && !isEconomiaProcesada && <button
+                disabled={reabriendoActa} onClick={handleReabrirActa}
+                className="min-h-11 rounded-lg border border-sky-500/40 px-3 text-sm font-bold text-sky-300 disabled:opacity-40"
+              >{reabriendoActa ? "Reabriendo…" : "Reabrir acta"}</button>}
+              {isEditingFinished && (!isEconomiaProcesada || esUltimaCarreraProcesada) && <button
+                disabled={deshaciendoCarrera} onClick={handleDeshacerCarrera}
+                className="min-h-11 rounded-lg border border-red-500/40 px-3 text-sm font-bold text-red-300 disabled:opacity-40"
+              >{deshaciendoCarrera ? "Deshaciendo…" : "Deshacer carrera"}</button>}
             <button
               onClick={async () => {
                 if (!selectedSplitId) return;
@@ -1323,12 +1236,13 @@ export function AdminDashboard() {
               }}
               disabled={recalculandoPuntos || !selectedSplitId}
               title="Rehace puntos, rating y puntos de constructor desde cero a partir de los circuitos que sigan completados. Úsalo si un split se queda con cifras desincronizadas."
-              className="px-3 py-1 bg-sky-500/[0.06] hover:bg-sky-500/15 border border-sky-500/20 text-[9px] uppercase font-bold tracking-wider text-sky-400/70 hover:text-sky-400 transition-colors disabled:opacity-40 flex items-center gap-1"
+              className="min-h-11 rounded-lg border border-sky-500/40 px-3 text-sm font-bold text-sky-300 disabled:opacity-40 flex items-center gap-1"
             >
               {recalculandoPuntos ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
               Recalcular puntos y rating
             </button>
-          </div>
+            </div>
+          </details>
 
           {economiaMsg && (
             <div className="mt-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-sm text-xs text-amber-400 font-mono">

@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, Suspense, lazy } from "react";
-import { Link } from "react-router";
+import { useState, useMemo, useEffect, useRef, Suspense, lazy } from "react";
+import { Link, useSearchParams } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Sun, Moon, Play, Radio, Crown } from "lucide-react";
@@ -37,10 +37,29 @@ function useTheme() {
 
 export function PublicHome() {
   const { user, userData } = useAuth();
-  const { splits, loading } = useSplits();
+  const { splits, loading, error: dataError, fromCache, slow, retry } = useSplits();
   const { usuarios } = useUsuarios();
-  const [activeTab, setActiveTab] = useState<Tab>("clasificacion");
-  const [activeSplitId, setActiveSplitId] = useState<string>("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab: Tab = ["clasificacion", "equipos", "resultados", "paddock", "tv"].includes(requestedTab || "")
+    ? requestedTab as Tab : "clasificacion";
+  const activeSplitId = searchParams.get("temporada") || "";
+  const contentHeading = useRef<HTMLHeadingElement>(null);
+  const setActiveTab = (tab: Tab) => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.set("tab", tab);
+    return next;
+  });
+  const setActiveSplitId = (id: string) => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.set("temporada", id);
+    return next;
+  });
+  useEffect(() => {
+    if (!requestedTab) return;
+    contentHeading.current?.scrollIntoView({ block: "start" });
+    contentHeading.current?.focus({ preventScroll: true });
+  }, [activeTab, requestedTab]);
   const { dark, toggle } = useTheme();
   const [isLive, setIsLive] = useState(false);
 
@@ -139,15 +158,16 @@ export function PublicHome() {
           <span className="font-black tracking-[-0.03em] uppercase text-base truncate">Bugambra</span>
         </div>
 
-        <nav className="hidden md:flex items-center gap-6">
+        <nav aria-label="Secciones de la liga" className="hidden md:flex items-center gap-6">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
+              aria-current={activeTab === t.id ? "page" : undefined}
                 className={`relative py-5 text-[11px] font-black tracking-[0.12em] uppercase transition-colors ${
                 activeTab === t.id
                   ? "text-[#0a0a0a] dark:text-white after:absolute after:bottom-0 after:inset-x-0 after:h-1 after:bg-[#e10600]"
-                  : "text-[#111827]/50 dark:text-white/35 hover:text-[#111827]/80 dark:hover:text-white/70"
+                  : "text-[#111827]/75 dark:text-white/70 hover:text-[#111827] dark:hover:text-white"
               }`}
             >
               {t.label}
@@ -159,7 +179,7 @@ export function PublicHome() {
           <button
             onClick={toggle}
             className="grid h-11 w-11 place-items-center text-[#0a0a0a]/40 dark:text-white/40 hover:text-[#0a0a0a]/80 dark:hover:text-white/80 transition-colors"
-            aria-label="Cambiar tema"
+            aria-label={dark ? "Activar tema claro" : "Activar tema oscuro"}
           >
             {dark ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
           </button>
@@ -194,8 +214,12 @@ export function PublicHome() {
               <p className="mt-3 md:mt-6 max-w-xl text-[13px] md:text-base text-white/60 leading-relaxed">
                 {isHistoricalSplit
                   ? "Resultados, campeones y estadísticas del archivo histórico de la liga."
-                  : "Clasificación, equipos y señal oficial de la liga para seguir cada carrera."}
+                  : "Sigue las carreras, elige tu equipo y comenta la jugada con la parrilla. Puedes explorar la liga sin registrarte."}
               </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button onClick={() => { setActiveTab("resultados"); contentHeading.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-4 text-sm font-bold text-black hover:bg-white/85">Ver resultados →</button>
+                <button onClick={() => setActiveTab("paddock")} className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/30 px-4 text-sm font-bold text-white hover:bg-white/10">Qué se comenta</button>
+              </div>
               {isLive && (
                 <button
                   onClick={() => setActiveTab("tv")}
@@ -231,15 +255,34 @@ export function PublicHome() {
         </div>
       </section>
 
-      <MobileBottomTabs tabs={tabs} activeTab={activeTab} onTab={(id) => setActiveTab(id as Tab)} />
+      <MobileBottomTabs tabs={tabs} activeTab={activeTab} onTab={(id) => setActiveTab(id as Tab)} scrollToTop={false} />
 
       {/* ── CONTENT ── */}
       <main className="relative max-w-[90rem] mx-auto px-3 md:px-10 pt-8 md:py-14 pb-tabbar md:pb-14 safe-x">
-        <div className="rail-title mb-5 md:mb-6">{tabs.find(tab => tab.id === activeTab)?.label}</div>
-        {loading ? (
-          <div className="text-[#0a0a0a]/20 dark:text-white/20 text-xs font-mono tracking-[0.3em] uppercase py-24 text-center">
-            Cargando temporada...
+        <h2 ref={contentHeading} tabIndex={-1} className="rail-title mb-5 md:mb-6 scroll-mt-28">{tabs.find(tab => tab.id === activeTab)?.label}</h2>
+        {activeTab === "clasificacion" && <details className="mb-5 rounded-xl border border-black/15 bg-white/50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+          <summary className="min-h-8 cursor-pointer text-sm font-bold">¿Primera vez? La liga en 30 segundos</summary>
+          <div className="mt-3 grid gap-4 text-sm leading-relaxed text-black/70 dark:text-white/70 sm:grid-cols-3">
+            <p><strong className="block text-black dark:text-white">1. Sigue la competición</strong>Cada split es una etapa de la liga. En Clasificación ves quién lidera; en Resultados, qué pasó en cada carrera.</p>
+            <p><strong className="block text-black dark:text-white">2. Encuentra tu equipo</strong>Los pilotos compiten y los jeques gestionan las escuderías. En Equipos puedes conocer a la parrilla.</p>
+            <p><strong className="block text-black dark:text-white">3. Vive el paddock</strong>Es el muro de la comunidad: bienvenidas, pronósticos y comentarios. <Link to={dashboardLink} className="font-bold text-[#e10600] underline underline-offset-4">{user ? "Ir a mi panel" : "Entrar para participar"}</Link>.</p>
           </div>
+        </details>}
+        {(dataError || (slow && (loading || fromCache))) && (
+          <div role="status" className="mb-6 rounded-xl border border-amber-600/50 bg-amber-100 p-5 text-amber-950 dark:border-amber-300/40 dark:bg-[#302515] dark:text-amber-100">
+            <p className="font-bold">{dataError ? "No se han podido cargar todos los datos" : "No hemos podido confirmar los datos con el servidor"}</p>
+            <p className="mt-2 text-sm">{dataError ? "Comprueba tu conexión y vuelve a intentarlo. Si continúa, contacta con la administración de la liga." : "La conexión está tardando más de lo habitual. Comprueba tu red; la actualización continuará automáticamente."} {validSplits.length > 0 ? "La información visible puede estar incompleta o desactualizada." : "Esto no significa que no haya temporadas."}</p>
+            <button onClick={retry} className="mt-4 min-h-11 rounded-lg bg-amber-950 px-4 text-sm font-bold text-white dark:bg-amber-200 dark:text-amber-950">Reintentar carga</button>
+          </div>
+        )}
+        {loading || (fromCache && validSplits.length === 0 && !dataError && !slow) ? (
+          <div role="status" className="text-black/70 dark:text-white/75 text-sm py-16 text-center">
+            Cargando temporadas y clasificación…
+          </div>
+        ) : (dataError || fromCache) && validSplits.length === 0 ? (
+          <p className="py-8 text-sm text-black/75 dark:text-white/80">Los datos de la liga todavía no están disponibles en este dispositivo.</p>
+        ) : validSplits.length === 0 ? (
+          <p className="py-8 text-sm text-black/75 dark:text-white/80">Todavía no hay temporadas publicadas. Vuelve más adelante.</p>
         ) : (
           <>
             {activeTab === "clasificacion" && (
@@ -396,6 +439,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
               <button
                 key={s.id}
                 onClick={() => onSelectSplit(s.id)}
+                aria-pressed={currentSplitId === s.id}
                 className={`min-h-11 rounded-full md:rounded-none px-4 text-[12px] font-bold md:text-[10px] md:font-black md:tracking-[0.2em] md:uppercase transition-all ${
                   currentSplitId === s.id
                     ? "bg-[#e10600] text-white"
@@ -407,6 +451,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
             ))}
             <button
               onClick={() => onSelectSplit("general")}
+              aria-pressed={currentSplitId === "general"}
               className={`min-h-11 rounded-full md:rounded-none px-4 text-[12px] font-bold md:text-[10px] md:font-black md:tracking-[0.2em] md:uppercase transition-all ${
                 currentSplitId === "general"
                   ? "bg-[#e10600] text-white"

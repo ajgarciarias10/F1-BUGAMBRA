@@ -3,13 +3,14 @@ import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore"
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  SALA_VACIA, adjudicarSubasta, cerrarSala, comenzarTemporada, configurarSala,
+  SALA_VACIA, adjudicarSubasta, cerrarSala, configurarSala,
   deshacerAdjudicacionSimulada, leerEquiposDeSubasta, prorrogarSubasta, pujar,
-  sacarPilotoASubasta, puedePujar,
+  sacarPilotoASubasta, puedePujar, formatearMillones, formatearNumero,
   type EquipoEnSubasta, type SalaSubasta, type TipoOperacion,
 } from "../services/auctionService";
 import { ChevronLeft, ChevronRight, Gavel, Loader2, Timer, Trophy, Users } from "lucide-react";
 import { PilotCardF1 } from "./PilotCardF1";
+import { useConfirm } from "./Feedback";
 
 // La sala de subasta en vivo. El reloj vive en la sala (`termina_en`), así que todos los
 // que miran ven el mismo tiempo restante aunque entren a destiempo.
@@ -24,6 +25,8 @@ interface Puja {
   instante: number;
 }
 
+import { desglosarEspera, parsearImporte, paraInputLocal, segundosRestantes } from "../services/auctionService";
+
 const ANIMACIONES = `
 @keyframes subasta-latido { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 @keyframes subasta-flash  { 0% { opacity: 0; transform: translateY(-6px); } 15% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
@@ -36,41 +39,6 @@ const ANIMACIONES = `
 @keyframes subasta-panel  { 0% { opacity: 0; transform: translateY(26px) scale(0.9) rotate(-1.5deg); } 65% { transform: translateY(-5px) scale(1.015) rotate(0.4deg); } 100% { opacity: 1; transform: none; } }
 @keyframes subasta-cifra  { 0% { transform: scale(1); } 35% { transform: scale(1.22); } 100% { transform: scale(1); } }
 `;
-
-function segundosRestantes(terminaEn: number | null): number {
-  if (terminaEn == null) return 0;
-  return Math.max(0, (terminaEn - Date.now()) / 1000);
-}
-
-function parsearImporte(value: string): number {
-  return Number(value.replace(",", "."));
-}
-
-function formatearNumero(value: number): string {
-  return value.toFixed(1).replace(".", ",");
-}
-
-function formatearMillones(value: number): string {
-  return `${formatearNumero(value)}M`;
-}
-
-// Cuenta atrás hasta la apertura, partida en bloques para que se lea de un vistazo.
-function desglosarEspera(milisegundos: number) {
-  const total = Math.max(0, Math.floor(milisegundos / 1000));
-  return {
-    dias:     Math.floor(total / 86400),
-    horas:    Math.floor((total % 86400) / 3600),
-    minutos:  Math.floor((total % 3600) / 60),
-    segundos: total % 60,
-  };
-}
-
-// `datetime-local` trabaja en hora local y sin zona: hay que quitarle el desfase.
-function paraInputLocal(epoch: number | null): string {
-  if (epoch == null) return "";
-  const fecha = new Date(epoch - new Date(epoch).getTimezoneOffset() * 60000);
-  return fecha.toISOString().slice(0, 16);
-}
 
 export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: string }) {
   const { userData } = useAuth();
@@ -87,6 +55,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const [techo, setTecho] = useState(0);
   const [aviso, setAviso] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
   const [pilotoElegido, setPilotoElegido] = useState("");
   const [tipoElegido, setTipoElegido] = useState<TipoOperacion>("subasta");
   const prorrogasVistas = useRef(0);
@@ -184,8 +153,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const inminente = !mercadoAbierto && faltaParaAbrir <= 60_000;
 
   const miEquipo = miEquipoId ? equipos.find(equipo => equipo.id === miEquipoId) || null : null;
-  const puedoAbrir = !!miEquipo && !miEquipo.completo && sala.estado === "esperando_apertura";
-  const puedoPujar = !!miEquipo && !miEquipo.completo && sala.estado === "en_curso";
+  const puedoAbrir = !!miEquipo && sala.estado === "esperando_apertura";
+  const puedoPujar = !!miEquipo && sala.estado === "en_curso";
   const soyPujadorMax = !!miEquipoId && sala.puja_equipo_id === miEquipoId;
 
   const duracionTotal = Math.max(1, sala.duracion_segundos);
@@ -250,9 +219,15 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
   const adjudicarAhora = async () => {
     const detalle = sala.estado === "en_curso" && restante > 0
-      ? ` Quedan ${restante.toFixed(1)} segundos.`
-      : "";
-    if (!window.confirm(`¿Adjudicar la subasta ahora?${detalle}`)) return;
+      ? `Aún quedan ${restante.toFixed(1)} segundos de puja.`
+      : "El reloj ya se ha agotado.";
+    const ok = await confirm({
+      title: "Adjudicar la subasta",
+      body: `${detalle} ${sala.pilotoNombre || "El piloto"} se irá a ${sala.puja_equipo_nombre || "nadie, quedará desierta"}${sala.puja_actual != null ? ` por ${sala.puja_actual}M` : ""}.`,
+      confirmLabel: "Adjudicar",
+      tone: "peligro",
+    });
+    if (!ok) return;
     setOcupado(true);
     try {
       const resultado = await adjudicarSubasta(splitId, true);
@@ -266,17 +241,6 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     setOcupado(true);
     try {
       const resultado = await deshacerAdjudicacionSimulada(splitId);
-      setAviso(resultado.message);
-    } finally {
-      setOcupado(false);
-    }
-  };
-
-  const iniciarTemporada = async () => {
-    if (!window.confirm(`¿Comenzar ${split?.nombre || splitId}? Se cerrará el mercado y se desactivarán los demás splits.`)) return;
-    setOcupado(true);
-    try {
-      const resultado = await comenzarTemporada(splitId);
       setAviso(resultado.message);
     } finally {
       setOcupado(false);
@@ -435,11 +399,6 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               disabled={ocupado || sala.estado !== "en_curso" || sala.prorroga_segundos <= 0}
               className="border border-amber-300/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-30">
               Dar prórroga +{sala.prorroga_segundos}s
-            </button>
-            <button onClick={iniciarTemporada}
-              disabled={ocupado || !!split?.temporada_iniciada || sala.estado === "en_curso" || sala.estado === "esperando_apertura" || sala.simulacion_reversiones.length > 0}
-              className="border border-sky-300/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-30">
-              {split?.temporada_iniciada ? "Temporada iniciada" : `Comenzar ${split?.nombre || "temporada"}`}
             </button>
             {sala.simulacion_reversiones.length > 0 && (
               <button onClick={deshacerSimulacion} disabled={ocupado}
@@ -795,19 +754,19 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
             <div key={equipo.id}
               className={`border px-3 py-1.5 text-[9px] font-mono ${
                 equipo.id === sala.puja_equipo_id ? "border-amber-300/50 text-amber-300"
-                : equipo.completo ? "border-white/[0.06] text-white/20"
                 : "border-white/[0.08] text-white/45"
               }`}>
               <span className="font-bold uppercase tracking-wider">{equipo.nombre}</span>
               <span className="ml-2 tabular-nums">{formatearMillones(equipo.presupuesto)}</span>
               <span className="ml-2 inline-flex items-center gap-1 text-white/25">
-                <Users className="w-2.5 h-2.5" />{equipo.plantilla}/{sala.plazas_por_equipo}
-              </span>
-              {equipo.completo && <span className="ml-2 text-[#e10600]/70 uppercase">completa</span>}
+                 <Users className="w-2.5 h-2.5" />{equipo.plantilla} pilotos
+               </span>
             </div>
           ))}
         </div>
       )}
+
+      {confirmDialog}
     </section>
   );
 }

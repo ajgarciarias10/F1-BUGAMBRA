@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarPlus, Loader2, Lock } from "lucide-react";
+import { CalendarPlus, Loader2 } from "lucide-react";
 import {
-  cerrarSplitYAbrirMercado, contarCarrerasPrevias, crearSplit, leerCierreDeSplit, slug,
+  contarCarrerasPrevias, crearSplit, leerCierreDeSplit, slug,
   type ConfigNuevoSplit, type Destino, type EquipoAnterior, type FichaAnterior,
 } from "../services/splitBuilder";
 import type { TipoFichaje } from "../types";
@@ -11,7 +11,7 @@ import type { TipoFichaje } from "../types";
 
 type Modo = "siguiente" | "temporada";
 
-export function SplitBuilderPanel({ splits }: { splits: any[] }) {
+export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?: () => void }) {
   const bloques = useMemo(() => [...splits]
     .filter((s: any) => s.id !== "global" && s.tipo !== "individual")
     .sort((a: any, b: any) => Number(a.orden ?? 999) - Number(b.orden ?? 999)), [splits]);
@@ -103,9 +103,13 @@ export function SplitBuilderPanel({ splits }: { splits: any[] }) {
     const repetidos = listaCircuitos.map(slug).filter((s, i, a) => a.indexOf(s) !== i);
     if (repetidos.length) { add(`⚠ Circuitos repetidos: ${repetidos.join(", ")}.`); return; }
 
+    if (splits.some(split => split.id === splitId)) {
+      add("⚠ Ese split ya existe. Elige un identificador nuevo para preparar el siguiente.");
+      return;
+    }
+
     if (!confirm(
       `Se va a crear ${nombre} (${splitId}) con ${listaCircuitos.length} carreras.\n\n` +
-      `REEMPLAZA por completo lo que haya ahora en ${splitId}.\n` +
       (cerrarAnterior && anteriorId ? `Además cierra ${anteriorId}.\n` : "") +
       "\n¿Continuar?"
     )) return;
@@ -123,17 +127,11 @@ export function SplitBuilderPanel({ splits }: { splits: any[] }) {
       presupuestoDeArranque: modo === "temporada" ? Number(presupuestoArranque) || 0 : null,
       activo, fichajesAbiertos, cerrarAnterior,
     };
-    await crearSplit(config, add);
-    setTrabajando(false);
-  };
-
-  const soloCerrar = async () => {
-    if (!anteriorId) return;
-    if (!confirm(`Cerrar ${anteriorId} y abrir su mercado de fichajes. ¿Continuar?`)) return;
-    setTrabajando(true);
-    const resultado = await cerrarSplitYAbrirMercado(anteriorId, anteriorId);
-    setLog([resultado.message]);
-    setTrabajando(false);
+    try {
+      await crearSplit(config, add);
+    } catch (error: any) {
+      add(`Error: ${error.message}`);
+    } finally { setTrabajando(false); }
   };
 
   const campo = "bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]";
@@ -144,14 +142,12 @@ export function SplitBuilderPanel({ splits }: { splits: any[] }) {
       <div className="flex items-start gap-3">
         <div className="p-2 bg-emerald-500/10 text-emerald-300"><CalendarPlus className="w-5 h-5" /></div>
         <div>
-          <h2 className="font-black uppercase tracking-tight text-lg">Cerrar bloque y abrir el siguiente</h2>
+          <h2 className="font-black uppercase tracking-tight text-lg">Preparar un nuevo split</h2>
           <p className="text-xs text-white/45 mt-1 max-w-2xl">
-            Hereda saldos y overall del bloque anterior, coloca las operaciones de mercado ya
-            cerradas y manda al resto a la puja. Sirve igual para el split siguiente o para
-            arrancar temporada nueva. Nadie continúa por defecto: un equipo pierde al piloto que
-            no fiche.
+            Elige los circuitos y las plantillas iniciales. Puedes heredar los saldos del split anterior o arrancar una temporada nueva.
           </p>
         </div>
+        {onClose && <button type="button" onClick={onClose} disabled={trabajando} className="ml-auto min-h-11 shrink-0 rounded-lg border border-white/20 px-3 text-sm font-bold disabled:opacity-40">Cerrar preparación</button>}
       </div>
 
       {/* ── Qué se va a crear ── */}
@@ -313,11 +309,6 @@ export function SplitBuilderPanel({ splits }: { splits: any[] }) {
           className="inline-flex items-center gap-2 border border-emerald-400/40 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-300 disabled:opacity-30">
           {trabajando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarPlus className="w-3.5 h-3.5" />}
           Crear {nombre || "el split"}
-        </button>
-        <button onClick={soloCerrar} disabled={trabajando || !anteriorId}
-          className="inline-flex items-center gap-2 border border-white/15 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white/50 disabled:opacity-30">
-          <Lock className="w-3.5 h-3.5" />
-          Solo cerrar y abrir mercado
         </button>
       </div>
 

@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Link } from "react-router";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
@@ -45,6 +47,7 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
             <button
               key={split.id}
               onClick={() => onSelectSplit(split.id)}
+              aria-pressed={currentSplitId === split.id}
               className={`min-h-11 shrink-0 rounded-full md:rounded-none px-4 text-[12px] font-bold md:py-3 md:text-[10px] md:font-black md:uppercase md:tracking-[0.18em] transition-colors ${
                 currentSplitId === split.id
                   ? "bg-[#e10600] text-white"
@@ -60,7 +63,7 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
       {circuitos.length === 0 ? (
         <div className="border border-dashed border-black/10 dark:border-white/10 py-16 text-center">
           <Trophy className="w-6 h-6 mx-auto text-black/15 dark:text-white/15" />
-          <p className="mt-3 text-[10px] font-mono uppercase tracking-[0.3em] text-black/25 dark:text-white/25">Todavía no hay carreras cerradas en {currentSplit?.nombre}</p>
+          <p className="mt-3 text-sm text-black/70 dark:text-white/75">Todavía no hay carreras cerradas en {currentSplit?.nombre}. Puedes consultar otra temporada.</p>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -132,6 +135,20 @@ function RaceDetailModal({
   const [votando, setVotando] = useState<string | null>(null);
   const [cerrando, setCerrando] = useState(false);
   const [ganadorElegido, setGanadorElegido] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const previousOverflow = document.body.style.overflow;
+    dialog?.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog?.close();
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   // Vivo, directo al doc: así cada voto se ve al instante sin releer todo el split.
   useEffect(() => {
@@ -154,10 +171,14 @@ function RaceDetailModal({
   const propuesto = Object.entries(conteos).sort((a, b) => b[1] - a[1])[0]?.[0];
 
   const votar = async (pilotoId: string) => {
-    if (!uid) return;
+    if (!uid || votando || cerrando) return;
+    setActionError(""); setActionMessage("");
     setVotando(pilotoId);
     try {
       await votarPilotoDelDia(splitId, circuitoBase.id, uid, pilotoId);
+      setActionMessage("Tu voto se ha guardado.");
+    } catch {
+      setActionError("No se ha podido guardar tu voto. Comprueba tu conexión y vuelve a intentarlo.");
     } finally {
       setVotando(null);
     }
@@ -165,21 +186,25 @@ function RaceDetailModal({
 
   const cerrarVotacion = async () => {
     const ganador = ganadorElegido || propuesto;
-    if (!ganador) return;
+    if (!ganador || cerrando || votando) return;
+    setActionError(""); setActionMessage("");
     setCerrando(true);
     try {
       await cerrarVotacionPilotoDelDia(splitId, circuitoBase.id, ganador);
+      setActionMessage("La votación se ha cerrado y el ganador se ha guardado.");
+    } catch {
+      setActionError("No se ha podido cerrar la votación. Comprueba la conexión y tus permisos antes de volver a intentarlo.");
     } finally {
       setCerrando(false);
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/85 z-50 overflow-y-auto overscroll-contain p-0 md:p-6 text-left backdrop-blur-sm" onClick={onClose}>
+  return createPortal(
+    <dialog ref={dialogRef} aria-labelledby="race-detail-title" onCancel={event => { event.preventDefault(); onClose(); }} className="fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-black/85 overflow-y-auto overscroll-contain p-0 md:p-6 text-left backdrop:bg-black/70" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl border-white/[0.08] bg-[#0d0d0d] p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} aria-label="Cerrar" className="sticky top-[max(0.5rem,env(safe-area-inset-top))] z-10 -mr-1 ml-auto grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-[#0d0d0d] text-white/60 hover:text-white md:absolute md:top-4 md:right-4 md:ml-0">✕</button>
         <p className="text-[11px] font-bold text-[#e10600] md:font-mono md:text-[9px] md:uppercase md:tracking-[0.35em]">Resultados · {currentSplit?.nombre}</p>
-        <h2 className="mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] text-white">{circuito.nombre}</h2>
+        <h2 id="race-detail-title" className="mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] text-white">{circuito.nombre}</h2>
 
         {/* ── Podio ── */}
         {/* Podio de verdad: el segundo a la izquierda, el ganador en el centro y
@@ -240,7 +265,7 @@ function RaceDetailModal({
         <div className="mt-6 border-t border-white/[0.08] pt-5">
           <div className="flex items-center gap-2 mb-3">
             <Crown className="w-4 h-4 text-amber-400" />
-            <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Piloto del día</span>
+            <span className="text-sm font-semibold text-white/80">Piloto del día</span>
           </div>
 
           {circuito.piloto_dia_cerrado && circuito.piloto_dia_ganador ? (
@@ -271,15 +296,19 @@ function RaceDetailModal({
             </div>
           ) : (
             <>
+              {!uid && <p className="mb-4 text-sm text-white/80"><Link to="/login" className="font-semibold text-amber-300 underline underline-offset-4">Inicia sesión para votar</Link>. Puedes consultar los votos sin entrar.</p>}
+              {actionError && <p role="alert" className="mb-4 rounded-lg border border-red-300/40 bg-red-500/10 p-3 text-sm text-red-200">{actionError}</p>}
+              {actionMessage && <p role="status" className="mb-4 text-sm text-emerald-300">{actionMessage}</p>}
               <div className="grid gap-2 sm:grid-cols-2">
                 {candidatos.map(r => {
                   const seleccionado = miVoto === r.pilotoId;
                   return (
                     <button
                       key={r.pilotoId}
-                      disabled={!uid || votando === r.pilotoId}
+                      disabled={!uid || !!votando || cerrando}
+                      aria-pressed={seleccionado}
                       onClick={() => votar(r.pilotoId)}
-                      className={`m-row flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:opacity-40 md:rounded-none ${
+                      className={`m-row flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-default md:rounded-none ${
                         seleccionado ? "border-amber-400/50 bg-amber-400/[0.08]" : "border-white/10 bg-white/[0.02] hover:border-amber-400/30 active:bg-white/[0.06]"
                       }`}
                     >
@@ -287,16 +316,16 @@ function RaceDetailModal({
                         {votando === r.pilotoId ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white/40 shrink-0" /> : <Users className="w-3.5 h-3.5 text-white/25 shrink-0" />}
                         <span className="truncate text-sm font-bold uppercase tracking-tight text-white">{nombreDe(currentSplit, r.pilotoId)}</span>
                       </span>
-                      <span className="text-[10px] font-mono text-white/40 shrink-0">{conteos[r.pilotoId] || 0}</span>
+                      <span className="text-xs text-white/75 shrink-0">{conteos[r.pilotoId] || 0} votos</span>
                     </button>
                   );
                 })}
               </div>
-              {!uid && <p className="mt-2 text-[10px] font-mono uppercase tracking-[0.22em] text-white/25">Inicia sesión para votar</p>}
 
               {isAdmin && (
                 <div className="mt-4 flex flex-col gap-2 border-t border-white/[0.06] pt-4 sm:flex-row sm:flex-wrap sm:items-center">
                   <select
+                    aria-label="Ganador de la votación"
                     value={ganadorElegido}
                     onChange={e => setGanadorElegido(e.target.value)}
                     className="min-h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-amber-400 sm:min-h-0 sm:w-auto sm:rounded-none sm:py-2 sm:text-xs"
@@ -308,7 +337,7 @@ function RaceDetailModal({
                   </select>
                   <button
                     onClick={cerrarVotacion}
-                    disabled={cerrando || (!ganadorElegido && !propuesto)}
+                    disabled={cerrando || !!votando || (!ganadorElegido && !propuesto)}
                     className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-bold text-black disabled:opacity-40 sm:min-h-0 sm:rounded-none sm:py-2 sm:text-[10px] sm:font-black sm:uppercase sm:tracking-wider"
                   >
                     {cerrando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -330,6 +359,6 @@ function RaceDetailModal({
           </div>
         )}
       </div>
-    </div>
+    </dialog>, document.body
   );
 }
