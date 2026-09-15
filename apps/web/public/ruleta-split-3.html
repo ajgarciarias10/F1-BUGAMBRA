@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ruleta de entrevistas · Split 3</title>
+  <style>
+    :root { color-scheme: dark; --red: #e10600; --ink: #0b0c10; --muted: #9ca3af; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% -10%, #27303d 0, #11141b 38%, var(--ink) 75%); color: #f8fafc; font: 15px/1.45 Arial, Helvetica, sans-serif; }
+    main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0 56px; }
+    header { border-bottom: 1px solid #ffffff1c; margin-bottom: 28px; padding-bottom: 22px; }
+    .eyebrow { color: #ff554d; font: 700 11px/1.2 monospace; letter-spacing: .28em; text-transform: uppercase; }
+    h1 { margin: 8px 0 6px; font-size: clamp(28px, 5vw, 52px); letter-spacing: -.06em; text-transform: uppercase; }
+    header p { color: var(--muted); margin: 0; max-width: 620px; }
+    .teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; }
+    .team { overflow: hidden; border: 1px solid #ffffff1c; background: #12151b; box-shadow: 0 18px 45px #0008; }
+    .team-head { padding: 18px 18px 14px; border-bottom: 1px solid #ffffff12; }
+    .team-head h2 { margin: 4px 0 0; font-size: 24px; letter-spacing: -.04em; text-transform: uppercase; }
+    .team-head span { color: #ffffff66; font: 10px monospace; letter-spacing: .18em; text-transform: uppercase; }
+    .wheel-area { display: grid; place-items: center; padding: 25px 18px 18px; background: linear-gradient(145deg, #ffffff05, transparent); }
+    .wheel-wrap { position: relative; width: min(250px, 75vw); aspect-ratio: 1; }
+    .wheel { width: 100%; height: 100%; border: 7px solid #252a34; border-radius: 50%; background: #252a34; box-shadow: 0 0 0 2px #ffffff12, 0 12px 28px #000b; transition: transform 4s cubic-bezier(.12,.75,.18,1); }
+    .wheel::after { content: ""; position: absolute; inset: 38%; border: 5px solid #ffffff30; border-radius: 50%; background: #11141b; box-shadow: 0 0 0 5px #0008; }
+    .pointer { position: absolute; z-index: 2; top: -13px; left: 50%; width: 0; height: 0; transform: translateX(-50%); border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 28px solid var(--red); filter: drop-shadow(0 3px 2px #000); }
+    .result { min-height: 54px; padding: 12px 18px; border-top: 1px solid #ffffff12; color: #ffffffb3; text-align: center; }
+    .result strong { display: block; color: #fff; font-size: 19px; text-transform: uppercase; }
+    button { width: calc(100% - 36px); margin: 0 18px 18px; padding: 13px 16px; border: 0; border-radius: 2px; background: var(--red); color: #fff; cursor: pointer; font: 800 11px monospace; letter-spacing: .16em; text-transform: uppercase; transition: background .2s, transform .2s; }
+    button:hover { background: #ff241c; transform: translateY(-1px); }
+    button:disabled { cursor: wait; opacity: .55; transform: none; }
+    .pilot-list { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 18px 18px; }
+    .pilot { padding: 6px 9px; border: 1px solid #ffffff1c; color: #ffffff9c; font-size: 12px; }
+    footer { margin-top: 28px; color: #ffffff42; font: 10px monospace; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
+    @media (max-width: 500px) { main { width: min(100% - 20px, 1180px); padding-top: 26px; } .teams { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">F1 Bugambra · herramienta de entrevista</div>
+      <h1>Ruleta del Split 3</h1>
+      <p>Una ruleta independiente por equipo. Pulsa el botón de la escudería para elegir al piloto de la siguiente pregunta.</p>
+    </header>
+    <section id="teams" class="teams" aria-live="polite"></section>
+    <footer>Split 3 · Alfa Romero · Roses · Zenith</footer>
+  </main>
+  <script>
+    const teams = [
+      { name: "Alfa Romero", pilots: ["Carlos", "Dani", "Mimic", "Pinilla"], colors: ["#e10600", "#f28c28", "#283593", "#16803c"] },
+      { name: "Roses", pilots: ["Aparicio", "Jose", "Jota", "Mesa"], colors: ["#e10600", "#7c3aed", "#0891b2", "#be185d"] },
+      { name: "Zenith", pilots: ["Fabi", "Moles", "Pabliyo"], colors: ["#e10600", "#2563eb", "#d97706"] }
+    ];
+
+    const root = document.querySelector("#teams");
+    const escapeHtml = value => value.replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
+
+    teams.forEach((team, teamIndex) => {
+      const size = 360 / team.pilots.length;
+      const stops = team.pilots.map((_, index) => `${team.colors[index]} ${index * size}deg ${(index + 1) * size}deg`).join(", ");
+      const card = document.createElement("article");
+      card.className = "team";
+      card.innerHTML = `
+        <div class="team-head"><span>Escudería ${String(teamIndex + 1).padStart(2, "0")} · ${team.pilots.length} pilotos</span><h2>${escapeHtml(team.name)}</h2></div>
+        <div class="wheel-area"><div class="wheel-wrap"><div class="pointer" aria-hidden="true"></div><div class="wheel" style="background: conic-gradient(${stops})" aria-label="Ruleta de ${escapeHtml(team.name)}"></div></div></div>
+        <div class="result">Pulsa para elegir un piloto<strong>Listos para la entrevista</strong></div>
+        <div class="pilot-list">${team.pilots.map(pilot => `<span class="pilot">${escapeHtml(pilot)}</span>`).join("")}</div>
+        <button type="button">Girar ruleta</button>`;
+      const wheel = card.querySelector(".wheel");
+      const result = card.querySelector(".result");
+      const button = card.querySelector("button");
+      let rotation = 0;
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        const winner = Math.floor(Math.random() * team.pilots.length);
+        rotation += 1440 + (360 - (winner * size + size / 2)) + Math.random() * (size * .6 - size * .3);
+        wheel.style.transform = `rotate(${rotation}deg)`;
+        result.innerHTML = "La ruleta está girando...<strong>Preparando pregunta</strong>";
+        window.setTimeout(() => {
+          result.innerHTML = `Piloto seleccionado<strong>${escapeHtml(team.pilots[winner])}</strong>`;
+          button.disabled = false;
+        }, 4100);
+      });
+      root.appendChild(card);
+    });
+  </script>
+</body>
+</html>
