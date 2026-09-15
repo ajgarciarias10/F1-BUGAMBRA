@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Image, Loader2, Trash2 } from "lucide-react";
 import { StorageImageUpload } from "./StorageImageUpload";
-import { aprobarBienvenidas, borrarMensajesDeSplit, leerBienvenidas, marcarEquipoCompleto, publicarBienvenida, type PaddockWelcomeTeam } from "../services/paddockAdminService";
+import { aprobarBienvenidas, borrarMensajePaddock, borrarMensajesDeSplit, leerBienvenidas, leerMensajesPaddock, marcarEquipoCompleto, publicarBienvenida, type PaddockPostAdmin, type PaddockWelcomeTeam } from "../services/paddockAdminService";
 
 export function PaddockAdminPanel({ splits }: { splits: any[] }) {
   const [splitId, setSplitId] = useState(splits.find(split => split.id === "split_3")?.id || splits.find(split => split.id !== "global")?.id || "");
@@ -11,6 +11,7 @@ export function PaddockAdminPanel({ splits }: { splits: any[] }) {
   const [aprobado, setAprobado] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [posts, setPosts] = useState<PaddockPostAdmin[]>([]);
 
   const load = async () => {
     if (!splitId) return;
@@ -22,6 +23,20 @@ export function PaddockAdminPanel({ splits }: { splits: any[] }) {
     } catch (error: any) { setMessage(error.message); } finally { setBusy(""); }
   };
   useEffect(() => { void load(); }, [splitId]);
+
+  useEffect(() => {
+    void leerMensajesPaddock().then(setPosts).catch(error => setMessage(error.message));
+  }, []);
+
+  const removePost = async (post: PaddockPostAdmin) => {
+    if (!confirm(`¿Borrar el mensaje de ${post.author}? Esta acción no se puede deshacer.`)) return;
+    setBusy(`borrando-${post.id}`);
+    try {
+      await borrarMensajePaddock(post.id);
+      setPosts(current => current.filter(item => item.id !== post.id));
+      setMessage("Mensaje borrado.");
+    } catch (error: any) { setMessage(error.message); } finally { setBusy(""); }
+  };
 
   const approve = async () => {
     if (!completa || !confirm("¿Dar el OK completo y permitir publicar las bienvenidas?")) return;
@@ -44,6 +59,20 @@ export function PaddockAdminPanel({ splits }: { splits: any[] }) {
     </div>
     <p className="text-xs text-white/50">Las plantillas completas se revisan aquí. Nada se publica automáticamente. Primero da el OK completo y después publica cada comentario con su foto.</p>
     {message && <p className="border border-white/10 px-3 py-2 text-xs text-amber-300">{message}</p>}
+    <div className="space-y-3 border border-white/10 p-4">
+      <div>
+        <h2 className="font-black text-white">Mensajes del paddock</h2>
+        <p className="mt-1 text-xs text-white/50">Borra cualquier publicación individual con el botón.</p>
+      </div>
+      {posts.length === 0 ? <p className="text-xs text-white/40">No hay mensajes publicados.</p> : posts.map(post => <article key={post.id} className="flex items-start justify-between gap-3 border-t border-white/10 pt-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black text-white">{post.author}</p>
+          <p className="mt-1 whitespace-pre-wrap break-words text-xs text-white/60">{post.text || "(Publicación con imagen o vídeo)"}</p>
+          <time className="mt-1 block text-[10px] font-mono text-white/30">{new Date(post.createdAt).toLocaleString("es-ES")}</time>
+        </div>
+        <button onClick={() => void removePost(post)} disabled={!!busy} className="inline-flex shrink-0 items-center gap-1 border border-red-400/30 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-red-300 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" /> Borrar</button>
+      </article>)}
+    </div>
     <div className="flex flex-wrap gap-2">
       <button onClick={approve} disabled={!completa || aprobado || !!busy} className="inline-flex items-center gap-2 bg-emerald-500 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-40"><CheckCircle2 className="h-3.5 w-3.5" /> {aprobado ? "OK completo dado" : "Dar OK completo"}</button>
       <button onClick={removeSplit3} disabled={!!busy} className="inline-flex items-center gap-2 border border-red-400/30 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-red-300 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" /> Borrar mensajes Split 3</button>

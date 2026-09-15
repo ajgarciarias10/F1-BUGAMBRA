@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, runTransaction, serverTimestamp, writeBatch } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, orderBy, query, runTransaction, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 import { marketCompletion, type MarketPilot } from "../utils/marketLifecycle";
 
@@ -92,4 +92,22 @@ export async function borrarMensajesDeSplit(splitId: string) {
   matches.forEach(post => batch.delete(post.ref));
   await batch.commit();
   return matches.length;
+}
+
+export interface PaddockPostAdmin {
+  id: string;
+  author: string;
+  authorId?: string;
+  text: string;
+  createdAt: string;
+  kind?: string;
+}
+
+export async function leerMensajesPaddock(): Promise<PaddockPostAdmin[]> {
+  const snapshot = await getDocs(query(collection(db, "paddock_posts"), orderBy("createdAt", "desc")));
+  return snapshot.docs.map(item => ({ id: item.id, ...item.data() })) as PaddockPostAdmin[];
+}
+
+export async function borrarMensajePaddock(postId: string) {
+  await deleteDoc(doc(db, "paddock_posts", postId));
 }
