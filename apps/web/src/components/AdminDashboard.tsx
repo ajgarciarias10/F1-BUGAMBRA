@@ -93,6 +93,8 @@ export function AdminDashboard() {
   const [savingLogo, setSavingLogo] = useState<string | null>(null);
   const [photoEdits, setPhotoEdits] = useState<Record<string, string>>({});
   const [savingPhoto, setSavingPhoto] = useState<string | null>(null);
+  const [jequePhotoEdits, setJequePhotoEdits] = useState<Record<string, string>>({});
+  const [savingJequePhoto, setSavingJequePhoto] = useState<string | null>(null);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -161,6 +163,7 @@ export function AdminDashboard() {
   useEffect(() => {
     setLogoEdits({});
     setPhotoEdits({});
+    setJequePhotoEdits({});
   }, [selectedSplitId]);
 
   const handleSaveTeamLogo = async (teamId: string, logoUrl: string) => {
@@ -202,6 +205,20 @@ export function AdminDashboard() {
       setMsg("Error foto: " + err.message);
     } finally {
       setSavingPhoto(null);
+    }
+  };
+
+  const handleSaveJequePhoto = async (uid: string, photoUrl: string) => {
+    setSavingJequePhoto(uid);
+    try {
+      await updateDoc(doc(db, "usuarios", uid), { foto_url: photoUrl.trim() || null });
+      setJequePhotoEdits(prev => { const next = { ...prev }; delete next[uid]; return next; });
+      setMsg("Foto de jeque actualizada.");
+      setTimeout(() => setMsg(""), 2500);
+    } catch (err: any) {
+      setMsg("Error foto: " + err.message);
+    } finally {
+      setSavingJequePhoto(null);
     }
   };
 
@@ -897,12 +914,62 @@ export function AdminDashboard() {
                     </div>
                   );
                 })}
-              {(currentRawSplit?.roster || []).length === 0 && (
-                <p className="text-[9px] font-mono text-white/15">Sin pilotos en este split</p>
-              )}
-            </div>
+             {(currentRawSplit?.roster || []).length === 0 && (
+               <p className="text-[9px] font-mono text-white/15">Sin pilotos en este split</p>
+             )}
+             </div>
 
-          </details>
+             {/* Fotos de jeques */}
+             <div className="space-y-1.5">
+               <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Fotos de jeques</p>
+               <p className="mb-3 text-[10px] text-white/35">Estas fotos aparecerán junto a los pilotos en la sección Equipos.</p>
+               {(usuarios || [])
+                 .filter((usuario: any) => usuario.rol === "jeque")
+                 .slice()
+                 .sort((a: any, b: any) => (a.nombre || "").localeCompare(b.nombre || ""))
+                 .map((jeque: any) => {
+                   const currentPhoto = jeque.foto_url || "";
+                   const editVal = jequePhotoEdits[jeque.uid] ?? currentPhoto;
+                   const isSaving = savingJequePhoto === jeque.uid;
+                   const team = (currentRawSplit?.equipos || []).find((item: any) => item.id === jeque.escuderia_id);
+                   return (
+                     <div key={jeque.uid} className="flex items-center gap-2">
+                       <div className="w-8 h-8 rounded-full overflow-hidden border border-amber-300/20 shrink-0 bg-white/[0.02] flex items-center justify-center">
+                         {editVal ? <img src={editVal} alt="" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-white/10" />}
+                       </div>
+                       <div className="w-32 shrink-0 min-w-0">
+                         <span className="block truncate text-[10px] text-white/60 font-mono">{jeque.nombre || "Sin nombre"}</span>
+                         <span className="block truncate text-[9px] text-amber-200/45">{team?.nombre || jeque.escuderia_id || "Sin escudería"}</span>
+                       </div>
+                       <StorageImageUpload
+                         storagePath={`fotos/jeques/${jeque.uid}`}
+                         currentUrl={editVal || undefined}
+                         onUpload={url => handleSaveJequePhoto(jeque.uid, url)}
+                         size="sm"
+                       />
+                       <input
+                         type="url"
+                         value={editVal}
+                         onChange={event => setJequePhotoEdits(prev => ({ ...prev, [jeque.uid]: event.target.value }))}
+                         placeholder="o pega URL aquí"
+                         className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                       />
+                       <button
+                         onClick={() => handleSaveJequePhoto(jeque.uid, editVal)}
+                         disabled={isSaving}
+                         className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                       >
+                         {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
+                       </button>
+                     </div>
+                   );
+                 })}
+               {(usuarios || []).filter((usuario: any) => usuario.rol === "jeque").length === 0 && (
+                 <p className="text-[9px] font-mono text-white/15">Sin jeques registrados</p>
+               )}
+             </div>
+
+           </details>
             {!isSelectedSplitInitialized && selectedSplitId !== "split_1" && (
               <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div>

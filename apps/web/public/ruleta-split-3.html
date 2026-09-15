@@ -8,6 +8,12 @@
     :root { color-scheme: dark; --red: #e10600; --ink: #0b0c10; --muted: #9ca3af; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% -10%, #27303d 0, #11141b 38%, var(--ink) 75%); color: #f8fafc; font: 15px/1.45 Arial, Helvetica, sans-serif; }
+    body:not(.authorized) main { display: none; }
+    .auth-gate { display: grid; min-height: 100vh; place-items: center; padding: 24px; text-align: center; }
+    .auth-box { width: min(420px, 100%); border: 1px solid #ffffff1c; background: #12151b; padding: 28px; box-shadow: 0 18px 45px #0008; }
+    .auth-box h1 { margin: 8px 0; font-size: 25px; letter-spacing: -.04em; text-transform: uppercase; }
+    .auth-box p { color: var(--muted); }
+    .auth-box a { display: inline-block; margin-top: 12px; padding: 12px 16px; background: var(--red); color: #fff; font: 800 11px monospace; letter-spacing: .12em; text-decoration: none; text-transform: uppercase; }
     main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0 56px; }
     header { border-bottom: 1px solid #ffffff1c; margin-bottom: 28px; padding-bottom: 22px; }
     .eyebrow { color: #ff554d; font: 700 11px/1.2 monospace; letter-spacing: .28em; text-transform: uppercase; }
@@ -36,6 +42,7 @@
   </style>
 </head>
 <body>
+  <div id="auth-gate" class="auth-gate"><div class="auth-box"><div class="eyebrow">F1 Bugambra · acceso privado</div><h1>Ruleta de entrevistas</h1><p>Esta herramienta es privada. Inicia sesión con tu cuenta autorizada para continuar.</p><a href="/login?redirect=/ruleta-split-3.html">Ir al acceso</a></div></div>
   <main>
     <header>
       <div class="eyebrow">F1 Bugambra · herramienta de entrevista</div>
@@ -45,7 +52,29 @@
     <section id="teams" class="teams" aria-live="polite"></section>
     <footer>Split 3 · Alfa Romero · Roses · Zenith</footer>
   </main>
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+
+    const firebaseApp = initializeApp({
+      apiKey: "AIzaSyDROC-k5p-43Q3CRTdwLwleyjfHkxsq9nA",
+      authDomain: "gen-lang-client-0829043813.firebaseapp.com",
+      projectId: "gen-lang-client-0829043813",
+      appId: "1:305166080728:web:43bf3c77c5148ed68d55ad"
+    });
+    const auth = getAuth(firebaseApp);
+    const privateEmail = "ajgarciarias@gmail.com";
+    const gate = document.querySelector("#auth-gate");
+    onAuthStateChanged(auth, user => {
+      if (user?.email?.toLowerCase() === privateEmail) {
+        document.body.classList.add("authorized");
+        gate.remove();
+      } else {
+        document.body.classList.remove("authorized");
+        gate.querySelector("p").textContent = user ? "Esta cuenta no tiene permiso para abrir la ruleta." : "Inicia sesión con tu cuenta autorizada para continuar.";
+      }
+    });
+
     const teams = [
       { name: "Alfa Romero", pilots: [{ id: "piloto_carlos", name: "Carlos" }, { id: "piloto_dani", name: "Dani" }, { id: "piloto_mimic", name: "Mimic" }, { id: "piloto_pinilla", name: "Pinilla" }], colors: ["#e10600", "#f28c28", "#283593", "#16803c"] },
       { name: "Roses", pilots: [{ id: "piloto_aparicio", name: "Aparicio" }, { id: "piloto_jose", name: "Jose" }, { id: "piloto_jota", name: "Jota" }, { id: "piloto_mesa", name: "Mesa" }], colors: ["#e10600", "#7c3aed", "#0891b2", "#be185d"] },
