@@ -63,7 +63,7 @@ service cloud.firestore {
              data.uid is string && data.uid.size() <= 128 &&
              data.nombre is string && data.nombre.size() <= 100 &&
              data.email is string && data.email.size() <= 150 &&
-             data.rol is string && data.rol.matches('^(admin|usuario|invitado|jeque|piloto)$');
+             data.rol is string && data.rol.matches('^(admin|usuario|invitado|jeque|director_deportivo|piloto)$');
       // Financials and stats are optional or initialized to baseline values.
     }
 

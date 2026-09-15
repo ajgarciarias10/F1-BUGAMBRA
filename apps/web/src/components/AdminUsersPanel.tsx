@@ -23,8 +23,8 @@ export function AdminUsersPanel() {
     setSavingUid(uid);
     setMessage("");
     try {
-      if (rol === "jeque" && !equipoId) {
-        throw new Error("Asigna una escudería al jeque para que pueda operar y pujar.");
+       if ((rol === "jeque" || rol === "director_deportivo") && !equipoId) {
+         throw new Error("Asigna una escudería al responsable para que aparezca junto al equipo.");
       }
       const pilot = pilotos.find(item => item.id === pilotoId);
       await setDoc(doc(db, "usuarios", uid), {
@@ -33,7 +33,7 @@ export function AdminUsersPanel() {
         rol,
         ...(pilot?.nombre ? { nombre_piloto: pilot.nombre } : {}),
       }, { merge: true });
-      setMessage(rol === "jeque" ? "Jeque y escudería asignados correctamente." : "Asociación guardada correctamente.");
+       setMessage(rol === "jeque" || rol === "director_deportivo" ? "Responsable y escudería asignados correctamente." : "Asociación guardada correctamente.");
     } catch (error: any) {
       setMessage(`Error: ${error.message}`);
     } finally {
@@ -76,7 +76,7 @@ function UserRow({ user, pilotos, equipos, equipoPorPiloto, currentPilot, curren
     <td className="p-3 font-mono text-[10px] text-white/35">{user.uid}</td>
     <td className="p-3"><select value={pilotId} onChange={event => selectPilot(event.target.value)} className="w-full max-w-xs bg-black/30 border border-white/10 px-2 py-2 text-xs text-white"><option value="">Sin piloto</option>{pilotos.map((pilot: any) => <option key={pilot.id} value={pilot.id}>{pilot.nombre}</option>)}</select></td>
     <td className="p-3"><select value={teamId} onChange={event => setTeamId(event.target.value)} className="w-full max-w-xs bg-black/30 border border-white/10 px-2 py-2 text-xs text-white"><option value="">Sin escudería</option>{equipos.map((team: any) => <option key={team.id} value={team.id}>{team.nombre}</option>)}</select></td>
-    <td className="p-3"><select value={role} onChange={event => setRole(event.target.value)} className="bg-black/30 border border-white/10 px-2 py-2 text-xs text-white"><option value="usuario">Usuario</option><option value="piloto">Piloto</option><option value="jeque">Jeque</option><option value="admin">Admin</option></select></td>
+       <td className="p-3"><select value={role} onChange={event => setRole(event.target.value)} className="bg-black/30 border border-white/10 px-2 py-2 text-xs text-white"><option value="usuario">Usuario</option><option value="piloto">Piloto</option><option value="jeque">Jeque</option><option value="director_deportivo">Director deportivo</option><option value="admin">Admin</option></select></td>
     <td className="p-3 text-right"><button onClick={() => onSave(user.uid, pilotId, role, teamId)} disabled={saving} className="inline-flex items-center gap-1.5 border border-emerald-500/30 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-300 disabled:opacity-40">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Guardar</button></td>
   </tr>;
 }

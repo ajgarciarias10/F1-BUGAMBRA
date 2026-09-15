@@ -57,7 +57,7 @@ export default function App() {
               <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
               <Route path="/jeque" element={<ProtectedRoute allowedRoles={["jeque"]}><JequeDashboard /></ProtectedRoute>} />
               <Route path="/piloto" element={<ProtectedRoute allowedRoles={["piloto", "admin"]}><PilotoDashboard /></ProtectedRoute>} />
-              <Route path="/usuario" element={<ProtectedRoute allowedRoles={["usuario", "invitado"]}><UsuarioDashboard /></ProtectedRoute>} />
+              <Route path="/usuario" element={<ProtectedRoute allowedRoles={["usuario", "invitado", "director_deportivo"]}><UsuarioDashboard /></ProtectedRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

@@ -8,7 +8,7 @@
         "uid": { "type": "string" },
         "nombre": { "type": "string" },
         "email": { "type": "string" },
-        "rol": { "type": "string", "enum": ["admin", "jeque", "piloto"] },
+        "rol": { "type": "string", "enum": ["admin", "jeque", "director_deportivo", "piloto"] },
         "escuderia_id": { "type": "string" },
         "foto_url": { "type": "string" },
         "puntos_piloto": { "type": "number" },

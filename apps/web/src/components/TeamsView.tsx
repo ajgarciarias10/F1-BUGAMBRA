@@ -79,6 +79,15 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
     return result;
   }, [usuarios]);
 
+  const directoresPorEquipo = useMemo(() => {
+    const result: Record<string, Array<{ uid: string; nombre: string; foto_url?: string }>> = {};
+    for (const usuario of usuarios) {
+      if (usuario.rol !== "director_deportivo" || !usuario.escuderia_id) continue;
+      (result[usuario.escuderia_id] ??= []).push({ uid: usuario.uid, nombre: usuario.nombre, foto_url: usuario.foto_url });
+    }
+    return result;
+  }, [usuarios]);
+
   useEffect(() => {
     setSelectedTeamId("");
   }, [currentSplitId]);
@@ -108,6 +117,7 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
     ? -1
     : Math.min((Math.floor(indiceSeleccionado / columnas) + 1) * columnas, equipos.length) - 1;
   const selectedJeques = selectedTeam ? jequesPorEquipo[selectedTeam.id] || [] : [];
+  const selectedDirectores = selectedTeam ? directoresPorEquipo[selectedTeam.id] || [] : [];
   const selectedPilots = selectedTeam ? pilotsByTeam[selectedTeam.id] || [] : [];
   // Se busca en todo el plantel, no solo en el equipo desplegado: un enlace compartido
   // debe abrir la ficha aunque quien lo reciba no tenga esa alineación abierta.
@@ -269,6 +279,12 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                             ))}
                           </span>
                         )}
+                        {(directoresPorEquipo[team.id] || []).map(director => (
+                          <span key={director.uid} className="mt-1 flex items-center gap-1.5 min-w-0">
+                            {director.foto_url ? <img src={director.foto_url} alt="" className="h-4 w-4 shrink-0 rounded-full object-cover" /> : <Crown className="h-3 w-3 shrink-0 text-sky-300/60" />}
+                            <span className="truncate text-[12px] opacity-60 md:font-mono md:text-[9px] md:uppercase md:tracking-[0.16em]">Director deportivo · {director.nombre}</span>
+                          </span>
+                        ))}
                       </div>
                     </div>
                     <ChevronRight className={`w-5 h-5 shrink-0 transition-transform ${selected ? "rotate-90 text-[#e10600]" : "opacity-25"}`} />
@@ -329,6 +345,27 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                                 </div>
                               );
                             })}
+                          </div>
+                        </div>
+                      )}
+                      {selectedDirectores.length > 0 && (
+                        <div className="border-b border-white/[0.08] bg-[#0b0c10] p-4 md:p-5">
+                          <div className="mb-3 flex items-center gap-2">
+                            <Crown className="h-4 w-4 text-sky-300" />
+                            <span className="text-[9px] font-black uppercase tracking-[0.25em] text-sky-200/70">Dirección deportiva</span>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {selectedDirectores.map(director => (
+                              <div key={director.uid} className="flex items-center gap-3 border border-sky-300/15 bg-sky-300/[0.04] p-3">
+                                <div className="h-14 w-14 shrink-0 overflow-hidden border border-sky-300/20 bg-sky-300/10">
+                                  {director.foto_url ? <img src={director.foto_url} alt={director.nombre} className="h-full w-full object-cover" /> : <Crown className="m-auto h-6 w-6 text-sky-200/45" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-sky-200/45">Director deportivo</span>
+                                  <p className="truncate text-sm font-black uppercase text-white">{director.nombre}</p>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}

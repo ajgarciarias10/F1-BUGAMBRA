@@ -4,7 +4,7 @@ export interface Usuario {
   uid: string;
   email: string;
   nombre: string;
-  rol: "admin" | "usuario" | "jeque" | "piloto" | "invitado";
+  rol: "admin" | "usuario" | "jeque" | "director_deportivo" | "piloto" | "invitado";
   piloto_id: string | null; // FK → pilotos/{id}
   escuderia_id?: string | null;
   foto_url?: string;

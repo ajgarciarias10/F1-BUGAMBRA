@@ -3,7 +3,7 @@ import type { User } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../services/firebase";
 
-export type Role = "admin" | "usuario" | "jeque" | "piloto" | "invitado" | null;
+export type Role = "admin" | "usuario" | "jeque" | "director_deportivo" | "piloto" | "invitado" | null;
 
 interface UserData {
   uid: string;

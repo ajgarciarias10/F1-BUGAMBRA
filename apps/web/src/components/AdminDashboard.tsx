@@ -931,10 +931,10 @@ export function AdminDashboard() {
 
              {/* Fotos de jeques */}
              <div className="space-y-1.5">
-               <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Fotos de jeques</p>
+               <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Fotos de jeques y directores deportivos</p>
                <p className="mb-3 text-[10px] text-white/35">Estas fotos aparecerán junto a los pilotos en la sección Equipos.</p>
                {(usuarios || [])
-                 .filter((usuario: any) => usuario.rol === "jeque")
+                 .filter((usuario: any) => usuario.rol === "jeque" || usuario.rol === "director_deportivo")
                  .slice()
                  .sort((a: any, b: any) => (a.nombre || "").localeCompare(b.nombre || ""))
                  .map((jeque: any) => {
@@ -974,8 +974,8 @@ export function AdminDashboard() {
                      </div>
                    );
                  })}
-               {(usuarios || []).filter((usuario: any) => usuario.rol === "jeque").length === 0 && (
-                 <p className="text-[9px] font-mono text-white/15">Sin jeques registrados</p>
+               {(usuarios || []).filter((usuario: any) => usuario.rol === "jeque" || usuario.rol === "director_deportivo").length === 0 && (
+                 <p className="text-[9px] font-mono text-white/15">Sin jeques ni directores deportivos registrados</p>
                )}
              </div>
 
