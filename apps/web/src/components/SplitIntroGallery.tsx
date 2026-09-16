@@ -3,12 +3,12 @@ import { Play, X } from "lucide-react";
 import { getSplitIntroUrl, getYoutubeEmbedUrl, getYoutubeThumbnailUrl } from "../utils/youtube";
 
 /**
- * Las intros de todas las temporadas, para la vista de Mundial.
+ * Los tráilers de todas las temporadas, para la parrilla de F1 Bugambra TV.
  *
- * En una temporada concreta se muestra su propio vídeo; el Mundial es la vista
- * histórica de la liga, así que aquí tiene sentido el archivo completo.
+ * Es el único sitio donde salen: antes se repetían en Equipos y en la
+ * clasificación general, y el mismo vídeo aparecía tres veces por navegación.
  */
-export function SplitIntroGallery({ splits, titulo = "Vídeos de la liga" }: { splits: any[]; titulo?: string }) {
+export function SplitIntroGallery({ splits }: { splits: any[] }) {
   const [abierto, setAbierto] = useState<string>("");
 
   const conIntro = useMemo(
@@ -25,7 +25,7 @@ export function SplitIntroGallery({ splits, titulo = "Vídeos de la liga" }: { s
 
   return (
     <section>
-      <div className="rail-title mb-4">{titulo}</div>
+      <div className="rail-title mb-4">Tráilers de las temporadas</div>
 
       {activo && (
         <div className="m-card m-expand mb-4 border border-[#0a0a0a]/[0.08] dark:border-white/[0.08]">

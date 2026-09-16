@@ -11,6 +11,7 @@ import { TeamEconomyView } from "./TeamEconomyView";
 import { PaddockForum } from "./PaddockForum";
 import { TeamsView } from "./TeamsView";
 import { RaceResultsView } from "./RaceResultsView";
+import { FomLive } from "./FomLive";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 import { Shield, ChevronLeft, Lock, Store } from "lucide-react";
@@ -263,7 +264,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
           </div>
           {activeSplit?.mercado_cerrado_por_plantillas && <p className="mt-4 text-sm text-emerald-300">🏁 Plantillas completas en {activeSplit.nombre}. Las bienvenidas de los equipos ya están en el paddock.</p>}
         </section>}
-        {activeTab === "championship" && <SharedDashboardView canViewBudget={canViewBudget} escuderiaId={userData?.escuderia_id} />}
+        {activeTab === "championship" && <SharedDashboardView canViewBudget={canViewBudget} escuderiaId={userData?.escuderia_id} onOpenTv={() => setActiveTab("tv")} />}
         {activeTab === "market" && marketSplit && !selectedMarketClosed && (
           <div className="space-y-6">
             <label className="block text-sm font-bold">Mercado del split
@@ -307,6 +308,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
             darkMode
           />
         )}
+        {activeTab === "tv" && <FomLive />}
         {activeTab === "profile" && <ProfileView />}
         {activeTab === "suggestions" && <SuggestionsView isAdmin={false} />}
         {renderExtraTabs && activeTab === "extra" && renderExtraTabs()}
@@ -325,6 +327,7 @@ export function JequeDashboard() {
     { id: "paddock", label: "Paddock" },
     { id: "equipos", label: "Equipos" },
     { id: "resultados", label: "Resultados" },
+    { id: "tv", label: "TV" },
     { id: "profile", label: "Mi Perfil" },
     { id: "suggestions", label: "Buzón de Mejoras" },
   ];
@@ -347,6 +350,7 @@ export function PilotoDashboard() {
     { id: "paddock", label: "Paddock" },
     { id: "equipos",      label: "Equipos" },
     { id: "resultados",    label: "Resultados" },
+    { id: "tv",           label: "TV" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
   ];
@@ -367,6 +371,7 @@ export function UsuarioDashboard() {
     { id: "paddock", label: "Paddock" },
     { id: "equipos",      label: "Equipos" },
     { id: "resultados",    label: "Resultados" },
+    { id: "tv",           label: "TV" },
     { id: "profile",      label: "Mi Perfil" },
     { id: "suggestions",  label: "Buzón de Mejoras" },
   ];

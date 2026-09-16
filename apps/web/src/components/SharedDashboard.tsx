@@ -10,10 +10,9 @@ import { POINTS_BY_POSITION } from "../services/economyService";
 import { PilotRivalryPanel } from "./RivalryPanels";
 import { NextRaceWidget } from "./NextRaceWidget";
 import { PilotCardF1 } from "./PilotCardF1";
-import { FomLive } from "./FomLive";
 import { TotalStandings } from "./TotalStandings";
 
-export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBudget: boolean, escuderiaId?: string }) {
+export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { canViewBudget: boolean, escuderiaId?: string, onOpenTv?: () => void }) {
   const { userData } = useAuth();
   const { usuarios } = useUsuarios();
   const { splits: rawSplits, loading: loadingSplits } = useSplits();
@@ -23,7 +22,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
   const [comparePilotIdA, setComparePilotIdA] = useState<string>("");
   const [comparePilotIdB, setComparePilotIdB] = useState<string>("");
   const [isCompareViewOpen, setIsCompareViewOpen] = useState(false);
-  const [isF1TVOpen, setIsF1TVOpen] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<"profile" | "compare">("profile");
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -459,13 +457,15 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             <TrendingUp className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
             <span className="truncate">Comparador</span>
           </button>
-          <button
-            onClick={() => setIsF1TVOpen(true)}
-            className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-[#e10600]/50 px-3 text-[12px] font-bold text-red-100 transition-all hover:border-[#e10600] hover:text-white active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-wider"
-          >
-            <MonitorPlay className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
-            <span className="truncate">FOM en directo</span>
-          </button>
+          {onOpenTv && (
+            <button
+              onClick={onOpenTv}
+              className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-[#e10600]/50 px-3 text-[12px] font-bold text-red-100 transition-all hover:border-[#e10600] hover:text-white active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-wider"
+            >
+              <MonitorPlay className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
+              <span className="truncate">F1 Bugambra TV</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1151,24 +1151,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         </div>
       )}
 
-      {isF1TVOpen && (
-        <div className="fixed inset-0 bg-[#0a0a0a]/95 z-[60] overflow-y-auto overscroll-contain p-0 md:p-6 text-left">
-          <div className="relative mx-auto my-0 min-h-[100dvh] max-w-7xl overflow-hidden border-[#e10600]/30 bg-[#0a0a0a] p-4 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-[0_0_50px_rgba(225,6,0,0.15)] md:my-4 md:min-h-0 md:border md:p-6">
-            <div className="pointer-events-none absolute top-0 right-0 h-[500px] w-[500px] rounded-full bg-[#e10600]/10" />
-            <div className="relative z-10 mb-5 flex items-center justify-between gap-3 border-b border-[#e10600]/20 pt-[max(0.5rem,env(safe-area-inset-top))] pb-4 md:mb-6 md:pt-0">
-              <div className="flex min-w-0 items-center gap-3 md:gap-4">
-                <div className="shrink-0 rounded-sm bg-[#e10600] px-2.5 py-1 text-2xl font-black italic tracking-tighter text-white md:px-3 md:text-3xl">FOM</div>
-                <div className="min-w-0">
-                  <span className="block animate-pulse text-[11px] font-black text-[#e10600] md:font-mono md:text-[10px] md:uppercase md:tracking-[0.2em]">En directo</span>
-                  <h2 className="mt-0.5 truncate text-base font-bold uppercase tracking-tight text-white md:text-xl">Señal oficial Tonicotitular</h2>
-                </div>
-              </div>
-              <button aria-label="Cerrar" onClick={() => setIsF1TVOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-white transition-all hover:bg-white/10 md:rounded-sm"><X className="w-5 h-5 md:w-6 md:h-6" /></button>
-            </div>
-            <FomLive compact />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

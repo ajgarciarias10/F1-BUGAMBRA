@@ -173,7 +173,7 @@ export function FomLive({ compact = false }: { compact?: boolean }) {
         </div>
       </section>
 
-      <SplitIntroGallery splits={splitsConTrailer} titulo="Tráilers de las temporadas" />
+      <SplitIntroGallery splits={splitsConTrailer} />
 
       <InterviewsSection compact={compact} />
     </div>

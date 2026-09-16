@@ -1,8 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useSearchParams } from "react-router";
-import { ChevronRight, Crown, Play, Shield, Users } from "lucide-react";
+import { ChevronRight, Crown, Shield, Users } from "lucide-react";
 import { useUsuarios } from "../hooks/useData";
-import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
 import { PilotDetailModal } from "./PilotDetailModal";
 
 interface TeamsViewProps {
@@ -131,7 +130,6 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
   const selectedAverage = selectedPilots.length
     ? Math.round(selectedPilots.reduce((sum, pilot) => sum + (Number(pilot.rating_piloto) > 0 ? Number(pilot.rating_piloto) : 70), 0) / selectedPilots.length)
     : 0;
-  const videoIntroUrl = getSplitIntroUrl(currentSplit?.id, currentSplit?.video_intro);
   const isIndividual = currentSplit?.tipo === "individual" || (currentSplit?.equipos || []).length === 0;
 
   return (
@@ -171,29 +169,6 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
               </div>
               <span className="mt-8 text-[10px] font-mono uppercase tracking-[0.25em] text-[#e10600]">Formato histórico por dúos</span>
             </div>
-            {currentSplit?.id === "origins" && videoIntroUrl && (
-              <div className="min-h-64 bg-black flex items-center justify-center p-8 bg-[radial-gradient(circle_at_center,rgba(225,6,0,0.3),transparent_55%)]">
-                <a
-                  href={videoIntroUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-3 bg-[#e10600] px-6 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white hover:bg-[#ff241c] transition-colors"
-                >
-                  <Play className="h-5 w-5 fill-current" /> Ver vídeo de Origins
-                </a>
-              </div>
-            )}
-            {currentSplit?.id !== "origins" && videoIntroUrl && (
-              <div className="min-h-64 bg-black p-6">
-                <iframe
-                  className="w-full aspect-video"
-                  src={getYoutubeEmbedUrl(videoIntroUrl)}
-                  title={`Vídeo de ${currentSplit?.nombre}`}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
-            )}
           </div>
           {(currentSplit?.duos || []).length > 0 && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -211,31 +186,6 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
         </div>
       ) : (
         <>
-          {videoIntroUrl && (
-            <div className="border border-black/10 dark:border-white/10 bg-[#101116] text-white p-4">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="w-1 h-4 bg-[#e10600] shrink-0" />
-                <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-white/50">
-                  Vídeo · {currentSplit?.nombre}
-                </span>
-              </div>
-              <iframe
-                className="w-full aspect-video"
-                src={getYoutubeEmbedUrl(videoIntroUrl)}
-                title={`Vídeo de ${currentSplit?.nombre}`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
-              <a
-                href={videoIntroUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-flex items-center justify-center gap-2 bg-[#e10600] px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white hover:bg-[#ff241c] transition-colors"
-              >
-                Abrir en YouTube
-              </a>
-            </div>
-          )}
           <div ref={gridRef} className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {equipos.map((team: any, index: number) => {
               const pilots = pilotsByTeam[team.id] || [];

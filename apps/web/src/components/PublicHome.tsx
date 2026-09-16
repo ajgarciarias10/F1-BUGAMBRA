@@ -2,9 +2,8 @@ import { useState, useMemo, useEffect, useRef, Suspense, lazy } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { Sun, Moon, Play, Radio, Crown } from "lucide-react";
+import { Sun, Moon, Radio, Crown } from "lucide-react";
 import { TotalStandings } from "./TotalStandings";
-import { SplitIntroGallery } from "./SplitIntroGallery";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 
 // La portada abre siempre en Clasificación. Equipos, Resultados y TV solo hacen
@@ -17,7 +16,6 @@ const PaddockForum = lazy(() => import("./PaddockForum").then(m => ({ default: m
 const tabFallback = (
   <div className="py-20 text-center text-[13px] text-black/30 dark:text-white/30">Cargando…</div>
 );
-import { getSplitIntroUrl, getYoutubeEmbedUrl } from "../utils/youtube";
 import { InstallButton } from "./InstallApp";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 
@@ -373,59 +371,8 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
   const leader = pilotStandings[0];
   const leaderPts = leader?.puntos_piloto || 0;
 
-  const videoIntroUrl = getSplitIntroUrl(currentSplit?.id, currentSplit?.video_intro);
-
   return (
     <div className="space-y-8">
-
-      {/* Video de introducción del split */}
-      {currentSplitId !== "general" && currentSplit?.id === "origins" && videoIntroUrl && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-[#0a0a0a]/[0.08] dark:border-white/[0.06] p-4">
-          <div className="flex items-center gap-3">
-            <span className="w-1 h-4 bg-[#e10600] shrink-0" />
-            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#0a0a0a]/50 dark:text-white/50">
-              Intro · {currentSplit?.nombre}
-            </span>
-          </div>
-          <a
-            href={videoIntroUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center justify-center gap-2 bg-[#e10600] px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white hover:bg-[#ff241c] transition-colors"
-          >
-            <Play className="h-4 w-4 fill-current" /> Ver vídeo de Origins
-          </a>
-        </div>
-      )}
-
-      {currentSplitId !== "general" && currentSplit?.id !== "origins" && videoIntroUrl && (
-        <div className="border border-[#0a0a0a]/[0.08] dark:border-white/[0.06] p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="w-1 h-4 bg-[#e10600] shrink-0" />
-            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#0a0a0a]/50 dark:text-white/50">
-              Vídeo · {currentSplit?.nombre}
-            </span>
-          </div>
-          <div className="aspect-video w-full bg-black">
-            <iframe
-              className="w-full h-full"
-              loading="lazy"
-              src={getYoutubeEmbedUrl(videoIntroUrl)}
-              title={`Vídeo de ${currentSplit?.nombre}`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
-          </div>
-          <a
-            href={videoIntroUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-flex items-center justify-center gap-2 bg-[#e10600] px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white hover:bg-[#ff241c] transition-colors"
-          >
-            Abrir en YouTube
-          </a>
-        </div>
-      )}
 
       {/* Controles: en móvil el selector de temporada es un carrusel deslizable
           en vez de un bloque de botones que se apila y empuja la tabla abajo. */}
@@ -484,10 +431,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
 
       {/* Clasificación general acumulada */}
       {currentSplitId === "general" && (
-        <>
-          <TotalStandings splits={validSplits} getPilotPhoto={getPilotPhoto} />
-          <SplitIntroGallery splits={validSplits} />
-        </>
+        <TotalStandings splits={validSplits} getPilotPhoto={getPilotPhoto} />
       )}
 
       {/* Tabla pilotos */}
