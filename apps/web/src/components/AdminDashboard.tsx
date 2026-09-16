@@ -783,14 +783,6 @@ export function AdminDashboard() {
           <div className="flex items-center justify-between gap-3">
             <UserHeader title="Panel de Administración" />
             <div className="flex shrink-0 items-center gap-2">
-              <a
-                href="/ruleta-split-3.html"
-                target="_blank"
-                rel="noreferrer"
-                className="border border-red-500/30 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-red-300 hover:bg-red-500/10"
-              >
-                Ruleta
-              </a>
               {userData?.piloto_id && (
                 <button
                   onClick={() => { window.location.href = "/piloto"; }}

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
+import { useSplits } from "../hooks/useData";
+import { SplitIntroGallery } from "./SplitIntroGallery";
 import { getYoutubeEmbedUrl, getYoutubeThumbnailUrl, getYoutubeVideoId } from "../utils/youtube";
 import { ArrowUpRight, Loader2, MonitorPlay, Play, Plus, Radio, Trash2, Video } from "lucide-react";
 
@@ -117,6 +119,10 @@ function InterviewsSection({ compact }: { compact: boolean }) {
 export function FomLive({ compact = false }: { compact?: boolean }) {
   const domain = window.location.hostname || "localhost";
   const parent = domain === "localhost" ? "localhost" : domain;
+  const { splits } = useSplits();
+  // Los tráilers de cada temporada son parte de la parrilla televisiva: aquí los
+  // ve cualquiera que entre en TV, sin depender de en qué split esté mirando.
+  const splitsConTrailer = (splits || []).filter((split: any) => split.id !== "global");
 
   return (
     <div className={compact ? "space-y-3" : "space-y-5"}>
@@ -166,6 +172,8 @@ export function FomLive({ compact = false }: { compact?: boolean }) {
           <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/clips`} icon={<MonitorPlay className="w-3.5 h-3.5" />} label="Clips" />
         </div>
       </section>
+
+      <SplitIntroGallery splits={splitsConTrailer} titulo="Tráilers de las temporadas" />
 
       <InterviewsSection compact={compact} />
     </div>

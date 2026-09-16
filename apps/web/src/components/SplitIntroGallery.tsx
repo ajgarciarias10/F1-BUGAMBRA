@@ -8,7 +8,7 @@ import { getSplitIntroUrl, getYoutubeEmbedUrl, getYoutubeThumbnailUrl } from "..
  * En una temporada concreta se muestra su propio vídeo; el Mundial es la vista
  * histórica de la liga, así que aquí tiene sentido el archivo completo.
  */
-export function SplitIntroGallery({ splits }: { splits: any[] }) {
+export function SplitIntroGallery({ splits, titulo = "Vídeos de la liga" }: { splits: any[]; titulo?: string }) {
   const [abierto, setAbierto] = useState<string>("");
 
   const conIntro = useMemo(
@@ -25,7 +25,7 @@ export function SplitIntroGallery({ splits }: { splits: any[] }) {
 
   return (
     <section>
-      <div className="rail-title mb-4">Vídeos de la liga</div>
+      <div className="rail-title mb-4">{titulo}</div>
 
       {activo && (
         <div className="m-card m-expand mb-4 border border-[#0a0a0a]/[0.08] dark:border-white/[0.08]">

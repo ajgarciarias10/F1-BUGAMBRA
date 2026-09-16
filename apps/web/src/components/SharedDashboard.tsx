@@ -150,6 +150,17 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
     return currentSplit.roster.filter((p: any) => p.equipoId === miEscuderia.id && p.participa_hasta == null);
   }, [currentSplit, miEscuderia]);
 
+  // Sólo es "agente libre" quien corre este Split sin escudería. Un admin o un usuario
+  // de a pie no está en la parrilla, así que no debe ver el aviso de SIN EQUIPO.
+  const soyAgenteLibre = useMemo(() => {
+    if (!currentSplit || currentSplit.tipo === "individual" || !currentUserPilotId) return false;
+    if (userData?.rol !== "piloto" && userData?.rol !== "jeque") return false;
+    const rosterEntry = currentSplit.roster?.find(
+      (p: any) => p.pilotoId === currentUserPilotId && p.participa_hasta == null
+    );
+    return !!rosterEntry && !rosterEntry.equipoId;
+  }, [currentSplit, currentUserPilotId, userData?.rol]);
+
 
 
   const { standings, teamStandings, raceResults, championshipsTimeline } = useMemo(() => {
@@ -552,7 +563,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
         </section>
       )}
 
-      {activeSplitId !== "global" && currentSplit?.tipo !== "individual" && (
+      {activeSplitId !== "global" && currentSplit?.tipo !== "individual" && (miEscuderia || soyAgenteLibre) && (
         <section>
           <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
             <h2 className="text-xl font-bold italic tracking-tight lowercase flex items-center gap-2"><span className="w-1 h-5 bg-[#e10600]" />mi equipo</h2>
@@ -563,7 +574,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId }: { canViewBud
             )}
           </div>
           
-          {currentUserPilotId && !miEscuderia ? (
+          {soyAgenteLibre && !miEscuderia ? (
             <div className="bg-amber-500/5 border border-amber-500/20  p-6 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
               <div className="absolute right-0 top-0 w-32 h-32 bg-amber-500/5 rounded-full "></div>
               <div>
