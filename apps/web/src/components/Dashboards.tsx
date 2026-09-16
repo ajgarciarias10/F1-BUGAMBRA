@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { SharedDashboardView } from "./SharedDashboard";
@@ -14,11 +14,9 @@ import { RaceResultsView } from "./RaceResultsView";
 import { FomLive } from "./FomLive";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MobileBottomTabs } from "./MobileBottomTabs";
-import { Shield, ChevronLeft, Lock, Store } from "lucide-react";
+import { Shield, Lock, Store } from "lucide-react";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
 import { StatusBanner } from "./Feedback";
-
-const AdminDashboard = lazy(() => import("./AdminDashboard").then(module => ({ default: module.AdminDashboard })));
 
 /**
  * Estado del mercado, arriba del todo de la pestaña.
@@ -56,55 +54,7 @@ function MarketStatusHeader({ split }: { split: any }) {
   );
 }
 
-// ── ADMIN OVERLAY ──────────────────────────────────────────────────────────────
-// Overlay que permite a usuarios con rol admin acceder al panel de admin
-// sin salir de su dashboard (jeque/piloto).
-
-interface AdminOverlayProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-function AdminOverlay({ isOpen, onClose }: AdminOverlayProps) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="dark fixed inset-0 z-[99] flex flex-col bg-[#0a0a0a] text-white">
-      <header className="flex items-center justify-between min-h-14 px-3 md:px-8 border-b border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl z-10 safe-top safe-x">
-        <div className="flex items-center gap-2 min-w-0">
-          <button
-            onClick={onClose}
-            className="-ml-1 grid h-11 w-11 shrink-0 place-items-center text-white/50 hover:text-white transition-colors"
-            aria-label="Cerrar panel admin"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="w-0.5 h-5 shrink-0 bg-[#e10600]" />
-            <span className="truncate font-black tracking-tight md:tracking-[0.15em] uppercase text-sm text-white">F1 Bugambra</span>
-            <span className="shrink-0 rounded-full md:rounded-sm border border-[#e10600]/30 bg-[#e10600]/20 px-2 py-0.5 text-[10px] font-bold uppercase text-[#e10600]">
-              Admin
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          className="flex min-h-10 shrink-0 items-center rounded-full md:rounded-sm border border-white/10 bg-white/5 px-3 text-[12px] font-bold text-white/80 transition-colors hover:bg-white/10 md:text-[10px] md:tracking-[0.2em] md:uppercase"
-        >
-          <span className="md:hidden">Salir</span>
-          <span className="hidden md:inline">Volver a mi dashboard</span>
-        </button>
-      </header>
-      <div className="flex-1 overflow-auto overscroll-contain pt-4 pb-24 safe-x">
-        <Suspense fallback={<div className="py-24 text-center text-xs font-mono uppercase tracking-[0.3em] text-white/30">Cargando administración...</div>}>
-          <AdminDashboard />
-        </Suspense>
-      </div>
-    </div>
-  );
-}
-
-// ── APP NAV WITH ADMIN TOGGLE ──────────────────────────────────────────────────
+// ── APP NAV WITH ADMIN ACCESS ──────────────────────────────────────────────────
 
 interface AppNavProps {
   title: string;
@@ -112,11 +62,10 @@ interface AppNavProps {
   activeTab: string;
   onTab: (id: string) => void;
   isAdmin: boolean;
-  onToggleAdmin: () => void;
   showAdminBadge?: boolean;
 }
 
-function AppNav({ title, tabs, activeTab, onTab, isAdmin, onToggleAdmin, showAdminBadge = true }: AppNavProps) {
+function AppNav({ title, tabs, activeTab, onTab, isAdmin, showAdminBadge = true }: AppNavProps) {
   const { userData } = useAuth();
   return (
     <header className="fixed top-0 inset-x-0 z-50 bg-[#0a0a0a]/90 backdrop-blur-xl border-b border-white/[0.06] safe-top safe-x">
@@ -135,14 +84,14 @@ function AppNav({ title, tabs, activeTab, onTab, isAdmin, onToggleAdmin, showAdm
             <span className="text-[10px] font-bold text-white/70">{userData?.nombre}</span>
           </div>
           {isAdmin && showAdminBadge && (
-            <button
-              onClick={onToggleAdmin}
+            <Link
+              to="/admin"
               className="flex min-h-10 items-center gap-1.5 rounded-full md:rounded-sm px-3 text-[12px] font-bold md:text-[10px] md:tracking-[0.2em] md:uppercase bg-[#e10600]/20 hover:bg-[#e10600]/30 border border-[#e10600]/30 text-[#e10600] transition-colors"
-              aria-label="Abrir panel de administración"
+              aria-label="Ir al panel de administración"
             >
               <Shield className="w-4 h-4 md:w-3.5 md:h-3.5" />
               <span className="hidden sm:inline">Admin</span>
-            </button>
+            </Link>
           )}
           <button
             onClick={() => auth.signOut()}
@@ -181,7 +130,6 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
   const { splits, loading: loadingSplits } = useSplits();
   const { usuarios } = useUsuarios();
   const [activeTab, setActiveTab] = useState("championship");
-  const [adminOpen, setAdminOpen] = useState(false);
 
   const isAdmin = userData?.rol === "admin" || userData?.email === "ajgarciarias@gmail.com" || userData?.email === "admin@f1bugambra.com";
   const marketLifecycleError = useMarketLifecycleStatus();
@@ -241,10 +189,8 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
         activeTab={activeTab}
         onTab={setActiveTab}
         isAdmin={isAdmin}
-        onToggleAdmin={() => setAdminOpen(true)}
       />
       <MobileBottomTabs tabs={visibleTabs} activeTab={activeTab} onTab={setActiveTab} />
-      <AdminOverlay isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
       <main className="pt-appbar md:pt-[7.5rem] max-w-7xl mx-auto px-3 md:px-10 py-6 md:py-10 pb-tabbar md:pb-10 safe-x">
         <div className="rail-title rail-title-on-dark mb-5 md:hidden">{title}</div>
         {marketLifecycleError && <StatusBanner message={marketLifecycleError} tone="error" />}
@@ -380,17 +326,18 @@ export function UsuarioDashboard() {
 }
 
 // Exported for backwards compat
-export function UserHeader({ title }: { title: string }) {
+export function UserHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   const { userData } = useAuth();
   return (
-    <header className="min-h-14 border border-white/[0.08] md:border-b md:border-x-0 md:border-t-0 bg-white/[0.03] md:bg-transparent backdrop-blur-xl flex items-center justify-between px-4 md:px-6 shrink-0 mb-5 md:mb-8 rounded-3xl md:rounded-none gap-3">
-      <div className="flex items-center gap-3">
+    <header className="min-h-14 border border-white/[0.08] md:border-b md:border-x-0 md:border-t-0 bg-white/[0.03] md:bg-transparent backdrop-blur-xl flex flex-wrap items-center justify-between px-4 py-3 md:px-6 md:py-0 shrink-0 mb-5 md:mb-8 rounded-3xl md:rounded-none gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <span className="w-0.5 h-5 bg-[#e10600]" />
-        <span className="font-black tracking-[0.15em] uppercase text-sm">F1 Bugambra</span>
+        <span className="truncate font-black tracking-[0.15em] uppercase text-sm">F1 Bugambra</span>
         <span className="hidden sm:block w-px h-4 bg-white/10" />
         <span className="hidden sm:block text-[10px] font-mono tracking-[0.3em] text-white/30 uppercase">{title}</span>
       </div>
-      <div className="flex items-center gap-3 min-w-0">
+      {action && <div className="order-3 w-full sm:order-2 sm:w-auto">{action}</div>}
+      <div className="order-2 flex items-center gap-3 min-w-0 sm:order-3">
         <span className="hidden md:inline text-[10px] font-mono text-white/25 uppercase">{userData?.rol}</span>
         <span className="hidden sm:inline text-sm font-bold text-white/70 truncate max-w-28">{userData?.nombre}</span>
         <button onClick={() => auth.signOut()} className="text-[10px] font-bold tracking-[0.3em] uppercase text-white/30 hover:text-[#e10600] transition-colors">Salir</button>

@@ -1,4 +1,5 @@
 ﻿import React, { lazy, Suspense, useState, useEffect, useMemo } from "react";
+import { Link } from "react-router";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { processRace, RaceResult, revertirCarreraCompleta, recalcSplitPoints } from "../services/raceProcessor";
@@ -780,19 +781,17 @@ export function AdminDashboard() {
   return (
     <div className="dark min-h-[100dvh] bg-[#0a0a0a] text-slate-100 px-3 md:px-4 pt-3 md:pt-4 pb-10 safe-x">
       <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between gap-3">
-            <UserHeader title="Panel de Administración" />
-            <div className="flex shrink-0 items-center gap-2">
-              {userData?.piloto_id && (
-                <button
-                  onClick={() => { window.location.href = "/piloto"; }}
-                  className="shrink-0 px-3 py-2 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 text-[10px] font-black uppercase tracking-wider"
-                >
-                  Ir a mi panel de piloto
-                </button>
-              )}
-            </div>
-          </div>
+          <UserHeader
+            title="Panel de Administración"
+            action={(
+              <Link
+                to="/piloto"
+                className="flex min-h-11 w-full items-center justify-center rounded-xl border border-white/15 bg-white/[0.05] px-4 text-xs font-black uppercase tracking-[0.12em] text-white/80 transition-colors hover:border-[#e10600]/50 hover:bg-[#e10600]/10 hover:text-white sm:w-auto sm:rounded-sm sm:text-[10px]"
+              >
+                {userData?.piloto_id ? "Ir a mi panel de piloto" : "Acceder a la web"}
+              </Link>
+            )}
+          />
 
         {/* Navigation Tabs */}
          <nav aria-label="Secciones de administración" className="mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-white/10 bg-zinc-950 p-1 sm:grid-cols-3 lg:grid-cols-8">
