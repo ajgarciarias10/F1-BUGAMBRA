@@ -6,6 +6,7 @@ import { useConfirm } from "./Feedback";
 
 export function AdminTeamManager({ splitId, teams, roster, splits, onSelectSplit }: { splitId: string; teams: any[]; roster: any[]; splits: any[]; onSelectSplit: (id: string) => void }) {
   const [newName, setNewName] = useState("");
+  const [newBudget, setNewBudget] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [message, setMessage] = useState("");
@@ -19,8 +20,29 @@ export function AdminTeamManager({ splitId, teams, roster, splits, onSelectSplit
     if (!name) return;
     const id = teamId(name);
     if (teams.some(team => team.id === id)) { setMessage("Ya existe un equipo con ese nombre."); return; }
-    await setDoc(doc(db, `splits/${splitId}/equipos`, id), { nombre: name, presupuesto: 100, puntos_constructores: 0 });
+    const currentOrder = Number(splits.find(split => split.id === splitId)?.orden ?? Number.POSITIVE_INFINITY);
+    const previousTemplate = [...splits]
+      .filter(split => split.id !== splitId && split.tipo !== "individual" && Number(split.orden ?? 0) < currentOrder)
+      .sort((a, b) => Number(b.orden ?? 0) - Number(a.orden ?? 0))
+      .flatMap(split => split.equipos ?? [])
+      .find(team => team.id === id);
+    const requestedBudget = newBudget.trim() === "" ? null : Number(newBudget.replace(",", "."));
+    const budget = requestedBudget ?? (previousTemplate ? Number(previousTemplate.presupuesto ?? 0) : null);
+    if (budget == null || !Number.isFinite(budget)) {
+      setMessage("Indica el saldo inicial de la nueva escudería.");
+      return;
+    }
+    await setDoc(doc(db, `splits/${splitId}/equipos`, id), {
+      ...(previousTemplate ?? {}),
+      id,
+      nombre: name,
+      presupuesto: budget,
+      presupuesto_inicial: budget,
+      puntos_constructores: 0,
+      puntos_carreras: [],
+    });
     setNewName("");
+    setNewBudget("");
     setMessage(`Equipo ${name} creado.`);
   };
 
@@ -46,10 +68,18 @@ export function AdminTeamManager({ splitId, teams, roster, splits, onSelectSplit
   };
 
   return <section className="mb-5 border border-white/10 bg-white/[0.03] p-4">
-    <div className="flex gap-2 overflow-x-auto mb-5 border-b border-white/10 pb-3">{splits.filter(split => split.id !== "global").map(split => <button key={split.id} onClick={() => onSelectSplit(split.id)} className={`shrink-0 px-3 py-2 text-[10px] font-black uppercase tracking-wider ${split.id === splitId ? "bg-[#e10600] text-white" : "border border-white/10 text-white/45 hover:text-white"}`}>{split.nombre}</button>)}</div>
+    <div className="flex gap-2 overflow-x-auto mb-5 border-b border-white/10 pb-3">{splits.filter(split => split.id !== "global" && split.tipo !== "individual").map(split => <button key={split.id} onClick={() => onSelectSplit(split.id)} className={`shrink-0 px-3 py-2 text-[10px] font-black uppercase tracking-wider ${split.id === splitId ? "bg-[#e10600] text-white" : "border border-white/10 text-white/45 hover:text-white"}`}>{split.nombre}</button>)}</div>
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
       <div><h2 className="text-sm font-black uppercase tracking-tight">Administración de equipos</h2><p className="text-[10px] text-white/40 mt-1">Crea, modifica y elimina escuderías de este split.</p></div>
-      <div className="flex gap-2"><input value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => event.key === "Enter" && createTeam()} placeholder="Nombre del equipo" className="w-48 bg-black/30 border border-white/10 px-3 py-2 text-xs text-white" /><button onClick={createTeam} className="inline-flex items-center gap-1.5 bg-[#e10600] px-3 py-2 text-[10px] font-black uppercase"><Plus className="w-3.5 h-3.5" /> Crear</button></div>
+      <div className="flex flex-wrap gap-2">
+        <input value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => event.key === "Enter" && void createTeam()} placeholder="Nombre del equipo" className="w-48 bg-black/30 border border-white/10 px-3 py-2 text-xs text-white" />
+        <label className="flex items-center gap-1 border border-white/10 bg-black/30 px-2 text-[10px] text-white/45">
+          Saldo
+          <input type="number" step="0.1" value={newBudget} onChange={event => setNewBudget(event.target.value)} onKeyDown={event => event.key === "Enter" && void createTeam()} placeholder="obligatorio" className="w-24 bg-transparent py-2 text-right text-xs text-white outline-none" />
+          M
+        </label>
+        <button onClick={() => void createTeam()} className="inline-flex items-center gap-1.5 bg-[#e10600] px-3 py-2 text-[10px] font-black uppercase"><Plus className="w-3.5 h-3.5" /> Crear</button>
+      </div>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">{teams.map(team => <div key={team.id} className="flex items-center gap-2 border border-white/5 bg-black/20 p-3">
       <div className="flex-1 min-w-0">{editingId === team.id ? <input autoFocus value={editingName} onChange={event => setEditingName(event.target.value)} className="w-full bg-black/40 border border-[#e10600] px-2 py-1 text-xs text-white" /> : <strong className="block truncate text-xs text-white/85">{team.nombre}</strong>}<span className="text-[10px] text-white/35">{roster.filter(pilot => pilot.equipoId === team.id).length} pilotos · {team.presupuesto ?? 0}M</span></div>

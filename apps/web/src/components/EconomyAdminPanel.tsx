@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment, runTransaction, serverTimestamp, deleteField } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment, runTransaction, serverTimestamp } from "firebase/firestore";
 import { EconomyRulesPanel } from "./EconomyRulesPanel";
 import { SplitRestorePanel } from "./SplitRestorePanel";
 import { db } from "../services/firebase";
 import {
   procesarEconomiaCarrera, revertirEconomiaCarrera, ficharPiloto, recalcularCurvaPreciosSplit,
+  ajustarClausulaManual,
   mantenerInicialDe, clausulaInicialDe,
   calcularPuntosPosicion,
   calcularMillonesRivalidadClasificacion, calcularMillonesRivalidadCarrera,
@@ -39,6 +40,9 @@ interface PilotRow {
   precio_compra: number;
   mantener_actual: number;
   clausula_actual: number;
+  clausula_manual?: number;
+  clausula_sin_ajuste?: number;
+  clausula_manual_presupuesto_aplicado?: boolean;
   mantener_inicial_split: number;
   clausula_inicial_split: number;
   historial: Record<string, { mantener: number | null; clausula: number | null; congelado?: boolean }>;
@@ -121,7 +125,12 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const activeSplits = splits
     .filter((s: any) => s.id !== "global" && s.id !== "origins" && s.tipo !== "individual")
     .sort((a: any, b: any) => Number(a.orden ?? 999) - Number(b.orden ?? 999));
-  const [selectedSplitId, setSelectedSplitId] = useState(activeSplits.find((split: any) => split.id === "split_1")?.id ?? activeSplits[0]?.id ?? "");
+  const [selectedSplitId, setSelectedSplitId] = useState(
+    activeSplits.find((split: any) => split.activo)?.id
+      ?? activeSplits.find((split: any) => !split.completado)?.id
+      ?? activeSplits[0]?.id
+      ?? "",
+  );
   const [circuits, setCircuits] = useState<CircuitoCol[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [pilots, setPilots] = useState<PilotRow[]>([]);
@@ -149,6 +158,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const [avisosApertura, setAvisosApertura] = useState<string[]>([]);
   const [derivando, setDerivando] = useState(false);
   const [mensajeApertura, setMensajeApertura] = useState("");
+  const [splitOrigenAperturaId, setSplitOrigenAperturaId] = useState("");
 
   // Alta manual de pilotos en el split (liga nueva, debutantes, incorporaciones fuera de mercado)
   const [globalPilots, setGlobalPilots] = useState<Array<{ id: string; nombre: string }>>([]);
@@ -165,6 +175,18 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     setAvisosApertura([]);
     setMensajeApertura("");
   }, [selectedSplitId]);
+
+  const selectedSplit = activeSplits.find((split: any) => split.id === selectedSplitId);
+  const splitsAnteriores = activeSplits
+    .filter((split: any) => Number(split.orden) < Number(selectedSplit?.orden))
+    .sort((a: any, b: any) => Number(b.orden) - Number(a.orden));
+  const origenConfigurado = selectedSplit?.presupuesto_origen_splitId;
+  const splitOrigenSugerido = splitsAnteriores.find((split: any) => split.id === origenConfigurado)
+    ?? splitsAnteriores[0];
+
+  useEffect(() => {
+    setSplitOrigenAperturaId(splitOrigenSugerido?.id ?? "");
+  }, [selectedSplitId, splitOrigenSugerido?.id]);
 
   useEffect(() => {
     if (!activeSplits.some((split: any) => split.id === selectedSplitId)) {
@@ -272,6 +294,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
             precio_compra:          pd.precio_compra ?? 0,
             mantener_actual:        pd.mantener_actual ?? 0,
             clausula_actual:        pd.clausula_actual ?? 0,
+            clausula_manual:        pd.clausula_manual,
+            clausula_sin_ajuste:    pd.clausula_sin_ajuste,
+            clausula_manual_presupuesto_aplicado: pd.clausula_manual_presupuesto_aplicado,
             mantener_inicial_split: pd.mantener_inicial_split ?? 0,
             clausula_inicial_split: pd.clausula_inicial_split ?? 0,
             historial:    hist,
@@ -293,14 +318,12 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         }
       }
 
-      if (splitId !== "split_1") {
-        const nombreSet = new Set(
-          allPilots.filter(p => !p.id.startsWith(LEGACY_PREFIX)).map(p => p.nombre.toLowerCase().trim())
-        );
-        allPilots.forEach(p => {
-          if (p.id.startsWith(LEGACY_PREFIX) && nombreSet.has(p.nombre.toLowerCase().trim())) p.isLegacy = true;
-        });
-      }
+      const nombreSet = new Set(
+        allPilots.filter(p => !p.id.startsWith(LEGACY_PREFIX)).map(p => p.nombre.toLowerCase().trim())
+      );
+      allPilots.forEach(p => {
+        if (p.id.startsWith(LEGACY_PREFIX) && nombreSet.has(p.nombre.toLowerCase().trim())) p.isLegacy = true;
+      });
 
       const pilotTeam: Record<string, string> = {};
       allPilots.forEach(p => { pilotTeam[p.id] = p.equipoId; });
@@ -485,12 +508,13 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   }
 
   async function recalcularPrecios() {
+    const splitNombre = selectedSplit?.nombre ?? selectedSplitId;
     if (!confirm(
-      `Recalcula mantener y cláusula de cada carrera de ${selectedSplitId} desde el precio de compra.\n\n` +
+      `Recalcula mantener y cláusula de cada carrera de ${splitNombre} desde el precio de compra.\n\n` +
       "No toca presupuestos, transacciones ni resultados. Los precios pactados en mercado se respetan.\n\n¿Continuar?"
     )) return;
     setLoading(true);
-    setProcessLog([`Recalculando la curva de precios de ${selectedSplitId}…`]);
+    setProcessLog([`Recalculando la curva de precios de ${splitNombre}…`]);
     try {
       await recalcularCurvaPreciosSplit(selectedSplitId, msg => setProcessLog(prev => [...prev, msg]));
       await loadData(selectedSplitId);
@@ -502,7 +526,8 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   }
 
   async function resetEconomia() {
-    if (!confirm(`¿Revertir las liquidaciones de carreras de ${selectedSplitId}, empezando por la última? Los fichajes y ajustes se conservan.`)) return;
+    const splitNombre = selectedSplit?.nombre ?? selectedSplitId;
+    if (!confirm(`¿Revertir las liquidaciones de carreras de ${splitNombre}, empezando por la última? Los fichajes y ajustes se conservan.`)) return;
     setLoading(true);
     setProcessLog([]);
     try {
@@ -548,6 +573,41 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     await loadData(pilot.splitId);
     } catch (error: any) { setProcessLog([error.message]); }
     finally { setSavingId(null); }
+  }
+
+  async function repararPresupuestoClausula(pilot: PilotRow) {
+    const team = teams.find(entry => entry.id === pilot.equipoId);
+    const automatic = pilot.clausula_sin_ajuste ?? pilot.clausula_actual;
+    const expected = team
+      ? Math.round((team.presupuesto + pilot.clausula_actual - automatic) * 10) / 10
+      : null;
+    if (!confirm(
+      `La cláusula manual de ${pilot.nombre} alteró la caja por error. La cláusula es valor de plantilla y no debe cobrarse.\n\n`
+      + (team && expected != null ? `${team.nombre}: ${team.presupuesto}M → ${expected}M.\n\n` : "")
+      + "¿Restaurar ahora el presupuesto?"
+    )) return;
+
+    setSavingId(pilot.id);
+    try {
+      const resultado = await ajustarClausulaManual({
+        splitId: pilot.splitId,
+        equipoId: pilot.equipoId,
+        equipoNombre: pilot.equipoNombre,
+        pilotoId: pilot.id,
+        pilotoNombre: pilot.nombre,
+        nuevaClausula: pilot.clausula_actual,
+        motivo: "Reversión del cargo erróneo causado por el ajuste manual de cláusula",
+      });
+      await loadData(pilot.splitId);
+      setProcessLog([
+        `Cargo erróneo de la cláusula de ${pilot.nombre} revertido.`,
+        `Presupuesto de ${pilot.equipoNombre}: ${resultado.presupuestoAnterior}M → ${resultado.presupuestoNuevo}M.`,
+      ]);
+    } catch (error: any) {
+      setProcessLog([`Error: ${error.message}`]);
+    } finally {
+      setSavingId(null);
+    }
   }
 
   /**
@@ -676,19 +736,12 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   // ─── APERTURA DERIVADA DEL BLOQUE ANTERIOR ───────────────────────────────────
 
-  // El bloque anterior es el inmediatamente por debajo en orden: la apertura de este split
-  // sale de su cierre menos lo que costó el mercado, sin teclear ninguna cifra.
-  const splitAnteriorId: string | null = (() => {
-    const idx = activeSplits.findIndex((split: any) => split.id === selectedSplitId);
-    return idx > 0 ? activeSplits[idx - 1].id : null;
-  })();
-
   async function previsualizarAperturas() {
-    if (!splitAnteriorId) return;
+    if (!splitOrigenAperturaId) return;
     setDerivando(true);
     setMensajeApertura("");
     try {
-      const { filas, avisos } = await derivarAperturas(selectedSplitId, splitAnteriorId);
+      const { filas, avisos } = await derivarAperturas(selectedSplitId, splitOrigenAperturaId);
       setAperturas(filas);
       setAvisosApertura(avisos);
     } catch (error: any) {
@@ -808,6 +861,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     resolveTransferView({ ...pilot, pilotoId: pilot.id }, nextSplit?.roster ?? []),
   ]));
   const legacyCount = pilots.filter(p => p.isLegacy).length;
+  const splitOrigenApertura = splitsAnteriores.find((split: any) => split.id === splitOrigenAperturaId);
+  const splitNombre = selectedSplit?.nombre ?? selectedSplitId;
+  const hayEconomiaProcesada = circuits.some(circuit => circuit.economia_procesada);
   const grouped = visiblePilots.reduce<Record<string, PilotRow[]>>((acc, p) => {
     (acc[p.equipoNombre] = acc[p.equipoNombre] || []).push(p);
     return acc;
@@ -817,10 +873,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
   return (
     <div className="space-y-10">
-      {selectedSplitId && <EconomyRulesPanel key={selectedSplitId} splitId={selectedSplitId} />}
-      {selectedSplitId && <SplitRestorePanel key={`restore-${selectedSplitId}`} splitId={selectedSplitId} splits={splits} onRestored={() => loadData(selectedSplitId)} />}
-
-      {/* ── CONTROLES ── */}
+      {/* ── CONTEXTO ── */}
       <div className="flex items-center justify-between flex-wrap gap-4 border-b border-white/[0.06] pb-6">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 shrink-0">Split</span>
@@ -836,27 +889,10 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           </div>
           {loading && <Loader2 className="w-4 h-4 animate-spin text-white/30" />}
         </div>
-        <div className="flex items-center gap-4 ml-auto">
-          {legacyCount > 0 && (
-            <button onClick={() => setShowLegacy(!showLegacy)}
-              className={`text-[9px] font-mono uppercase tracking-[0.3em] transition-colors ${showLegacy ? "text-[#e10600]" : "text-white/25 hover:text-white/50"}`}>
-              {showLegacy ? `Ocultar ${legacyCount} legacy` : `Mostrar ${legacyCount} legacy`}
-            </button>
-          )}
-          <button onClick={openAltaModal} disabled={loading || altaCandidates.length === 0 || teams.length === 0}
-            className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-400/60 hover:text-emerald-300 transition-colors disabled:opacity-30">
-            + Añadir piloto
-          </button>
-          <button onClick={recalcularPrecios} disabled={loading}
-            className="text-[9px] font-mono uppercase tracking-[0.3em] text-amber-400/60 hover:text-amber-300 transition-colors disabled:opacity-30">
-            Recalcular precios
-          </button>
-          <button onClick={resetEconomia} disabled={loading}
-            className="text-[9px] font-mono uppercase tracking-[0.3em] text-[#e10600]/50 hover:text-[#e10600] transition-colors disabled:opacity-30">
-            Reset economía
-          </button>
-        </div>
       </div>
+
+      {/* La configuración pertenece al split que se acaba de elegir. */}
+      {selectedSplitId && <EconomyRulesPanel key={selectedSplitId} splitId={selectedSplitId} />}
 
       {/* ── LOG ── */}
       {processLog.length > 0 && (
@@ -911,25 +947,48 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         <div className="flex items-center gap-4 mb-4 flex-wrap">
           <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20">Resumen de Escuderías</p>
           <span className="text-[9px] font-mono text-white/15">· clic en inicial para establecer</span>
-          {splitAnteriorId && (
-            <button onClick={previsualizarAperturas} disabled={derivando}
-              className="ml-auto flex items-center gap-1.5 border border-white/10 px-2.5 py-1 text-[9px] font-mono uppercase tracking-widest text-white/40 hover:text-emerald-300 hover:border-emerald-300/30 transition-colors disabled:opacity-40">
-              {derivando ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-              Conciliar mercado desde {splitAnteriorId}
-            </button>
-          )}
         </div>
 
-        {mensajeApertura && (
-          <p className="mb-3 border border-white/10 px-3 py-2 text-[10px] font-mono text-white/50">{mensajeApertura}</p>
-        )}
+        {splitsAnteriores.length > 0 && (
+          <details className="mb-4 border border-emerald-400/15 bg-emerald-400/[0.02] p-3">
+            <summary className="cursor-pointer text-[9px] font-mono uppercase tracking-[0.25em] text-emerald-300/60 hover:text-emerald-200">
+              Saldos de apertura · conciliar con un cierre anterior
+            </summary>
+            <p className="mt-2 text-xs text-white/40">
+              Compara el cierre elegido con el coste del mercado de {splitNombre}. Nada se modifica hasta confirmar la vista previa.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="text-[9px] font-mono uppercase tracking-widest text-white/30">
+                Cierre de origen
+                <select value={splitOrigenAperturaId}
+                  onChange={event => {
+                    setSplitOrigenAperturaId(event.target.value);
+                    setAperturas(null);
+                    setAvisosApertura([]);
+                    setMensajeApertura("");
+                  }}
+                  disabled={derivando}
+                  className="ml-2 border border-white/10 bg-black px-2 py-1 text-white/60 outline-none disabled:opacity-40">
+                  {splitsAnteriores.map((split: any) => <option key={split.id} value={split.id}>{split.nombre}</option>)}
+                </select>
+              </label>
+              <button onClick={previsualizarAperturas} disabled={derivando || !splitOrigenAperturaId}
+                className="flex items-center gap-1.5 border border-white/10 px-2.5 py-1 text-[9px] font-mono uppercase tracking-widest text-white/40 hover:text-emerald-300 hover:border-emerald-300/30 transition-colors disabled:opacity-40">
+                {derivando ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                Previsualizar conciliación
+              </button>
+            </div>
 
-        {/* Previsualización: nada se escribe hasta confirmar. */}
-        {aperturas && (
-          <div className="mb-4 border border-emerald-300/25 bg-emerald-300/[0.03]">
+            {mensajeApertura && (
+              <p className="mt-3 border border-white/10 px-3 py-2 text-[10px] font-mono text-white/50">{mensajeApertura}</p>
+            )}
+
+            {/* Previsualización: nada se escribe hasta confirmar. */}
+            {aperturas && (
+              <div className="mt-3 border border-emerald-300/25 bg-emerald-300/[0.03]">
             <div className="px-4 py-3 border-b border-white/[0.06]">
               <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-300/70">
-                Conciliación de mercado desde {splitAnteriorId}
+                Conciliación de {splitNombre} desde {splitOrigenApertura?.nombre ?? splitOrigenAperturaId}
               </p>
               <p className="mt-1 text-[10px] font-mono text-white/35">
                 Cierre del bloque anterior menos lo que costó el mercado, tomado del precio de compra de cada ficha.
@@ -940,7 +999,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[0.2em] text-white/25">
                     <th className="py-2 px-4 text-left font-normal">Escudería</th>
-                    <th className="py-2 px-4 text-right font-normal">Cierre {splitAnteriorId}</th>
+                    <th className="py-2 px-4 text-right font-normal">Cierre {splitOrigenApertura?.nombre ?? splitOrigenAperturaId}</th>
                     <th className="py-2 px-4 text-right font-normal">Mercado</th>
                     <th className="py-2 px-4 text-right font-normal">Saldo derivado</th>
                     <th className="py-2 px-4 text-right font-normal">Actual</th>
@@ -990,7 +1049,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 Conciliar mercado
               </button>
             </div>
-          </div>
+              </div>
+            )}
+          </details>
         )}
         <div className="overflow-x-auto border border-white/[0.06]">
           <table className="w-full text-xs border-collapse">
@@ -1090,16 +1151,28 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
             <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20">Pilotos y Mercado</p>
             <span className="text-[9px] font-mono text-white/15">· clic en precio para editar</span>
           </div>
-          {/* Toggle PRECIOS / RENDIMIENTO */}
-          <div className="flex gap-0.5">
-            {(["precios", "rendimiento"] as const).map(m => (
-              <button key={m} onClick={() => setViewMode(m)}
-                className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
-                  viewMode === m ? "bg-white/10 text-white" : "text-white/25 hover:text-white/50"
-                }`}>
-                {m === "precios" ? "Precios" : "Rendimiento"}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {legacyCount > 0 && (
+              <button onClick={() => setShowLegacy(!showLegacy)}
+                className={`text-[9px] font-mono uppercase tracking-[0.2em] transition-colors ${showLegacy ? "text-[#e10600]" : "text-white/25 hover:text-white/50"}`}>
+                {showLegacy ? `Ocultar ${legacyCount} legacy` : `Mostrar ${legacyCount} legacy`}
               </button>
-            ))}
+            )}
+            <button onClick={openAltaModal} disabled={loading || altaCandidates.length === 0 || teams.length === 0}
+              className="text-[9px] font-mono uppercase tracking-[0.2em] text-emerald-400/60 hover:text-emerald-300 transition-colors disabled:opacity-30">
+              + Añadir piloto
+            </button>
+            {/* Toggle PRECIOS / RENDIMIENTO */}
+            <div className="flex gap-0.5">
+              {(["precios", "rendimiento"] as const).map(m => (
+                <button key={m} onClick={() => setViewMode(m)}
+                  className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
+                    viewMode === m ? "bg-white/10 text-white" : "text-white/25 hover:text-white/50"
+                  }`}>
+                  {m === "precios" ? "Precios" : "Rendimiento"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1183,6 +1256,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                     const destTeam = destTeamId ? (nextSplit?.equipos?.find((team: any) => team.id === destTeamId) ?? teams.find(t => t.id === destTeamId)) : null;
                     const isRenovacion = destTeamId === pilot.equipoId;
                     const tipoActivo = transfer?.tipo;
+                    const clausulaConCargoErroneo = pilot.clausula_manual != null
+                      && pilot.clausula_manual_presupuesto_aplicado === true
+                      && pilot.equipoId !== "agente_libre";
 
                     return (
                       <tr key={pilot.id}
@@ -1195,6 +1271,12 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <span className="font-bold text-white/90 truncate text-[11px] block">{pilot.nombre}</span>
+                              {pilot.clausula_manual != null && (
+                                <span className={`block text-[8px] ${clausulaConCargoErroneo ? "text-amber-300" : "text-sky-300/70"}`}>
+                                  cláusula manual · {r1(pilot.clausula_manual)}M
+                                  {clausulaConCargoErroneo ? " · reparar presupuesto" : ""}
+                                </span>
+                              )}
                               {pilot.isLegacy && <span className="text-[8px] text-[#e10600]/40">legacy</span>}
                                {transfer && (
                                 <div className="flex items-center gap-1 mt-0.5 flex-wrap">
@@ -1267,6 +1349,12 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                               } catch (error: any) { setProcessLog([error.message]); }
                               finally { setDeletingId(null); }
                             }}>Deshacer alta</button>
+                          {clausulaConCargoErroneo && (
+                            <button type="button" disabled={isSaving} onClick={() => repararPresupuestoClausula(pilot)}
+                              className="block text-[9px] font-bold text-amber-300 mt-1 disabled:opacity-40">
+                              {isSaving ? "Reparando…" : "Restaurar presupuesto"}
+                            </button>
+                          )}
                           <button type="button" className="block text-[9px] text-sky-300 mt-1"
                             onClick={async () => {
                               const raw = prompt("Nueva cláusula (M). Deja el campo vacío para retirar el ajuste manual y recuperar la cláusula automática.", String(pilot.clausula_actual));
@@ -1277,20 +1365,24 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                               const motivo = prompt("Motivo del ajuste de cláusula:");
                               if (!motivo?.trim()) return;
                               try {
-                                const ref = doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
-                                await runTransaction(db, async tx => {
-                                  const snap = await tx.get(ref);
-                                  if (!snap.exists()) throw new Error("La ficha ya no existe.");
-                                  const anterior = snap.data();
-                                  const nuevo = retirar ? (anterior.clausula_sin_ajuste ?? anterior.clausula_actual ?? 0) : importe;
-                                  tx.update(ref, { clausula_actual: nuevo,
-                                    clausula_manual: retirar ? deleteField() : importe,
-                                    clausula_sin_ajuste: retirar ? deleteField() : (anterior.clausula_sin_ajuste ?? anterior.clausula_actual ?? 0) });
-                                  tx.set(doc(collection(db, "transacciones")), { splitId: pilot.splitId, equipoId: pilot.equipoId,
-                                    equipo: pilot.equipoNombre, piloto: pilot.nombre, tipo: "ajuste", cantidad: 0, esIngreso: true,
-                                    descripcion: `Cláusula: ${anterior.clausula_actual ?? 0}M → ${nuevo}M${retirar ? " (ajuste retirado)" : ""}. ${motivo}`, fecha: serverTimestamp() });
+                                const resultado = await ajustarClausulaManual({
+                                  splitId: pilot.splitId,
+                                  equipoId: pilot.equipoId,
+                                  equipoNombre: pilot.equipoNombre,
+                                  pilotoId: pilot.id,
+                                  pilotoNombre: pilot.nombre,
+                                  nuevaClausula: retirar ? null : importe,
+                                  motivo,
                                 });
                                 await loadData(pilot.splitId);
+                                setProcessLog([
+                                  retirar
+                                    ? `Ajuste manual retirado de ${pilot.nombre}. Cláusula restaurada: ${resultado.clausulaNueva}M.`
+                                    : `Cláusula manual aplicada a ${pilot.nombre}: ${resultado.clausulaNueva}M.`,
+                                  resultado.deltaPresupuesto
+                                    ? `Presupuesto corregido: ${resultado.presupuestoAnterior}M → ${resultado.presupuestoNuevo}M.`
+                                    : `La caja de ${pilot.equipoNombre} no cambia; sí cambia el valor total de su plantilla.`,
+                                ]);
                               } catch (error: any) { setProcessLog([error.message]); }
                             }}>Ajustar cláusula</button>
                         </td>
@@ -1466,6 +1558,41 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           </p>
         )}
       </div>
+
+      {/* Las reparaciones quedan al final: no forman parte del trabajo diario con
+          presupuestos y fichajes, y siempre actúan sobre el split seleccionado. */}
+      {selectedSplitId && (
+        <details className="border border-white/[0.08] bg-white/[0.015] p-4">
+          <summary className="cursor-pointer text-[10px] font-mono uppercase tracking-[0.25em] text-white/35 hover:text-white/60">
+            Mantenimiento avanzado · {splitNombre}
+          </summary>
+          <p className="mt-3 text-xs text-white/45">
+            Utiliza estas herramientas solo para recuperar o reconstruir datos. Las operaciones normales se realizan en las tablas anteriores.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="border border-white/[0.06] p-3">
+              <p className="text-[10px] font-bold text-white/65">Reconstruir precios</p>
+              <p className="mt-1 text-xs text-white/35">Regenera mantener, cláusula e historial desde el precio de compra y el calendario.</p>
+              <button onClick={recalcularPrecios} disabled={loading || circuits.length === 0 || pilots.length === 0}
+                className="mt-3 border border-amber-400/25 px-3 py-2 text-[9px] font-mono uppercase tracking-[0.2em] text-amber-300/70 hover:border-amber-300/50 hover:text-amber-200 transition-colors disabled:opacity-30">
+                Reconstruir en {splitNombre}
+              </button>
+            </div>
+            <div className="border border-white/[0.06] p-3">
+              <p className="text-[10px] font-bold text-white/65">Revertir liquidaciones</p>
+              <p className="mt-1 text-xs text-white/35">Deshace la economía de las carreras, de la más reciente a la más antigua. Conserva fichajes y ajustes.</p>
+              <button onClick={resetEconomia} disabled={loading || !hayEconomiaProcesada}
+                title={hayEconomiaProcesada ? "" : "Este split no tiene liquidaciones que revertir."}
+                className="mt-3 border border-[#e10600]/25 px-3 py-2 text-[9px] font-mono uppercase tracking-[0.2em] text-[#e10600]/70 hover:border-[#e10600]/50 hover:text-[#e10600] transition-colors disabled:opacity-30">
+                Revertir en {splitNombre}
+              </button>
+            </div>
+          </div>
+          <div className="mt-4">
+            <SplitRestorePanel key={`restore-${selectedSplitId}`} splitId={selectedSplitId} splits={splits} onRestored={() => loadData(selectedSplitId)} />
+          </div>
+        </details>
+      )}
 
       {/* ── MODAL DE ALTA MANUAL ── */}
       {altaModalOpen && (

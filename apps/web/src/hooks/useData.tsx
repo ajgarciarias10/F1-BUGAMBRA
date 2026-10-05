@@ -168,7 +168,13 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
   const equiposMap = raw.equipos.get(sid) ?? new Map();
   const equipos: Equipo[] = [...equiposMap.entries()]
     .filter(([id]) => id !== "agente_libre")
-    .map(([id, data]) => ({ id, nombre: id, presupuesto: 100, puntos_constructores: 0, ...data })) as Equipo[];
+    .map(([id, data]) => ({
+      id,
+      ...data,
+      nombre: data.nombre ?? id,
+      presupuesto: Number(data.presupuesto ?? 0),
+      puntos_constructores: Number(data.puntos_constructores ?? 0),
+    })) as Equipo[];
 
   const rosterByPilot = new Map<string, PilotInRoster>();
   const pilotosPorEquipoDelSplit = raw.pilotosPorEquipo.get(sid) ?? new Map();

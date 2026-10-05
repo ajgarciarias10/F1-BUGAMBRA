@@ -5,6 +5,7 @@ import {
 import { db } from "./firebase";
 import type { TipoTransaccion } from "../types";
 import { economyRules } from "../utils/economyRules";
+import { rosterEntryAtSplitStart } from "../utils/rosterEntry";
 
 // ─── CONSTANTES ECONÓMICAS ────────────────────────────────────────────────────
 
@@ -131,6 +132,74 @@ async function logTx(data: TransactionLog) {
   await addDoc(collection(db, "transacciones"), payload);
 }
 
+// ─── AJUSTE MANUAL DE CLÁUSULA ───────────────────────────────────────
+
+export async function ajustarClausulaManual(params: {
+  splitId: string;
+  equipoId: string;
+  equipoNombre: string;
+  pilotoId: string;
+  pilotoNombre: string;
+  nuevaClausula: number | null;
+  motivo: string;
+}): Promise<{ clausulaAnterior: number; clausulaNueva: number; presupuestoAnterior: number; presupuestoNuevo: number; deltaPresupuesto: number }> {
+  if (!params.motivo.trim()) throw new Error("Indica el motivo del ajuste.");
+  if (params.nuevaClausula != null && (!Number.isFinite(params.nuevaClausula) || params.nuevaClausula < 0)) {
+    throw new Error("La cláusula debe ser un número igual o mayor que cero.");
+  }
+
+  const pilotoRef = doc(db, `splits/${params.splitId}/equipos/${params.equipoId}/pilotos`, params.pilotoId);
+  const equipoRef = doc(db, `splits/${params.splitId}/equipos`, params.equipoId);
+  const movimientoRef = doc(collection(db, "transacciones"));
+
+  return runTransaction(db, async tx => {
+    const [piloto, equipo] = await Promise.all([tx.get(pilotoRef), tx.get(equipoRef)]);
+    if (!piloto.exists()) throw new Error("La ficha ya no existe.");
+    if (!equipo.exists()) throw new Error("La escudería ya no existe.");
+
+    const ficha = piloto.data() as any;
+    const clausulaAnterior = Number(ficha.clausula_actual ?? 0);
+    const clausulaAutomatica = Number(ficha.clausula_sin_ajuste ?? clausulaAnterior);
+    const clausulaNueva = params.nuevaClausula == null ? clausulaAutomatica : params.nuevaClausula;
+    const presupuestoAnterior = Number(equipo.data()?.presupuesto ?? 0);
+
+    // La cláusula es valor de plantilla, no precio de compra: no mueve la caja. Durante
+    // una versión defectuosa sí se cargó la diferencia y se marcó la ficha. Si aparece
+    // esa marca, esta misma transacción devuelve exactamente aquel cargo erróneo.
+    const cargoErroneoAplicado = ficha.clausula_manual_presupuesto_aplicado === true;
+    const presupuestoNuevo = cargoErroneoAplicado && params.equipoId !== "agente_libre"
+      ? r1(presupuestoAnterior + clausulaAnterior - clausulaAutomatica)
+      : presupuestoAnterior;
+    const deltaPresupuesto = r1(presupuestoNuevo - presupuestoAnterior);
+
+    tx.update(pilotoRef, {
+      clausula_actual: clausulaNueva,
+      clausula_manual: params.nuevaClausula == null ? deleteField() : clausulaNueva,
+      clausula_sin_ajuste: params.nuevaClausula == null
+        ? deleteField()
+        : (ficha.clausula_sin_ajuste ?? clausulaAnterior),
+      clausula_manual_presupuesto_aplicado: deleteField(),
+    });
+    if (deltaPresupuesto) tx.update(equipoRef, { presupuesto: presupuestoNuevo });
+    tx.set(movimientoRef, {
+      splitId: params.splitId,
+      equipoId: params.equipoId,
+      equipo: params.equipoNombre,
+      piloto: params.pilotoNombre,
+      tipo: "ajuste",
+      cantidad: Math.abs(deltaPresupuesto),
+      esIngreso: deltaPresupuesto >= 0,
+      descripcion: `Cláusula: ${clausulaAnterior}M → ${clausulaNueva}M; sin movimiento de caja.`
+        + (deltaPresupuesto ? ` Corrección del cargo erróneo anterior: ${presupuestoAnterior}M → ${presupuestoNuevo}M.` : "")
+        + ` ${params.motivo.trim()}`,
+      fecha: serverTimestamp(),
+      concepto: "clausula_manual",
+    });
+
+    return { clausulaAnterior, clausulaNueva, presupuestoAnterior, presupuestoNuevo, deltaPresupuesto };
+  });
+}
+
 // ─── HELPER: buscar doc anidado de un piloto en un split ─────────────────────
 
 export async function findPilotEntry(
@@ -178,10 +247,11 @@ export async function ficharPiloto(params: {
       .map(id => doc(db, `splits/${splitId}/equipos/${id}/pilotos`, pilotoId));
     const operationRef = doc(collection(db, `splits/${splitId}/transfers`));
     await runTransaction(db, async transaction => {
-    const [team, locations, split, room] = await Promise.all([
+    const [team, locations, split, room, globalPilot] = await Promise.all([
       transaction.get(teamRef), Promise.all(locationRefs.map(ref => transaction.get(ref))),
       transaction.get(doc(db, "splits", splitId)),
       params.adjudicacion ? transaction.get(doc(db, `splits/${splitId}/subasta`, "sala")) : Promise.resolve(null),
+      transaction.get(doc(db, "pilotos", pilotoId)),
     ]);
     if (!team.exists()) throw new Error("La escudería no existe.");
     if (precio > 0 && Number(team.data().presupuesto ?? 0) < precio) throw new Error("Presupuesto insuficiente.");
@@ -217,6 +287,7 @@ export async function ficharPiloto(params: {
       participa_hasta: null,
       clausula_manual: null,
       clausula_sin_ajuste: null,
+      clausula_manual_presupuesto_aplicado: null,
       restaurado_desde: null,
     };
 
@@ -230,14 +301,17 @@ export async function ficharPiloto(params: {
       // Mismo equipo: solo actualizar precios
       transaction.update(current.ref, priceFields);
     } else {
-      // Piloto sin doc en este split: crear con stats en 0
-      transaction.set(newRef, {
+      // Un alta parte de la ficha global. Así conserva nombre, rating, foto y cualquier
+      // campo de identidad añadido después, en vez de crear un documento paralelo fijo.
+      transaction.set(newRef, rosterEntryAtSplitStart(globalPilot.exists() ? globalPilot.data() : { nombre: pilotName }, {
         pilotoId,
-        rating_piloto: 70,
-        puntos_piloto: 0, victorias: 0, podios: 0,
-        poles: 0, dnfs: 0, carreras_limpias: 0,
-        ...priceFields,
-      });
+        equipoId: teamId,
+        precioCompra: precio,
+        mantener: nuevaMantener,
+        clausula: nuevaClausula,
+        tipoFichaje: tipo,
+        extra: { ultima_operacion_id: operationRef.id },
+      }));
     }
 
     transaction.update(teamRef, { presupuesto: increment(delta) });

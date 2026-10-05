@@ -5,7 +5,7 @@ import { useUsuarios, useSplits } from "../hooks/useData";
 import { processRace, RaceResult, revertirCarreraCompleta, recalcSplitPoints } from "../services/raceProcessor";
 import { procesarEconomiaCarrera, revertirEconomiaCarrera } from "../services/economyService";
 import { db } from "../services/firebase";
-import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, setDoc, onSnapshot, writeBatch } from "firebase/firestore";
 import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { isSplitUnlocked } from "../utils/splitResolver";
@@ -22,6 +22,7 @@ import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 import { SplitIntroPanel } from "./SplitIntroPanel";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
 import { PaddockAdminPanel } from "./PaddockAdminPanel";
+import { previsualizarRestauracion, restaurarSplitDesdeCierre } from "../services/splitRestoreService";
 
 const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
 
@@ -78,12 +79,19 @@ export function AdminDashboard() {
   const [selectedSplitId, setSelectedSplitId] = useState("");
 
   const currentRawSplit = useMemo(() => rawSplits.find(s => s.id === selectedSplitId), [rawSplits, selectedSplitId]);
+  const orderedTeamSplits = useMemo(() => rawSplits
+    .filter(split => split.id !== "global" && split.tipo !== "individual")
+    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0) || a.id.localeCompare(b.id)), [rawSplits]);
+  const previousTeamSplit = useMemo(() => {
+    const index = orderedTeamSplits.findIndex(split => split.id === selectedSplitId);
+    return index > 0 ? orderedTeamSplits[index - 1] : null;
+  }, [orderedTeamSplits, selectedSplitId]);
   const isSelectedSplitInitialized = useMemo(() => {
-    if (!selectedSplitId || selectedSplitId === "split_1") return true;
+    if (!selectedSplitId || !previousTeamSplit) return true;
     if (!currentRawSplit) return false;
     if (currentRawSplit.tipo === "individual") return true;
     return (currentRawSplit.roster?.length || 0) > 0;
-  }, [selectedSplitId, currentRawSplit]);
+  }, [selectedSplitId, previousTeamSplit, currentRawSplit]);
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -412,154 +420,28 @@ export function AdminDashboard() {
 
   const handleSyncSplitRosters = (splitId: string) => {
     const currentSplitName = splits.find(s => s.id === splitId)?.nombre || splitId;
+    const currentIndex = orderedTeamSplits.findIndex(split => split.id === splitId);
+    const source = currentIndex > 0 ? orderedTeamSplits[currentIndex - 1] : null;
+    if (!source) {
+      setMsg(`Error: ${currentSplitName} no tiene un split de escuderías anterior.`);
+      return;
+    }
     setConfirmModal({
       isOpen: true,
       title: `Inicializar ${currentSplitName}`,
-       message: `¿Seguro que quieres INICIALIZAR las plantillas del ${currentSplitName.toUpperCase()} a partir del Split anterior? Los presupuestos heredarán el saldo conciliado, mientras que los puntos, victorias y podios empezarán en 0. El RATING de cada piloto se heredará del valor final que tenga en el split anterior.`,
+      message: `¿Restaurar ${currentSplitName} desde el cierre de ${source.nombre}? Se conservará la estructura existente de equipos y pilotos, se heredarán saldos y ratings y se reiniciarán estadísticas y mercado. Se guardará una copia antes de sustituir datos.`,
       onConfirm: async () => {
         setLoading(true);
         try {
-          const sortedSplits = splits
-            .filter(split => split.tipo !== "individual")
-            .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0) || a.id.localeCompare(b.id));
-          const currentIndex = sortedSplits.findIndex(s => s.id === splitId);
-          if (currentIndex <= 0) {
-            setMsg("Error: No se puede inicializar el Split 1 desde un split anterior.");
-            setLoading(false);
-            return;
-          }
-           const prevSplit = sortedSplits[currentIndex - 1];
-           setMsg(`Leyendo roster de ${prevSplit.nombre}...`);
-
-           for (const previousSplit of sortedSplits.slice(0, currentIndex)) {
-             const previousCircuits = await getDocs(collection(db, `splits/${previousSplit.id}/circuitos`));
-             if (previousCircuits.empty) {
-               throw new Error(`${previousSplit.nombre} no tiene carreras registradas.`);
-             }
-             const pendingCircuits = previousCircuits.docs.filter(circuitDoc => {
-               const circuit = circuitDoc.data();
-               return !circuit.completado
-                 || !circuit.acta_cerrada
-                 || !circuit.economia_procesada
-                 || !Array.isArray(circuit.resultados)
-                 || circuit.resultados.length === 0;
-             });
-             if (pendingCircuits.length) {
-               throw new Error(`${previousSplit.nombre} tiene carreras sin resultados cerrados o sin economía procesada: ${pendingCircuits.map(circuit => circuit.data().nombre || circuit.id).join(", ")}.`);
-             }
-           }
-
-           // Copiar equipos del split anterior conservando el saldo ya conciliado.
-           const prevTeamsSnap = await getDocs(collection(db, `splits/${prevSplit.id}/equipos`));
-           for (const prevTeamDoc of prevTeamsSnap.docs) {
-             const teamData = prevTeamDoc.data();
-             const inheritedBudget = Number(teamData.presupuesto ?? 100);
-             await setDoc(doc(db, `splits/${splitId}/equipos`, prevTeamDoc.id), {
-               id: prevTeamDoc.id,
-               nombre: teamData.nombre || prevTeamDoc.id,
-               presupuesto: inheritedBudget,
-                presupuesto_inicial: inheritedBudget,
-                presupuesto_arrastre: inheritedBudget,
-                presupuesto_origen_splitId: prevSplit.id,
-                puntos_constructores: 0
-            }, { merge: true });
-          }
-          await setDoc(doc(db, `splits/${splitId}/equipos`, "agente_libre"), {
-            id: "agente_libre", nombre: "Agentes libres", presupuesto: 0, puntos_constructores: 0,
-          }, { merge: true });
-
-          // Borrar pilotos anidados existentes en este split
-          const existingEquiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
-          for (const equipoDoc of existingEquiposSnap.docs) {
-            const pilotsSnap = await getDocs(
-              collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`)
-            );
-            for (const pd of pilotsSnap.docs) {
-              await deleteDoc(pd.ref);
-            }
-          }
-
-          // Leer pilotos anidados del split anterior y copiarlos al nuevo
-          let pilotsInitialized = 0;
-           for (const prevEquipoDoc of prevTeamsSnap.docs) {
-            const prevPilotosSnap = await getDocs(
-              collection(db, `splits/${prevSplit.id}/equipos/${prevEquipoDoc.id}/pilotos`)
-            );
-            for (const prevPd of prevPilotosSnap.docs) {
-              const r = prevPd.data();
-              if (r.participa_hasta != null) continue;
-               const pid = prevPd.id;
-               const inheritedRating = r.rating_piloto ?? 70;
-               const estado = r.estado_siguiente_split || (
-                 r.pending_tipo_fichaje === "mantener" ? "mantener" :
-                 r.pending_tipo_fichaje === "clausula" ? "clausula" :
-                 r.pending_equipoId ? "subasta" : "agente_libre"
-               );
-                if (estado === "agente_libre") {
-                  await setDoc(doc(db, `splits/${splitId}/equipos/agente_libre/pilotos`, pid), {
-                    ...r,
-                    pilotoId: pid,
-                    equipoId: "agente_libre",
-                    precio_compra: 0,
-                    mantener_actual: 0,
-                    clausula_actual: 0,
-                    tipo_fichaje: "subasta",
-                    participa_desde: 1,
-                    participa_hasta: null,
-                  });
-                  pilotsInitialized++;
-                  continue;
-                }
-               const nextEquipoId = r.pending_equipoId ?? r.equipoId;
-               if (!nextEquipoId || nextEquipoId === "agente_libre") continue;
-               const nextPrecioCompra = Number(r.precio_inicio_siguiente_split);
-               if (!Number.isFinite(nextPrecioCompra)) {
-                 throw new Error(`Falta el precio inicial manual del siguiente split para ${r.nombre || pid}.`);
-               }
-               // Un precio negativo divide en vez de multiplicar, conservando el signo (Excel T2/T3).
-               const nextMantener = Math.round((nextPrecioCompra < 0 ? nextPrecioCompra / 3 : nextPrecioCompra * 3) * 10) / 10;
-               const nextClausula = Math.round((nextPrecioCompra < 0 ? nextPrecioCompra / 2 : nextPrecioCompra * 2) * 10) / 10;
-
-              await setDoc(doc(db, `splits/${splitId}/equipos/${nextEquipoId}/pilotos`, pid), {
-                pilotoId:               pid,
-                equipoId:               nextEquipoId,
-                rating_piloto:          inheritedRating,
-                rating_base:            inheritedRating,
-                participa_desde:        1,
-                participa_hasta:        null,
-                 tipo_fichaje:           estado === "subasta" ? "subasta" : estado,
-                puntos_piloto: 0, victorias: 0, podios: 0,
-                poles: 0, dnfs: 0, carreras_limpias: 0,
-                precio_compra:           nextPrecioCompra,
-                mantener_actual:         nextMantener,
-                clausula_actual:         nextClausula,
-                mantener_inicial_split:  nextMantener,
-                clausula_inicial_split:  nextClausula,
-                precio_carrera_anterior: nextMantener,
-                historial_precios:       {},
-                 congelado:               false,
-                congelado_en:            undefined,
-              });
-
-              pilotsInitialized++;
-            }
-          }
-
-           await addDoc(collection(db, `splits/${splitId}/transfers`), {
-             detalles: `⚙️ Admin inicializó los rosters del ${currentSplitName} desde ${prevSplit.nombre}. ${pilotsInitialized} pilotos copiados con precio inicial manual. Los no renovados quedan libres para subasta.`,
-            timestamp: new Date().toISOString(),
-            tipo: "admin"
-          });
-
-          setMsg(`¡${currentSplitName} inicializado! ${pilotsInitialized} pilotos copiados. Recarguemos para ver presupuestos...`);
-          
-          // Forzar reload para que useSplits recargue los datos con los presupuestos ajustados
+          setMsg(`Previsualizando el cierre de ${source.nombre}...`);
+          const preview = await previsualizarRestauracion(source.id, splitId);
+          const result = await restaurarSplitDesdeCierre(source.id, splitId, preview.version);
+          setMsg(`${currentSplitName} restaurado: ${result.equipos} escuderías y ${result.pilotos} pilotos. Copia ${result.backupId}.`);
           setTimeout(() => {
             window.location.reload();
           }, 1500);
-          setTimeout(() => setMsg(""), 6000);
         } catch (err: any) {
-          setMsg("Error al inicializar split: " + err.message);
+          setMsg("Error al restaurar el split: " + err.message);
         } finally {
           setLoading(false);
         }
@@ -971,7 +853,7 @@ export function AdminDashboard() {
              </div>
 
            </details>
-            {!isSelectedSplitInitialized && selectedSplitId !== "split_1" && (
+            {!isSelectedSplitInitialized && previousTeamSplit && (
               <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div>
                   <h4 className="text-sm font-bold text-amber-400">Este split todavía no tiene pilotos</h4>

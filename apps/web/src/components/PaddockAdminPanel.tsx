@@ -4,7 +4,15 @@ import { StorageImageUpload } from "./StorageImageUpload";
 import { aprobarBienvenidas, borrarMensajePaddock, borrarMensajesDeSplit, leerBienvenidas, leerMensajesPaddock, marcarEquipoCompleto, publicarBienvenida, type PaddockPostAdmin, type PaddockWelcomeTeam } from "../services/paddockAdminService";
 
 export function PaddockAdminPanel({ splits }: { splits: any[] }) {
-  const [splitId, setSplitId] = useState(splits.find(split => split.id === "split_3")?.id || splits.find(split => split.id !== "global")?.id || "");
+  const availableSplits = splits
+    .filter(split => split.id !== "global" && split.tipo !== "individual")
+    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
+  const [splitId, setSplitId] = useState(
+    availableSplits.find(split => split.activo)?.id
+      || [...availableSplits].reverse().find(split => !split.completado)?.id
+      || availableSplits.at(-1)?.id
+      || "",
+  );
   const [splitNombre, setSplitNombre] = useState("");
   const [equipos, setEquipos] = useState<PaddockWelcomeTeam[]>([]);
   const [completa, setCompleta] = useState(false);
@@ -12,6 +20,16 @@ export function PaddockAdminPanel({ splits }: { splits: any[] }) {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [posts, setPosts] = useState<PaddockPostAdmin[]>([]);
+
+  useEffect(() => {
+    if (availableSplits.some(split => split.id === splitId)) return;
+    setSplitId(
+      availableSplits.find(split => split.activo)?.id
+        || [...availableSplits].reverse().find(split => !split.completado)?.id
+        || availableSplits.at(-1)?.id
+        || "",
+    );
+  }, [splits, splitId]);
 
   const load = async () => {
     if (!splitId) return;
@@ -45,17 +63,17 @@ export function PaddockAdminPanel({ splits }: { splits: any[] }) {
     catch (error: any) { setMessage(error.message); } finally { setBusy(""); }
   };
 
-  const removeSplit3 = async () => {
-    if (!confirm("¿Borrar todos los mensajes de bienvenida del Split 3? Esta acción no se puede deshacer.")) return;
+  const removeSplitMessages = async () => {
+    if (!splitId || !confirm(`¿Borrar todos los mensajes de bienvenida de ${splitNombre || splitId}? Esta acción no se puede deshacer.`)) return;
     setBusy("borrando");
-    try { const count = await borrarMensajesDeSplit("split_3"); setMessage(`${count} mensaje(s) del Split 3 borrado(s).`); await load(); }
+    try { const count = await borrarMensajesDeSplit(splitId); setMessage(`${count} mensaje(s) de ${splitNombre || splitId} borrado(s).`); await load(); }
     catch (error: any) { setMessage(error.message); } finally { setBusy(""); }
   };
 
   return <section className="space-y-5 border border-white/10 bg-white/[0.02] p-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><p className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-300/70">Paddock · publicaciones oficiales</p><h2 className="mt-1 text-xl font-black text-white">Bienvenidas de equipos</h2></div>
-      <select value={splitId} onChange={event => setSplitId(event.target.value)} className="border border-white/10 bg-black px-3 py-2 text-xs text-white">{splits.filter(split => split.id !== "global").map(split => <option key={split.id} value={split.id}>{split.nombre || split.id}</option>)}</select>
+      <select value={splitId} onChange={event => setSplitId(event.target.value)} className="border border-white/10 bg-black px-3 py-2 text-xs text-white">{availableSplits.map(split => <option key={split.id} value={split.id}>{split.nombre || split.id}</option>)}</select>
     </div>
     <p className="text-xs text-white/50">Las plantillas completas se revisan aquí. Nada se publica automáticamente. Primero da el OK completo y después publica cada comentario con su foto.</p>
     {message && <p className="border border-white/10 px-3 py-2 text-xs text-amber-300">{message}</p>}
@@ -75,7 +93,7 @@ export function PaddockAdminPanel({ splits }: { splits: any[] }) {
     </div>
     <div className="flex flex-wrap gap-2">
       <button onClick={approve} disabled={!completa || aprobado || !!busy} className="inline-flex items-center gap-2 bg-emerald-500 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-40"><CheckCircle2 className="h-3.5 w-3.5" /> {aprobado ? "OK completo dado" : "Dar OK completo"}</button>
-      <button onClick={removeSplit3} disabled={!!busy} className="inline-flex items-center gap-2 border border-red-400/30 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-red-300 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" /> Borrar mensajes Split 3</button>
+      <button onClick={removeSplitMessages} disabled={!!busy || !splitId} className="inline-flex items-center gap-2 border border-red-400/30 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-red-300 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" /> Borrar mensajes de {splitNombre || "este split"}</button>
     </div>
     {!completa && <p className="text-xs text-amber-300">No se puede dar el OK: todavía falta completar algún equipo.</p>}
     {busy === "cargando" ? <Loader2 className="h-5 w-5 animate-spin text-white/40" /> : <div className="grid gap-3 md:grid-cols-2">{equipos.map(equipo => <article key={equipo.id} className="border border-white/10 p-4">

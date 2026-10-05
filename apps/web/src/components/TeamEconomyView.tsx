@@ -419,10 +419,10 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
                           <div className="bg-white/[0.02] border border-t-0 border-white/[0.06] px-2 py-1.5 space-y-1">
                             <div className="flex justify-between text-[8px] font-mono text-white/40">
                               <span>Cláusula</span>
-                              <span className="text-[#e10600] font-bold">{p.clausula_actual || 0}M</span>
+                              <span className="text-[#e10600] font-bold">{p.clausula_actual ?? 0}M</span>
                             </div>
                             {canManage && miEquipo && p.equipoId !== escuderiaId && (() => {
-                              const precio = p.clausula_actual || 0;
+                              const precio = p.clausula_actual ?? 0;
                               const sinDinero = miEquipo.presupuesto < precio;
                               const cargando = busy === `sign:${p.pilotoId}`;
                               return (
@@ -488,16 +488,16 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
                       <div className="bg-white/[0.02] border border-t-0 border-white/[0.06] px-2 py-1.5">
                         <div className="flex justify-between text-[8px] font-mono text-white/40">
                           <span>Precio</span>
-                          <span className="text-emerald-400 font-bold">{p.clausula_actual || 0}M</span>
+                          <span className="text-emerald-400 font-bold">{p.clausula_actual ?? 0}M</span>
                         </div>
                         <button
-                          onClick={() => handleSignPilot(miEquipo.id, p.pilotoId, p.clausula_actual || 0)}
-                           disabled={!!busy || !mercadoAbierto || miEquipo.presupuesto < (p.clausula_actual || 0)}
+                          onClick={() => handleSignPilot(miEquipo.id, p.pilotoId, p.clausula_actual ?? 0)}
+                           disabled={!!busy || !mercadoAbierto || miEquipo.presupuesto < (p.clausula_actual ?? 0)}
                           title={!mercadoAbierto
                             ? "La ventana de fichajes está cerrada"
-                            : miEquipo.presupuesto < (p.clausula_actual || 0)
+                            : miEquipo.presupuesto < (p.clausula_actual ?? 0)
                               ? "Presupuesto insuficiente"
-                              : `Fichar por ${formatearMillones(p.clausula_actual || 0)}`}
+                              : `Fichar por ${formatearMillones(p.clausula_actual ?? 0)}`}
                           className="mt-1 flex w-full min-h-9 items-center justify-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 text-[9px] font-black uppercase tracking-[0.1em] text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-30"
                         >
                           {busy === `sign:${p.pilotoId}` && <Loader2 className="h-3 w-3 animate-spin" />}

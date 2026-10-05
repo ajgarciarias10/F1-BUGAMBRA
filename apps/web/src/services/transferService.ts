@@ -1,6 +1,7 @@
 import { collection, doc, getDocs, increment, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { clausulaInicialDe, mantenerInicialDe } from "./economyService";
+import { rosterEntryAtSplitStart } from "../utils/rosterEntry";
 
 // Todos los equipos, incluido el contenedor libre aunque todavía no tenga documento padre.
 async function pilotLocations(splitId: string, pilotoId: string) {
@@ -74,15 +75,18 @@ export async function guardarPacto(params: {
     });
     if (nextSplitId) {
       for (const snapshot of destinations) if (snapshot.exists()) tx.delete(snapshot.ref);
-      tx.set(doc(db, `splits/${nextSplitId}/equipos/${equipoDestinoId}/pilotos`, pilotoId), {
-        pilotoId, nombre: data.nombre || pilotoId, equipoId: equipoDestinoId, tipo_fichaje: tipo,
-        rating_piloto: data.rating_piloto ?? 0, rating_base: data.rating_piloto ?? 0,
-        puntos_piloto: 0, victorias: 0, podios: 0, poles: 0, dnfs: 0, carreras_limpias: 0,
-        precio_compra: precio, mantener_actual: mantenerInicialDe(precio), clausula_actual: clausulaInicialDe(precio),
-        mantener_inicial_split: mantenerInicialDe(precio), clausula_inicial_split: clausulaInicialDe(precio),
-        precio_carrera_anterior: mantenerInicialDe(precio), historial_precios: {},
-        pacto_origen: source.path,
-      });
+      tx.set(
+        doc(db, `splits/${nextSplitId}/equipos/${equipoDestinoId}/pilotos`, pilotoId),
+        rosterEntryAtSplitStart(data, {
+          pilotoId,
+          equipoId: equipoDestinoId,
+          precioCompra: precio,
+          mantener: mantenerInicialDe(precio),
+          clausula: clausulaInicialDe(precio),
+          tipoFichaje: tipo,
+          extra: { pacto_origen: source.path },
+        }),
+      );
     }
   });
 }

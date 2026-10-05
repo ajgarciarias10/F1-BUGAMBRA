@@ -106,6 +106,19 @@ test("un precio negativo puede sanear un saldo temporalmente negativo", async ()
   assert.equal(budget("s2", "b"), -40);
 });
 
+test("un alta nueva parte de la ficha global en vez de inventar un piloto fijo", async () => {
+  state.docs.set("pilotos/nuevo", { nombre: "Nuevo", rating_piloto: 83.5, foto_url: "foto.webp", licencia: "A" });
+  const result = await services.ficharPiloto({ splitId: "s2", teamId: "b", teamName: "b", pilotoId: "nuevo", pilotName: "Nuevo", tipo: "fichaje", precio: 10 });
+  assert.equal(result.success, true, result.message);
+  const pilot = state.docs.get(path("s2", "b", "nuevo"));
+  assert.equal(pilot.nombre, "Nuevo");
+  assert.equal(pilot.rating_piloto, 83.5);
+  assert.equal(pilot.foto_url, "foto.webp");
+  assert.equal(pilot.licencia, "A");
+  assert.equal(pilot.puntos_piloto, 0);
+  assert.equal(pilot.precio_compra, 10);
+});
+
 test("un fallo de commit no cobra ni mueve fichas; tampoco deja una anulación a medias", async () => {
   const original = structuredClone([...state.docs]);
   state.failCommit = true;
@@ -171,6 +184,48 @@ test("premios configurados y cláusula manual: procesar y revertir devuelve impo
   assert.equal(state.docs.get(path("s1", "a")).precio_carrera_anterior, 14);
   assert.equal((await services.revertirEconomiaCarrera("s1", "c1")).ok, false);
   assert.equal(budget("s1", "a"), 100);
+});
+
+test("ajustar una cláusula cambia la valoración pero no la caja", async () => {
+  Object.assign(state.docs.get(path("s1", "a")), { clausula_actual: 20 });
+  const subida = await services.ajustarClausulaManual({ splitId: "s1", equipoId: "a", equipoNombre: "a",
+    pilotoId: "p", pilotoNombre: "Piloto", nuevaClausula: 30, motivo: "Corrección" });
+  assert.equal(subida.presupuestoNuevo, 100);
+  assert.equal(budget("s1", "a"), 100);
+  assert.equal(state.docs.get(path("s1", "a")).clausula_actual, 30);
+  assert.equal(state.docs.get(path("s1", "a")).clausula_manual_presupuesto_aplicado, undefined);
+
+  const bajada = await services.ajustarClausulaManual({ splitId: "s1", equipoId: "a", equipoNombre: "a",
+    pilotoId: "p", pilotoNombre: "Piloto", nuevaClausula: 25, motivo: "Segunda corrección" });
+  assert.equal(bajada.presupuestoNuevo, 100);
+  assert.equal(budget("s1", "a"), 100);
+
+  const retirada = await services.ajustarClausulaManual({ splitId: "s1", equipoId: "a", equipoNombre: "a",
+    pilotoId: "p", pilotoNombre: "Piloto", nuevaClausula: null, motivo: "Retirar ajuste" });
+  assert.equal(retirada.clausulaNueva, 20);
+  assert.equal(retirada.presupuestoNuevo, 100);
+  assert.equal(budget("s1", "a"), 100);
+});
+
+test("repara una cláusula cobrada por error sin cambiar su valor manual", async () => {
+  state.docs.get("splits/s1/equipos/a").presupuesto = 113.8;
+  Object.assign(state.docs.get(path("s1", "a")), {
+    clausula_actual: 21.2,
+    clausula_manual: 21.2,
+    clausula_sin_ajuste: 0,
+    clausula_manual_presupuesto_aplicado: true,
+  });
+  const result = await services.ajustarClausulaManual({ splitId: "s1", equipoId: "a", equipoNombre: "a",
+    pilotoId: "p", pilotoNombre: "Piloto", nuevaClausula: 21.2, motivo: "Reparar cargo" });
+  assert.equal(result.presupuestoNuevo, 135);
+  assert.equal(budget("s1", "a"), 135);
+  assert.equal(state.docs.get(path("s1", "a")).clausula_actual, 21.2);
+  assert.equal(state.docs.get(path("s1", "a")).clausula_manual_presupuesto_aplicado, undefined);
+
+  const repeated = await services.ajustarClausulaManual({ splitId: "s1", equipoId: "a", equipoNombre: "a",
+    pilotoId: "p", pilotoNombre: "Piloto", nuevaClausula: 21.2, motivo: "Sin cambios" });
+  assert.equal(repeated.deltaPresupuesto, 0);
+  assert.equal(budget("s1", "a"), 135);
 });
 
 test("heredar la apertura no cobra otra vez el pacto y su anulación corrige ambos splits", async () => {
@@ -258,6 +313,7 @@ function restorationFixture() {
 
 test("restaurar un split existente recupera el cierre sin cobrar la plantilla y limpia el mercado roto", async () => {
   restorationFixture();
+  Object.assign(state.docs.get(path("s1", "a")), { foto_personalizada: "a.webp", dorsal: 27 });
   const preview = await services.previsualizarRestauracion("s1", "s2");
   assert.equal(preview.teams.find((t: any) => t.id === "b").saldo, 100);
   assert.equal(preview.pactos, 1);
@@ -269,6 +325,9 @@ test("restaurar un split existente recupera el cierre sin cobrar la plantilla y 
   assert.equal(state.docs.get(path("s2", "a")).mantener_actual, 15);
   assert.equal(state.docs.get(path("s2", "a")).clausula_actual, 10);
   assert.equal(state.docs.get(path("s2", "a")).puntos_piloto, 0);
+  assert.equal(state.docs.get(path("s2", "a")).foto_personalizada, "a.webp");
+  assert.equal(state.docs.get(path("s2", "a")).dorsal, 27);
+  assert.equal(state.docs.get(path("s2", "a")).pending_equipoId, null);
   assert.equal(state.docs.has(path("s2", "b")), false);
   assert.equal(state.docs.has(path("s2", "agente_libre")), false);
   assert.equal(state.docs.has("transacciones/old-target"), false);

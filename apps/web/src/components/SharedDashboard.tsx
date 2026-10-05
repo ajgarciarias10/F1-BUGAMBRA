@@ -11,6 +11,7 @@ import { PilotRivalryPanel } from "./RivalryPanels";
 import { NextRaceWidget } from "./NextRaceWidget";
 import { PilotCardF1 } from "./PilotCardF1";
 import { TotalStandings } from "./TotalStandings";
+import { clauseValue } from "../utils/pilotValue";
 
 export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { canViewBudget: boolean, escuderiaId?: string, onOpenTv?: () => void }) {
   const { userData } = useAuth();
@@ -135,7 +136,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
     if (!equipo) return null;
 
     const pilotosDelEquipo = currentSplit.roster.filter((p: any) => p.equipoId === teamId && p.participa_hasta == null);
-    const pilotsVal = pilotosDelEquipo.reduce((sum: number, p: any) => sum + (p.clausula_actual || (p.rating_piloto ?? 0) * 0.5), 0);
+    const pilotsVal = pilotosDelEquipo.reduce((sum: number, p: any) => sum + clauseValue(p), 0);
 
     return {
       ...equipo,
@@ -314,13 +315,17 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
         if (entry) {
           const eMap = Object.fromEntries(latestSplit.equipos.map(e => [e.id, e.nombre]));
           escuderiaName = eMap[entry.equipoId] ?? entry.equipoId;
-           finalRating = Number(entry.rating_piloto ?? 0);
+          finalRating = Number(entry.rating_piloto ?? 0);
+          baseClause = clauseValue(entry);
+          isCongelado = !!entry.congelado;
+        } else {
+          baseClause = finalRating * 0.5;
         }
       } else if (pilotUser?.rating_piloto) {
         finalRating = pilotUser.rating_piloto;
+        baseClause = finalRating * 0.5;
       }
       if (!pilotName) pilotName = "Desconocido";
-      baseClause = finalRating * 0.5;
     } else {
       const activeSp = splits.find(s => s.id === activeSplitId);
       if (activeSp) {
@@ -329,7 +334,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
           const eMap = Object.fromEntries(activeSp.equipos.map(e => [e.id, e.nombre]));
           escuderiaName = eMap[entry.equipoId] ?? "Sin equipo";
            finalRating = Number(entry.rating_piloto ?? 0);
-          baseClause = entry.clausula_actual ?? (finalRating * 0.5);
+          baseClause = clauseValue(entry);
           isCongelado = !!entry.congelado;
         } else {
           // Sin ficha en este split: se cae al rating del usuario.
@@ -614,7 +619,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                           ) : (
                             <div className="flex justify-between text-[9px] font-mono text-white/40">
                               <span>Cláusula</span>
-                              <span className="text-[#e10600] font-bold">{p.clausula_actual || 0}M</span>
+                              <span className="text-[#e10600] font-bold">{clauseValue(p)}M</span>
                             </div>
                           )}
                         </div>

@@ -12,10 +12,11 @@ export function SplitRestorePanel({ splitId, splits, onRestored }: {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   if (!sources.length) return null;
+  const targetName = target?.nombre || splitId;
   const sourceName = sources.find(s => s.id === sourceId)?.nombre ?? sourceId;
   return <details className="border border-amber-500/30 p-4 space-y-3">
-    <summary className="cursor-pointer font-bold text-amber-200">Restaurar {target?.nombre || splitId} desde un cierre anterior</summary>
-    <p className="text-sm text-white/70">Recupera los saldos, plantillas, ratings y valores de cierre del origen. Los pactos hacia este split se anulan y se compensan en el origen. No se vuelve a cobrar la plantilla.</p>
+    <summary className="cursor-pointer font-bold text-amber-200">Restaurar desde otro cierre</summary>
+    <p className="text-sm text-white/70">Destino: <strong>{targetName}</strong>. Recupera los saldos, plantillas, ratings y valores de cierre del origen. Los pactos hacia este split se anulan y se compensan en el origen. No se vuelve a cobrar la plantilla.</p>
     <p className="text-sm text-white/70">El destino vuelve al inicio: se reinician resultados, puntos, liquidaciones y subastas. Se conserva su calendario. El mercado queda cerrado hasta que lo abras. Se guarda una copia de los documentos sustituidos.</p>
     <label className="block text-sm">Cierre de origen
       <select disabled={busy} className="block bg-black border border-white/20 p-2 mt-1" value={sourceId}
@@ -35,7 +36,7 @@ export function SplitRestorePanel({ splitId, splits, onRestored }: {
         <tbody>{preview.teams.map(t => <tr key={t.id}><td className="py-1">{t.nombre}</td><td className="text-right">{t.saldo.toLocaleString("es-ES")} M</td><td className="text-right">{t.conciliado ? "Cierre conciliado" : "Saldo + anulación de pactos"}</td></tr>)}</tbody>
       </table>
       <button disabled={busy} className="bg-amber-500 text-black font-bold px-4 py-2 disabled:opacity-40" onClick={async () => {
-        if (!confirm(`¿Restaurar ${target?.nombre || splitId} desde el cierre de ${sourceName}?\n\nSe reemplazarán las plantillas y saldos del destino, se reiniciarán sus resultados y se retirarán sus fichajes y movimientos actuales. Los pactos del origen hacia el destino se anularán. Se guardará una copia antes de sustituirlos.`)) return;
+        if (!confirm(`¿Restaurar ${targetName} desde el cierre de ${sourceName}?\n\nSe reemplazarán las plantillas y saldos del destino, se reiniciarán sus resultados y se retirarán sus fichajes y movimientos actuales. Los pactos del origen hacia el destino se anularán. Se guardará una copia antes de sustituirlos.`)) return;
         setBusy(true);
         try {
           const result = await restaurarSplitDesdeCierre(sourceId, splitId, preview.version);
@@ -44,7 +45,7 @@ export function SplitRestorePanel({ splitId, splits, onRestored }: {
           await onRestored();
         } catch (error: any) { setPreview(null); setMessage(error.message); }
         finally { setBusy(false); }
-      }}>Restaurar {target?.nombre || splitId} desde {sourceName}</button>
+      }}>Restaurar {targetName} desde {sourceName}</button>
     </div>}
     <p role="status" className="text-sm whitespace-pre-wrap">{message}</p>
   </details>;

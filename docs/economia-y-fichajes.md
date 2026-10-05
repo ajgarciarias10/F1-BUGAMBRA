@@ -36,19 +36,25 @@ Los saldos copiados manualmente antes de esta corrección no tienen esa vinculac
 
 ## Datos históricos
 
-### Restaurar Split 3 desde el cierre de Split 2
+### Restaurar cualquier split desde un cierre anterior
 
-En **Administración → Economía**, selecciona **Split 3** y despliega **Restaurar Split 3 desde un cierre anterior**. Elige **Split 2**, pulsa **Previsualizar restauración**, revisa los saldos por equipo y confirma.
+En **Administración → Economía**, selecciona el split de destino y abre **Mantenimiento avanzado**. Dentro de **Restaurar desde otro cierre**, el selector ofrece todos los splits de escuderías con un orden anterior. Elige el cierre de origen, pulsa **Previsualizar restauración**, revisa los saldos por equipo y confirma.
 
 La restauración recupera las escuderías, pilotos, ratings y valores finales del origen. Usa el saldo de cierre conciliado si existe; en su defecto reconstruye el saldo anterior a los pactos sumando sus devoluciones. Los pilotos declarados agentes libres para el siguiente split pasan a agentes libres. No se cobra la plantilla restaurada.
+
+Las fichas se derivan de los documentos existentes: se conservan los campos de identidad y las ampliaciones del modelo, y solo se reinician estadísticas, historiales y estado transitorio del mercado. Las altas directas y los pactos usan la misma construcción, por lo que no crean una variante fija de la ficha desde el panel.
 
 Se anulan y compensan los pactos del origen hacia el destino para que no reaparezcan fichajes cancelados. Se mantienen los resultados y estadísticas del origen. En el destino se reinician resultados, estadísticas, liquidaciones, fichajes y sala de subastas; se conservan los circuitos del calendario y se deja el mercado cerrado hasta que administración lo abra.
 
 Antes de sustituir los documentos se guarda su contenido en `restauraciones_split/{id}/documentos`, dentro de la misma transacción. La interfaz muestra el identificador de esa copia. Si alguien modifica los datos después de la vista previa, la restauración solicita calcularla de nuevo. Una restauración que falla no deja cambios parciales.
 
+La conciliación de aperturas tampoco presupone un identificador concreto ni el bloque inmediatamente anterior. El panel propone el origen guardado en `presupuesto_origen_splitId` (o el cierre anterior más cercano) y permite escoger cualquier split de escuderías anterior. Las reconstrucciones de precios y las reversiones de liquidaciones están en **Mantenimiento avanzado** y siempre muestran el nombre del split seleccionado antes de ejecutarse.
+
 Este cambio de código no repara automáticamente los documentos de producción. Los fichajes antiguos pueden carecer de justificante del cargo o fotografía previa; su `precio_compra` por sí solo no demuestra dónde se cobró.
 
 Para conciliar un descuadre, revisar split, equipo, piloto, precio y movimientos existentes. Si el pacto conserva el importe y la fotografía, usar su anulación. Si falta el justificante, documentar la corrección de saldo con **Ajustar saldo** y corregir la plantilla por separado, sin registrar un alta pagada solo para recrear una ficha.
+
+Una cláusula manual cambia el valor de la plantilla y, por tanto, la valoración total del equipo; no cambia su caja disponible. El dinero solo se mueve al registrar, modificar o anular el precio de una operación. Si una cláusula aparece marcada por el cargo defectuoso de una versión anterior, la fila permite **Restaurar presupuesto** una sola vez sin retirar el valor manual.
 
 Las altas directas nuevas guardan el justificante en `splits/{splitId}/transfers/{id}`. Sus anulaciones se registran como movimientos compensatorios y marcan la operación como anulada. Los pactos conservan la fotografía con tipos nativos de Firestore; se admite la lectura del formato JSON anterior.
 

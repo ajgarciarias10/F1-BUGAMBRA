@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, query, where, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
+import { rosterEntryAtSplitStart } from "../utils/rosterEntry";
 
 type Entry = { path: string; data: Record<string, any> };
 const money = (value: unknown) => {
@@ -97,16 +98,20 @@ export function planRestauracion(sourceId: string, targetId: string, entries: En
   for (const [id, { equipoId, data }] of pilots) {
     const rating = data.rating_exacto ?? data.rating_piloto ?? data.rating_base ?? 0;
     const mantener = money(data.mantener_actual ?? 0), clausula = money(data.clausula_actual ?? 0);
-    changes.set(`splits/${targetId}/equipos/${equipoId}/pilotos/${id}`, {
-      pilotoId: id, nombre: data.nombre || id, equipoId,
-      rating_base: rating, rating_piloto: data.rating_piloto ?? rating, rating_exacto: rating,
-      precio_compra: money(data.precio_compra ?? 0), mantener_actual: mantener, clausula_actual: clausula,
-      mantener_inicial_split: mantener, clausula_inicial_split: clausula, precio_carrera_anterior: mantener,
-      valor_split_anterior: mantener, clausula_split_anterior: clausula,
-      puntos_piloto: 0, victorias: 0, podios: 0, poles: 0, dnfs: 0, carreras_limpias: 0, vueltas_rapidas: 0,
-      historial_precios: {}, historial_rating: {}, congelado: false, participa_hasta: null,
-      restaurado_desde: sourceId,
-    });
+    changes.set(`splits/${targetId}/equipos/${equipoId}/pilotos/${id}`, rosterEntryAtSplitStart(data, {
+      pilotoId: id,
+      equipoId,
+      precioCompra: money(data.precio_compra ?? 0),
+      mantener,
+      clausula,
+      rating,
+      extra: {
+        valor_split_anterior: mantener,
+        clausula_split_anterior: clausula,
+        precio_split_anterior: money(data.precio_compra ?? 0),
+        restaurado_desde: sourceId,
+      },
+    }));
   }
   const targetPrefix = `splits/${targetId}/`;
   const deletes = entries.filter(e => e.path.startsWith(targetPrefix) || e.data.splitId === targetId).map(e => e.path);
