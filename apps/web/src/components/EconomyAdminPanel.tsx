@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment, runTransaction, serverTimestamp, deleteField } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment, runTransaction, serverTimestamp, deleteField, query, where } from "firebase/firestore";
 import { EconomyRulesPanel } from "./EconomyRulesPanel";
 import { SplitRestorePanel } from "./SplitRestorePanel";
 import { db } from "../services/firebase";
 import {
   procesarEconomiaCarrera, revertirEconomiaCarrera, ficharPiloto, recalcularCurvaPreciosSplit,
+  ajustarPrecioCompraPiloto,
   mantenerInicialDe, clausulaInicialDe,
   calcularPuntosPosicion,
   calcularMillonesRivalidadClasificacion, calcularMillonesRivalidadCarrera,
@@ -14,7 +15,7 @@ import {
 import { aplicarAperturas, derivarAperturas, type AperturaDerivada } from "../services/splitBuilder";
 import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
 import { resolveTransferView, type TransferView } from "../utils/transferView";
-import { presupuestoTrasCambiarPrecio } from "../utils/presupuesto";
+import { previsualizarAjustePrecio } from "../utils/presupuesto";
 import { economyRules } from "../utils/economyRules";
 import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
 
@@ -187,17 +188,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
    *
    * Ahora solo se aplica la diferencia del precio que se está editando.
    */
-  function getTeamPresupuesto(teamId: string, overridePilotId?: string, overridePrice?: number): number | null {
-    const team = teams.find(t => t.id === teamId);
-    if (!team || team.presupuesto == null) return null;
-    if (!overridePilotId) return Math.round(team.presupuesto * 10) / 10;
-    const pilot = pilots.find(p => p.id === overridePilotId);
-    if (!pilot || pilot.equipoId !== teamId) return Math.round(team.presupuesto * 10) / 10;
-    return presupuestoTrasCambiarPrecio(team.presupuesto, pilot.precio_compra || 0, overridePrice ?? 0);
-  }
-
-
-
   // ─── CARGA DE DATOS ──────────────────────────────────────────────────────────
 
   async function loadData(splitId: string) {
@@ -345,8 +335,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           const team = newTeams.find(t => t.id === tid);
           if (!team) continue;
 
-          const isDNF = r.racePos === 99;
-           const ptsPos  = isDNF ? 0 : calcularPuntosPosicion(r.racePos);
+           const ptsPos  = calcularPuntosPosicion(r.racePos);
           const ptsPole = r.qualyPos === 1 ? 2 : 0;
           const totalPts = ptsPos + ptsPole;
           if (totalPts > 0) team.ingresos_premios += parseFloat((totalPts * M_PUNTOS_FACTOR).toFixed(2));
@@ -387,6 +376,19 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           });
         }
       }
+
+      const seasonAwards = await getDocs(query(
+        collection(db, "transacciones"),
+        where("splitId", "==", splitId),
+      ));
+      seasonAwards.docs.forEach(award => {
+        const data = award.data();
+        if (data.tipo !== "premio_temporada") return;
+        const team = newTeams.find(entry => entry.id === data.equipoId);
+        if (!team) return;
+        if (String(data.descripcion || "").toLowerCase().includes("rivalidad")) team.ingresos_rivalidades += Number(data.cantidad || 0);
+        else team.ingresos_premios += Number(data.cantidad || 0);
+      });
 
       if (requestId !== loadRequestRef.current) return;
       setGlobalPilots(
@@ -520,31 +522,19 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   }
 
   async function savePrecio(pilot: PilotRow, rawVal: string) {
-    if (pilot.congelado) return;
     const newPrecio = Number(rawVal.replace(",", "."));
     if (!rawVal.trim() || !Number.isFinite(newPrecio)) return;
+    const reason = prompt(`Motivo para corregir el precio de ${pilot.nombre} (${pilot.precio_compra}M → ${newPrecio}M):`);
+    if (!reason?.trim()) return;
     setSavingId(pilot.id);
     try {
-    const mantenerInicial = mantenerInicialDe(newPrecio);
-    const clausulaInicial = clausulaInicialDe(newPrecio);
-    await runTransaction(db, async tx => {
-      const ref = doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
-      const snap = await tx.get(ref);
-      if (!snap.exists()) throw new Error("La ficha ya no existe.");
-      const data = snap.data();
-      if (data.pending_equipoId || Object.keys(data.historial_precios ?? {}).length) throw new Error("Deshaz primero los pactos y las liquidaciones de carreras antes de cambiar el precio de compra.");
-      if (data.ultima_operacion_id) throw new Error("Para corregir el importe, deshaz el alta y vuelve a registrarla. Así se compensa el cobro original.");
-      tx.update(ref, {
-      precio_compra: newPrecio, mantener_actual: mantenerInicial, clausula_actual: clausulaInicial,
-      mantener_inicial_split: mantenerInicial, clausula_inicial_split: clausulaInicial,
-      precio_carrera_anterior: mantenerInicial, historial_precios: {},
-      ...(data.clausula_manual != null ? { clausula_actual: data.clausula_manual } : {}),
-      });
-      tx.set(doc(collection(db, "transacciones")), { splitId: pilot.splitId, equipoId: pilot.equipoId, equipo: pilot.equipoNombre,
-        piloto: pilot.nombre, tipo: "ajuste", cantidad: 0, esIngreso: true,
-        descripcion: `Corrección de valoración: ${data.precio_compra ?? 0}M → ${newPrecio}M; sin cobro`, fecha: serverTimestamp() });
+    const result = await ajustarPrecioCompraPiloto({
+      splitId: pilot.splitId, teamId: pilot.equipoId, pilotId: pilot.id,
+      pilotName: pilot.nombre, newPrice: newPrecio, reason,
     });
+    if (!result.ok) throw new Error(result.message);
     setEditing(prev => { const n = { ...prev }; delete n[pilot.id]; return n; });
+    setProcessLog([result.message]);
     await loadData(pilot.splitId);
     } catch (error: any) { setProcessLog([error.message]); }
     finally { setSavingId(null); }
@@ -668,7 +658,13 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         return;
       }
       setAltaModalOpen(false);
-      await loadData(selectedSplitId);
+      try {
+        await loadData(selectedSplitId);
+      } catch (error: any) {
+        setProcessLog([`${result.message}`, `El fichaje se guardó, pero no se pudo actualizar la vista: ${error.message}. Recarga el split para confirmar el saldo y la plantilla.`]);
+      }
+    } catch (error: any) {
+      setAltaMsg(`No se pudo completar el fichaje: ${error.message}`);
     } finally {
       setConfirmingAlta(false);
     }
@@ -1062,9 +1058,15 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                             const ref = doc(db, `splits/${selectedSplitId}/equipos`, t.id);
                             const snap = await tx.get(ref);
                             if (!snap.exists()) throw new Error("La escudería ya no existe.");
+                            const saldoActual = Number(snap.data().presupuesto ?? 0);
+                            if (r1(saldoActual) !== r1(t.presupuesto)) {
+                              throw new Error("El saldo cambió desde que cargaste la tabla. Recárgala y vuelve a revisar el ajuste; no se aplicó nada.");
+                            }
                             tx.update(ref, { presupuesto: increment(delta) });
                             tx.set(doc(collection(db, "transacciones")), { splitId: selectedSplitId, equipoId: t.id, equipo: t.nombre,
-                              tipo: "ajuste", cantidad: Math.abs(delta), esIngreso: delta > 0, descripcion: motivo.trim(), fecha: serverTimestamp() });
+                              tipo: "ajuste", cantidad: Math.abs(delta), esIngreso: delta > 0,
+                              saldo_anterior: saldoActual, saldo_nuevo: r1(saldoActual + delta),
+                              descripcion: motivo.trim(), fecha: serverTimestamp() });
                           });
                           await loadData(selectedSplitId);
                         } catch (error: any) { setProcessLog([error.message]); }
@@ -1297,12 +1299,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
                         {/* Precio editable */}
                         <td className="py-2.5 px-3 text-right">
-                          {isFichado ? (
-                            <div className="space-y-0.5">
-                              <span className="text-white/40 block">{r1(pilot.precio_compra)}M</span>
-                              <span className="text-amber-300/50 text-[8px] font-mono block">{OPERACION_LABEL[estadoOperacion!]}</span>
-                            </div>
-                          ) : editVal !== undefined ? (
+                          {editVal !== undefined ? (
                             <div className="flex items-center justify-end gap-1">
                               <input type="number" step="0.1" value={editVal}
                                 onChange={e => setEditing(prev => ({ ...prev, [pilot.id]: e.target.value }))}
@@ -1314,6 +1311,21 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                               </button>
                               <button onClick={() => setEditing(prev => { const n = { ...prev }; delete n[pilot.id]; return n; })}
                                 className="text-white/25 hover:text-white/60 px-0.5">✕</button>
+                              {(() => {
+                                const nextPrice = Number(editVal.replace(",", "."));
+                                const currentBudget = teams.find(team => team.id === pilot.equipoId)?.presupuesto;
+                                if (currentBudget == null || !Number.isFinite(nextPrice)) return null;
+                                const preview = previsualizarAjustePrecio(Number(currentBudget), Number(pilot.precio_compra ?? 0), nextPrice);
+                                const { presupuestoNuevo: nextBudget, delta, insuficiente: hasInsufficientBudget, faltante } = preview;
+                                return delta === 0 ? null : (
+                                  <span className="text-[8px] font-mono whitespace-nowrap">
+                                    <span className={delta > 0 ? "text-emerald-300/70" : "text-amber-300/70"}>
+                                      Saldo tras corregir: {r1(nextBudget)}M ({delta > 0 ? "+" : ""}{r1(delta)}M)
+                                    </span>
+                                    {hasInsufficientBudget && delta < 0 && <span className="text-red-300 block">Presupuesto insuficiente: faltan {r1(faltante)}M.</span>}
+                                  </span>
+                                );
+                              })()}
                             </div>
                           ) : (
                             <div className="space-y-0.5">

@@ -282,7 +282,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
             if (res.racePos === 1) victories++;
             if (res.racePos >= 1 && res.racePos <= 3) podiums++;
             if (res.qualyPos === 1) poles++;
-            if (res.isDnfOwnError || res.racePos > 12) dnfs++;
+            if (res.isDnf === true) dnfs++;
             if (res.isClean) cleanRaces++;
             if (res.isDotd) dotds++;
             if (res.isMvp) mvps++;
@@ -293,7 +293,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
             ? "Individual"
             : equipoNombreMap[res.equipoId ?? res.escuderiaId ?? rosterEntry?.equipoId] ?? "N/A";
 
-          history.push({ splitId: s.id, splitName: s.nombre, splitTipo: s.tipo, circuitId: c.id, circuitName: c.nombre, qualyPos: res.qualyPos, racePos: res.racePos, isDnfOwnError: res.isDnfOwnError, isClean: res.isClean, overtakesBoost: res.overtakesBoost, isDotd: res.isDotd, isMvp: res.isMvp, fastestLap: res.fastestLap, points, teamName });
+          history.push({ splitId: s.id, splitName: s.nombre, splitTipo: s.tipo, circuitId: c.id, circuitName: c.nombre, qualyPos: res.qualyPos, racePos: res.racePos, isDnf: res.isDnf, isClean: res.isClean, overtakesBoost: res.overtakesBoost, isDotd: res.isDotd, isMvp: res.isMvp, fastestLap: res.fastestLap, points, teamName });
         }
       });
     });
@@ -972,7 +972,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                             </thead>
                             <tbody>
                               {pilotProfileStats.history.map((h: any, idx: number) => {
-                                const esDnf = h.splitTipo !== "individual" && (h.isDnfOwnError === true || h.racePos === 99 || h.racePos > 12);
+                                const esDnf = h.splitTipo !== "individual" && h.isDnf === true;
                                 return (
                                 <tr key={`gp-hist-${h.splitId}-${h.circuitId}-${idx}`} className={`border-b border-white/5 last:border-0 transition-colors ${esDnf ? "bg-red-500/[0.06] hover:bg-red-500/[0.10]" : "hover:bg-white/5"}`}>
                                   <td className={`p-3 text-[#e10600] font-bold ${esDnf ? "border-l-2 border-red-500/70" : ""}`}>{h.splitName}</td>
@@ -981,7 +981,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                                    <td className={`p-3 text-center font-bold ${h.splitTipo === "individual" ? "text-white/30" : esDnf ? "" : h.racePos === 1 ? 'text-amber-400' : h.racePos <= 3 ? 'text-yellow-500' : 'text-white'}`}>
                                      {h.splitTipo === "individual" ? "N/D" : esDnf ? (
                                        <span title="No terminó la carrera" className="inline-block rounded-sm border border-red-500/60 bg-red-500/20 px-2 py-0.5 text-[10px] font-black tracking-wider text-red-200">DNF</span>
-                                     ) : `P${h.racePos}`}
+                                     ) : h.racePos === 99 ? "—" : `P${h.racePos}`}
                                   </td>
                                   <td className={`p-3 text-center font-bold text-sm bg-white/[0.02] tabular-nums ${esDnf ? "text-white/40" : "text-white"}`}>{h.points} pts</td>
                                   <td className="p-3">
@@ -1065,8 +1065,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                           commonRaces++;
                           if (hA.qualyPos < matchB.qualyPos) qualyA++;
                           else if (matchB.qualyPos < hA.qualyPos) qualyB++;
-                          if (hA.isDnfOwnError && !matchB.isDnfOwnError) aheadB++;
-                          else if (!hA.isDnfOwnError && matchB.isDnfOwnError) aheadA++;
+                          if (hA.isDnf && !matchB.isDnf) aheadB++;
+                          else if (!hA.isDnf && matchB.isDnf) aheadA++;
                           else {
                             if (hA.racePos < matchB.racePos) aheadA++;
                             else if (matchB.racePos < hA.racePos) aheadB++;

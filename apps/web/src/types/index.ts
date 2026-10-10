@@ -137,9 +137,10 @@ export interface RaceResult {
   puntos?: number;
   equipoId?: string; // Equipo en el momento de la carrera; ausente en resultados legacy
   qualyPos: number; // 1-12, o 99 si DNF
-  racePos: number;  // 1-12, o 99 si DNF
-  isDnfOwnError: boolean;
-  isClean: boolean;
+  racePos: number;  // Posición real o 99 si aún se desconoce / no terminó
+  isDnf?: boolean;
+  isDnfOwnError?: boolean;
+  isClean?: boolean;
   overtakesBoost: boolean;
   isDotd: boolean;
   isMvp: boolean;
@@ -167,7 +168,9 @@ export type TipoTransaccion =
   | "rivalidad"
   | "pole"
   | "vuelta_rapida"
-  | "sin_sancionados";
+  | "sin_sancionados"
+  | "premio_temporada"
+  | "ajuste";
 
 export interface Transaccion {
   id?: string;

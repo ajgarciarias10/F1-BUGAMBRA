@@ -487,8 +487,8 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
               puntos: racePoints[pilotIndex], racePos: assignments[pilotIndex].racePos,
               qualyPos: assignments[pilotIndex].pole ? 1 : 99,
               fastestLap: fastestIndexes[0] === pilotIndex,
-              isClean: assignments[pilotIndex].racePos !== 99,
-              isDnfOwnError: assignments[pilotIndex].racePos === 99,
+              isDnf: false,
+              isDnfOwnError: false,
             }]),
           };
         });
@@ -503,7 +503,7 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
             const teamResults = race.resultados.filter(result => result.equipoId === teamId);
             const economy = economyByTeam.get(teamId)!;
             if (teamResults.length) economy.participations++;
-            if (teamResults.length && teamResults.every(result => result.isClean)) economy.cleanRaces++;
+            if (teamResults.length && teamResults.every(result => (result as any).isClean === true)) economy.cleanRaces++;
             economy.poles += teamResults.filter(result => result.qualyPos === 1).length;
             economy.fastestLaps += teamResults.filter(result => result.fastestLap).length;
           });

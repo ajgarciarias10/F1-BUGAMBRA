@@ -10,6 +10,7 @@ import {
 import { loadCorrectionContext } from "./correction-repository.ts";
 import { pool } from "./database.ts";
 import { loadSystemControlData } from "./reconciliation-repository.ts";
+import { generateRaceWinnerImage, validateRaceWinnerImageInput } from "./domain/race-winner-image.ts";
 import {
   previewRaceCorrection,
   parseRaceResults,
@@ -58,6 +59,25 @@ app.get("/health", async (_request, response, next) => {
 
 app.get("/api/me", requireAuthentication, (request, response) => {
   response.json({ user: request.currentUser });
+});
+
+app.post("/api/media/race-winner-image", requireAuthentication, requireRole("admin"), async (request, response) => {
+  if (!config.geminiApiKey) {
+    response.status(503).json({ error: "La generación de imágenes no está configurada en el servidor. Configura GEMINI_API_KEY en la API." });
+    return;
+  }
+  const input = validateRaceWinnerImageInput(request.body);
+  if (!input) {
+    response.status(422).json({ error: "Indica el split, la carrera y entre uno y tres ganadores con posiciones válidas. La dirección creativa admite hasta 500 caracteres." });
+    return;
+  }
+  try {
+    const image = await generateRaceWinnerImage(config.geminiApiKey, config.geminiImageModel, input);
+    response.json(image);
+  } catch (error) {
+    console.error("Gemini race image generation failed:", error);
+    response.status(502).json({ error: "Gemini no pudo generar la imagen. No se ha guardado ni publicado ningún contenido." });
+  }
 });
 
 app.post(

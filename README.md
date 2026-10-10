@@ -19,8 +19,7 @@ La migración al nuevo backend autoritativo Node.js + PostgreSQL está en `apps/
 ## Ejecutar en Replit
 
 1. Importa el repositorio en [replit.com](https://replit.com)
-2. Abre la pestaña **Secrets** (candado en el panel izquierdo) y añade:
-   - `GEMINI_API_KEY` → tu clave de la API de Google Gemini
+2. Configura `GEMINI_API_KEY` como secreto del **proceso backend `apps/api`** para habilitar imágenes de podio. No la pongas en variables `VITE_*`, porque Vite las incorpora al navegador.
 3. Haz clic en **Run** — Replit ejecutará `npm run dev` automáticamente
 
 La app estará disponible en la URL pública que Replit asigna al proyecto.
@@ -36,10 +35,12 @@ npm install
 npm run dev
 ```
 
-Crea un archivo `.env.local` con tus variables de entorno:
+Crea un archivo `.env.local` para la web solo si necesitas configurar la URL de la API:
 ```
-GEMINI_API_KEY=tu_clave_de_gemini
+VITE_API_URL=http://localhost:4000
 ```
+
+La clave de Gemini se configura en `apps/api/.env` (usa `apps/api/.env.example` como referencia) y solo la lee el backend. En desarrollo local, ejecuta también `npm run dev:api`; Vite reenvía `/api` a `localhost:4000`.
 
 La app estará en `http://localhost:3000`.
 
@@ -65,9 +66,11 @@ Los comandos y requisitos del backend nuevo están documentados en [apps/api/REA
 
 | Variable | Descripción | Requerida |
 |---|---|---|
-| `GEMINI_API_KEY` | Clave de la API de Google Gemini | Sí |
+| `GEMINI_API_KEY` | Clave Gemini, solo en el entorno privado de `apps/api`; habilita el borrador de imagen del podio para administradores | No |
+| `GEMINI_IMAGE_MODEL` | Modelo Gemini de generación de imágenes en `apps/api` | No |
+| `VITE_API_URL` | URL pública del backend API consumida por el navegador | No en local; necesaria si web y API tienen distinto origen |
 
-En Replit se configuran en **Secrets** (nunca en el código). En local se ponen en `.env.local`.
+En Replit, configura la clave Gemini en los **Secrets del backend API**. En local se pone en `apps/api/.env`; nunca en `.env.local` de la web.
 
 ---
 

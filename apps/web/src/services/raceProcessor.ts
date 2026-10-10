@@ -116,7 +116,7 @@ export async function processRace(
             victorias: res.racePos === 1 ? 1 : 0,
             podios:    res.racePos >= 1 && res.racePos <= 3 ? 1 : 0,
             poles:     res.qualyPos === 1 ? 1 : 0,
-            dnfs:      res.racePos > 12 || res.isDnfOwnError ? 1 : 0,
+            dnfs:      res.isDnf === true ? 1 : 0,
             limpias:   res.isClean ? 1 : 0,
           };
         }
@@ -154,7 +154,7 @@ export async function processRace(
           victorias:        Math.max(0, (prev.victorias        ?? 0) - old.victorias + (res?.racePos === 1 ? 1 : 0)),
           podios:           Math.max(0, (prev.podios           ?? 0) - old.podios    + (res && res.racePos <= 3 && res.racePos >= 1 ? 1 : 0)),
           poles:            Math.max(0, (prev.poles            ?? 0) - old.poles     + (res?.qualyPos === 1 ? 1 : 0)),
-          dnfs:             Math.max(0, (prev.dnfs             ?? 0) - old.dnfs      + (res && (res.racePos > 12 || res.isDnfOwnError) ? 1 : 0)),
+          dnfs:             Math.max(0, (prev.dnfs             ?? 0) - old.dnfs      + (res?.isDnf === true ? 1 : 0)),
           carreras_limpias: Math.max(0, (prev.carreras_limpias ?? 0) - old.limpias   + (res?.isClean ? 1 : 0)),
         };
 
@@ -325,7 +325,7 @@ function evolucionDePiloto(pilotId: string, base: number, bloque: Awaited<Return
       media: circuito.media,
       // Sin resultado el piloto no corrió esa carrera: el rating se arrastra intacto.
       resultado: res
-        ? { puntos: puntosDelResultado(res), racePos: res.racePos, qualyPos: res.qualyPos, dnf: res.racePos > 12 || !!res.isDnfOwnError }
+        ? { puntos: puntosDelResultado(res), racePos: res.racePos, qualyPos: res.qualyPos, dnf: res.isDnf === true }
         : null,
       bonusOVR: anterior?.pilotoDiaGanador === pilotId ? BONUS_PILOTO_DEL_DIA : 0,
     };
@@ -444,7 +444,7 @@ export async function recalcSplitPoints(
         if (res.racePos === 1)  acc.victorias++;
         if (res.racePos <= 3 && res.racePos >= 1) acc.podios++;
         if (res.qualyPos === 1) acc.poles++;
-        if (res.racePos > 12 || res.isDnfOwnError) acc.dnfs++;
+        if (res.isDnf === true) acc.dnfs++;
         if (res.isClean) acc.carreras_limpias++;
       }
     }

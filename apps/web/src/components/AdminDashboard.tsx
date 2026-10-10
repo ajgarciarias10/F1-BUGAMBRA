@@ -22,6 +22,7 @@ import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 import { SplitIntroPanel } from "./SplitIntroPanel";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
 import { PaddockAdminPanel } from "./PaddockAdminPanel";
+import { RaceWinnersImagePanel } from "./RaceWinnersImagePanel";
 
 const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
 
@@ -147,13 +148,28 @@ export function AdminDashboard() {
     const counts: Record<number, number> = {};
     (Object.values(results) as Partial<RaceResult>[]).forEach(res => {
       const r = res.racePos;
-      const isPilotDnf = res.isDnfOwnError || false;
+      const isPilotDnf = res.isDnf === true;
       if (!isPilotDnf && r !== undefined && r !== null && typeof r === "number" && !isNaN(r) && r !== 99) {
         counts[r] = (counts[r] || 0) + 1;
       }
     });
     return counts;
   }, [results]);
+
+  const raceImageWinners = useMemo(() => {
+    const roster = currentRawSplit?.roster ?? [];
+    return Object.entries(results)
+      .filter(([pilotId, result]) => !noCorrieron.has(pilotId) && result.isDnf !== true
+        && Number.isSafeInteger(result.racePos) && Number(result.racePos) >= 1 && Number(result.racePos) <= 3)
+      .map(([pilotId, result]) => ({
+        pilotId,
+        name: roster.find((pilot: any) => pilot.pilotoId === pilotId)?.nombre || pilotId,
+        position: Number(result.racePos),
+      }))
+      .sort((a, b) => a.position - b.position)
+      .slice(0, 3)
+      .map(({ name, position }) => ({ name, position }));
+  }, [results, currentRawSplit, noCorrieron]);
 
   // Schedule State
   const [fechaVal, setFechaVal] = useState("");
@@ -458,107 +474,90 @@ export function AdminDashboard() {
              }
            }
 
-           // Copiar equipos del split anterior conservando el saldo ya conciliado.
-           const prevTeamsSnap = await getDocs(collection(db, `splits/${prevSplit.id}/equipos`));
-           for (const prevTeamDoc of prevTeamsSnap.docs) {
-             const teamData = prevTeamDoc.data();
-             const inheritedBudget = Number(teamData.presupuesto ?? 100);
-             await setDoc(doc(db, `splits/${splitId}/equipos`, prevTeamDoc.id), {
-               id: prevTeamDoc.id,
-               nombre: teamData.nombre || prevTeamDoc.id,
-               presupuesto: inheritedBudget,
-                presupuesto_inicial: inheritedBudget,
-                presupuesto_arrastre: inheritedBudget,
-                presupuesto_origen_splitId: prevSplit.id,
-                puntos_constructores: 0
-            }, { merge: true });
-          }
-          await setDoc(doc(db, `splits/${splitId}/equipos`, "agente_libre"), {
-            id: "agente_libre", nombre: "Agentes libres", presupuesto: 0, puntos_constructores: 0,
-          }, { merge: true });
+          // Preparar y validar toda la sustitución antes de escribir para evitar un split
+          // medio vacío si falta un precio manual o una escudería de destino.
+          const prevTeamsSnap = await getDocs(collection(db, `splits/${prevSplit.id}/equipos`));
+          const existingTeamsSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
+          const [previousRosters, existingRosters] = await Promise.all([
+            Promise.all(prevTeamsSnap.docs.map(team => getDocs(collection(db, `splits/${prevSplit.id}/equipos/${team.id}/pilotos`)))),
+            Promise.all(existingTeamsSnap.docs.map(team => getDocs(collection(db, `splits/${splitId}/equipos/${team.id}/pilotos`)))),
+          ]);
+          const teamIds = new Set(prevTeamsSnap.docs.map(team => team.id));
+          const writes = new Map<string, { ref: any; kind: "set" | "delete"; data?: any }>();
+          const planSet = (ref: any, data: any, merge = false) => writes.set(ref.path, { ref, kind: "set", data: merge ? { ...data, __merge: true } : data });
+          const planDelete = (ref: any) => writes.set(ref.path, { ref, kind: "delete" });
 
-          // Borrar pilotos anidados existentes en este split
-          const existingEquiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
-          for (const equipoDoc of existingEquiposSnap.docs) {
-            const pilotsSnap = await getDocs(
-              collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`)
-            );
-            for (const pd of pilotsSnap.docs) {
-              await deleteDoc(pd.ref);
-            }
-          }
-
-          // Leer pilotos anidados del split anterior y copiarlos al nuevo
-          let pilotsInitialized = 0;
-           for (const prevEquipoDoc of prevTeamsSnap.docs) {
-            const prevPilotosSnap = await getDocs(
-              collection(db, `splits/${prevSplit.id}/equipos/${prevEquipoDoc.id}/pilotos`)
-            );
-            for (const prevPd of prevPilotosSnap.docs) {
-              const r = prevPd.data();
-              if (r.participa_hasta != null) continue;
-               const pid = prevPd.id;
-               const inheritedRating = r.rating_piloto ?? 70;
-               const estado = r.estado_siguiente_split || (
-                 r.pending_tipo_fichaje === "mantener" ? "mantener" :
-                 r.pending_tipo_fichaje === "clausula" ? "clausula" :
-                 r.pending_equipoId ? "subasta" : "agente_libre"
-               );
-                if (estado === "agente_libre") {
-                  await setDoc(doc(db, `splits/${splitId}/equipos/agente_libre/pilotos`, pid), {
-                    ...r,
-                    pilotoId: pid,
-                    equipoId: "agente_libre",
-                    precio_compra: 0,
-                    mantener_actual: 0,
-                    clausula_actual: 0,
-                    tipo_fichaje: "subasta",
-                    participa_desde: 1,
-                    participa_hasta: null,
-                  });
-                  pilotsInitialized++;
-                  continue;
-                }
-               const nextEquipoId = r.pending_equipoId ?? r.equipoId;
-               if (!nextEquipoId || nextEquipoId === "agente_libre") continue;
-               const nextPrecioCompra = Number(r.precio_inicio_siguiente_split);
-               if (!Number.isFinite(nextPrecioCompra)) {
-                 throw new Error(`Falta el precio inicial manual del siguiente split para ${r.nombre || pid}.`);
-               }
-               // Un precio negativo divide en vez de multiplicar, conservando el signo (Excel T2/T3).
-               const nextMantener = Math.round((nextPrecioCompra < 0 ? nextPrecioCompra / 3 : nextPrecioCompra * 3) * 10) / 10;
-               const nextClausula = Math.round((nextPrecioCompra < 0 ? nextPrecioCompra / 2 : nextPrecioCompra * 2) * 10) / 10;
-
-              await setDoc(doc(db, `splits/${splitId}/equipos/${nextEquipoId}/pilotos`, pid), {
-                pilotoId:               pid,
-                equipoId:               nextEquipoId,
-                rating_piloto:          inheritedRating,
-                rating_base:            inheritedRating,
-                participa_desde:        1,
-                participa_hasta:        null,
-                 tipo_fichaje:           estado === "subasta" ? "subasta" : estado,
-                puntos_piloto: 0, victorias: 0, podios: 0,
-                poles: 0, dnfs: 0, carreras_limpias: 0,
-                precio_compra:           nextPrecioCompra,
-                mantener_actual:         nextMantener,
-                clausula_actual:         nextClausula,
-                mantener_inicial_split:  nextMantener,
-                clausula_inicial_split:  nextClausula,
-                precio_carrera_anterior: nextMantener,
-                historial_precios:       {},
-                 congelado:               false,
-                congelado_en:            undefined,
-              });
-
-              pilotsInitialized++;
-            }
-          }
-
-           await addDoc(collection(db, `splits/${splitId}/transfers`), {
-             detalles: `⚙️ Admin inicializó los rosters del ${currentSplitName} desde ${prevSplit.nombre}. ${pilotsInitialized} pilotos copiados con precio inicial manual. Los no renovados quedan libres para subasta.`,
-            timestamp: new Date().toISOString(),
-            tipo: "admin"
+          prevTeamsSnap.docs.forEach(team => {
+            const data = team.data();
+            const budget = Number(data.presupuesto ?? 100);
+            planSet(doc(db, `splits/${splitId}/equipos`, team.id), {
+              id: team.id, nombre: data.nombre || team.id, presupuesto: budget,
+              presupuesto_inicial: budget, presupuesto_arrastre: budget,
+              presupuesto_origen_splitId: prevSplit.id, puntos_constructores: 0,
+            }, true);
           });
+          planSet(doc(db, `splits/${splitId}/equipos`, "agente_libre"), {
+            id: "agente_libre", nombre: "Agentes libres", presupuesto: 0, puntos_constructores: 0,
+          }, true);
+          existingRosters.forEach(roster => roster.docs.forEach(pilot => planDelete(pilot.ref)));
+
+          let pilotsInitialized = 0;
+          previousRosters.forEach(roster => roster.docs.forEach(previousPilot => {
+            const r = previousPilot.data();
+            if (r.participa_hasta != null) return;
+            const pid = previousPilot.id;
+            const inheritedRating = r.rating_piloto ?? 70;
+            const estado = r.estado_siguiente_split || (
+              r.pending_tipo_fichaje === "mantener" ? "mantener" :
+              r.pending_tipo_fichaje === "clausula" ? "clausula" :
+              r.pending_equipoId ? "subasta" : "agente_libre"
+            );
+            if (estado === "agente_libre") {
+              planSet(doc(db, `splits/${splitId}/equipos/agente_libre/pilotos`, pid), {
+                ...r, pilotoId: pid, equipoId: "agente_libre", precio_compra: 0,
+                mantener_actual: 0, clausula_actual: 0, tipo_fichaje: "subasta",
+                participa_desde: 1, participa_hasta: null,
+              });
+              pilotsInitialized++;
+              return;
+            }
+            const nextTeamId = r.pending_equipoId ?? r.equipoId;
+            if (!nextTeamId || nextTeamId === "agente_libre") return;
+            if (!teamIds.has(nextTeamId)) throw new Error(`La escudería ${nextTeamId} de ${r.nombre || pid} no existe en el split anterior.`);
+            const price = Number(r.precio_inicio_siguiente_split);
+            if (!Number.isFinite(price)) throw new Error(`Falta el precio inicial manual del siguiente split para ${r.nombre || pid}.`);
+            const keep = Math.round((price < 0 ? price / 3 : price * 3) * 10) / 10;
+            const clause = Math.round((price < 0 ? price / 2 : price * 2) * 10) / 10;
+            planSet(doc(db, `splits/${splitId}/equipos/${nextTeamId}/pilotos`, pid), {
+              pilotoId: pid, equipoId: nextTeamId, rating_piloto: inheritedRating,
+              rating_base: inheritedRating, participa_desde: 1, participa_hasta: null,
+              tipo_fichaje: estado === "subasta" ? "subasta" : estado,
+              puntos_piloto: 0, victorias: 0, podios: 0, poles: 0, dnfs: 0, carreras_limpias: 0,
+              precio_compra: price, mantener_actual: keep, clausula_actual: clause,
+              mantener_inicial_split: keep, clausula_inicial_split: clause,
+              precio_carrera_anterior: keep, historial_precios: {}, congelado: false,
+            });
+            pilotsInitialized++;
+          }));
+
+          const logRef = doc(collection(db, `splits/${splitId}/transfers`));
+          planSet(logRef, {
+            detalles: `⚙️ Admin inicializó los rosters del ${currentSplitName} desde ${prevSplit.nombre}. ${pilotsInitialized} pilotos copiados con precio inicial manual. Los no renovados quedan libres para subasta.`,
+            timestamp: new Date().toISOString(), tipo: "admin",
+          });
+          if (writes.size > 500) throw new Error(`La inicialización requiere ${writes.size} escrituras y supera el límite de 500 de una operación atómica. No se realizó ningún cambio.`);
+          const batch = writeBatch(db);
+          writes.forEach(write => {
+            if (write.kind === "delete") batch.delete(write.ref);
+            else {
+              const data = { ...write.data };
+              const merge = data.__merge === true;
+              delete data.__merge;
+              if (merge) batch.set(write.ref, data, { merge: true });
+              else batch.set(write.ref, data);
+            }
+          });
+          await batch.commit();
 
           setMsg(`¡${currentSplitName} inicializado! ${pilotsInitialized} pilotos copiados. Recarguemos para ver presupuestos...`);
           
@@ -720,7 +719,7 @@ export function AdminDashboard() {
          const item = results[p.pilotoId] || {};
          const enteredQualy = typeof item.qualyPos === "number" ? item.qualyPos : parseInt(item.qualyPos as any);
          const enteredRace = typeof item.racePos === "number" ? item.racePos : parseInt(item.racePos as any);
-         const isDnf = item.isDnfOwnError === true || enteredRace === 99;
+         const isDnf = item.isDnf === true;
          if (isNaN(enteredQualy) || enteredQualy <= 0) {
            throw new Error(`Falta la posición de clasificación de ${p.nombre}.`);
          }
@@ -733,9 +732,10 @@ export function AdminDashboard() {
            pilotoNombre: p.nombre,
            qualyPos: enteredQualy,
            racePos: isDnf ? 99 : enteredRace,
-           isDnfOwnError: isDnf,
+           isDnf,
+           isDnfOwnError: isDnf && item.isDnfOwnError === true,
            fastestLap: item.fastestLap === true,
-           isClean: !isDnf && item.isClean !== false,
+           isClean: item.isClean !== false,
          } as RaceResult;
        });
 
@@ -1327,6 +1327,15 @@ export function AdminDashboard() {
             </div>
           )}
 
+          {isActaCerrada && raceImageWinners.length > 0 && (
+            <RaceWinnersImagePanel
+              key={`${selectedSplitId}-${selectedCircuitoId}`}
+              raceName={getCircuitName()}
+              splitName={currentRawSplit?.nombre || selectedSplitId}
+              winners={raceImageWinners}
+            />
+          )}
+
           <AnimatePresence>
             {msg && (
               <motion.div
@@ -1367,7 +1376,7 @@ export function AdminDashboard() {
                    const qPosVal = results[p.pilotoId]?.qualyPos;
                     const isQualyDuplicated = typeof qPosVal === "number" && qPosVal !== 99 && (qualyCount[qPosVal] || 0) > 1;
                   const rPosVal = results[p.pilotoId]?.racePos;
-                   const isPilotDnf = results[p.pilotoId]?.isDnfOwnError === true || rPosVal === 99;
+                   const isPilotDnf = results[p.pilotoId]?.isDnf === true;
                    const isRaceDuplicated = !isPilotDnf && typeof rPosVal === "number" && rPosVal !== 99 && (raceCount[rPosVal] || 0) > 1;
                    const didNotRace = noCorrieron.has(p.pilotoId);
                   return (
@@ -1424,7 +1433,7 @@ export function AdminDashboard() {
                            onChange={e => handleUpdate(p.pilotoId, "fastestLap", e.target.checked)} />
                        </td>
                        <td className="py-2.5 text-center">
-                         <input type="checkbox" checked={!isPilotDnf && results[p.pilotoId]?.isClean !== false} disabled={isActaCerrada || isPilotDnf} title="Desmarcar si el piloto fue sancionado"
+                         <input type="checkbox" checked={results[p.pilotoId]?.isClean !== false} disabled={isActaCerrada} title="Desmarcar si el piloto fue sancionado"
                            className="w-4 h-4 accent-emerald-500 disabled:opacity-40"
                            onChange={e => handleUpdate(p.pilotoId, "isClean", e.target.checked)} />
                        </td>
@@ -1438,7 +1447,8 @@ export function AdminDashboard() {
                                [p.pilotoId]: {
                                  ...prev[p.pilotoId],
                                  pilotoId: p.pilotoId,
-                                 isDnfOwnError: dnf,
+                                 isDnf: dnf,
+                                 isDnfOwnError: false,
                                  racePos: dnf ? 99 : ("" as any),
                                }
                              }));
@@ -1451,7 +1461,7 @@ export function AdminDashboard() {
                         <input
                           type="number"
                           min="1"
-                          max="15"
+                          max="20"
                           className={`w-12 bg-[#1a1a1a]/50 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${
                             isRaceDuplicated
                               ? "border-amber-500/60 text-amber-300 bg-amber-500/5"

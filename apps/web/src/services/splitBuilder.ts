@@ -1,6 +1,6 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, updateDoc, writeBatch, runTransaction } from "firebase/firestore";
 import { db } from "./firebase";
-import { clausulaInicialDe, mantenerInicialDe } from "./economyService";
+import { clausulaInicialDe, mantenerInicialDe, procesarPremiosCierreSplit } from "./economyService";
 import { OVR_DEBUT } from "../utils/splitResolver";
 import type { TipoFichaje } from "../types";
 
@@ -488,30 +488,43 @@ export async function cerrarSplitYAbrirMercado(
   try {
     const snap = await getDoc(doc(db, "splits", splitId));
     if (!snap.exists()) return { ok: false, message: `${splitId} no existe.` };
+    const mercadoSnap = splitDelMercado && splitDelMercado !== splitId
+      ? await getDoc(doc(db, "splits", splitDelMercado))
+      : null;
+    if (mercadoSnap && !mercadoSnap.exists()) return { ok: false, message: `El split de mercado ${splitDelMercado} no existe.` };
 
     const circuitos = await getDocs(collection(db, `splits/${splitId}/circuitos`));
     const sinCerrar = circuitos.docs.filter(d => !(d.data() as any).acta_cerrada);
     const sinEconomia = circuitos.docs.filter(d => !(d.data() as any).economia_procesada);
+    if (sinCerrar.length || sinEconomia.length) {
+      const pendientes = [
+        sinCerrar.length ? `${sinCerrar.length} acta(s) sin cerrar` : "",
+        sinEconomia.length ? `${sinEconomia.length} carrera(s) sin economía procesada` : "",
+      ].filter(Boolean);
+      return { ok: false, message: `No se cerró el split: ${pendientes.join(" y ")}.` };
+    }
 
-    await updateDoc(doc(db, "splits", splitId), {
+    if (!snap.data().premios_cierre_procesados) {
+      const premios = await procesarPremiosCierreSplit(splitId);
+      if (!premios.ok) return premios;
+    }
+
+    const batch = writeBatch(db);
+    batch.update(doc(db, "splits", splitId), {
       completado: true,
       activo: false,
       fichajes_abiertos: splitDelMercado === splitId,
     });
     if (splitDelMercado && splitDelMercado !== splitId) {
-      await updateDoc(doc(db, "splits", splitDelMercado), { fichajes_abiertos: true, activo: true });
+      batch.update(doc(db, "splits", splitDelMercado), { fichajes_abiertos: true, activo: true });
     }
-
-    const pendientes = [
-      sinCerrar.length ? `${sinCerrar.length} acta(s) sin cerrar` : "",
-      sinEconomia.length ? `${sinEconomia.length} carrera(s) sin economía procesada` : "",
-    ].filter(Boolean);
+    await batch.commit();
 
     return {
       ok: true,
       message: `${snap.data()?.nombre || splitId} cerrado`
         + (splitDelMercado ? ` · mercado abierto en ${splitDelMercado}` : "")
-        + (pendientes.length ? `. Ojo: ${pendientes.join(" y ")}.` : "."),
+        + ` · premios de cierre procesados.`,
     };
   } catch (error: any) {
     return { ok: false, message: `Error al cerrar: ${error.message}` };

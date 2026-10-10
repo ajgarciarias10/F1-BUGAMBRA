@@ -130,8 +130,7 @@ export function PilotDetailModal({
               {carreras.length > 0 ? (
                 <ul className="grid gap-px bg-white/[0.06]">
                   {carreras.map(({ circuito, resultado }) => {
-                    // Igual que cuentan las stats: marca explícita, el 99 o una posición fuera de la parrilla.
-                    const abandono = resultado.isDnfOwnError === true || resultado.racePos === 99 || resultado.racePos > 12;
+                    const abandono = resultado.isDnf === true;
                     return (
                       <li key={circuito.id} className={`flex items-center gap-3 px-3 py-2.5 ${
                         abandono ? "border-l-2 border-red-500/70 bg-gradient-to-r from-red-500/[0.10] to-[#101116]" : "bg-[#101116]"
@@ -155,7 +154,7 @@ export function PilotDetailModal({
                             : resultado.racePos <= 3 ? "border-slate-300/40 bg-slate-300/10 text-slate-100"
                             : "border-white/10 bg-white/[0.03] text-white/70"
                         }`}>
-                          {abandono ? "DNF" : `P${resultado.racePos}`}
+                          {abandono ? "DNF" : resultado.racePos === 99 ? "—" : `P${resultado.racePos}`}
                         </span>
                       </li>
                     );

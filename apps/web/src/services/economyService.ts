@@ -4,7 +4,8 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { TipoTransaccion } from "../types";
-import { economyRules } from "../utils/economyRules";
+import { economyRules, ordenarPorClasificacion } from "../utils/economyRules";
+import { previsualizarAjustePrecio } from "../utils/presupuesto";
 
 // ─── CONSTANTES ECONÓMICAS ────────────────────────────────────────────────────
 
@@ -176,6 +177,8 @@ export async function ficharPiloto(params: {
     const teams = await getDocs(collection(db, `splits/${splitId}/equipos`));
     const locationRefs = [...new Set([...teams.docs.map(d => d.id), "agente_libre", teamId])]
       .map(id => doc(db, `splits/${splitId}/equipos/${id}/pilotos`, pilotoId));
+    const rosterBefore = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
+    const activeRosterCount = rosterBefore.docs.filter(pilot => pilot.data().participa_hasta == null).length;
     const operationRef = doc(collection(db, `splits/${splitId}/transfers`));
     await runTransaction(db, async transaction => {
     const [team, locations, split, room] = await Promise.all([
@@ -197,7 +200,9 @@ export async function ficharPiloto(params: {
     if (current?.equipoId === teamId && !room) throw new Error("El piloto ya pertenece a esta escudería.");
     if (tipo === "fichaje" && current && current.equipoId !== "agente_libre") throw new Error("El piloto ya tiene equipo; registra una cláusula o un pacto, no otra alta libre.");
     if (current?.data.pending_equipoId) throw new Error("Deshaz primero el pacto pendiente del piloto.");
-    const roster = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
+    const pilotAlreadyOccupiesSlot = current?.equipoId === teamId && current.data.participa_hasta == null;
+    const slots = Number(room?.data()?.plazas_por_equipo ?? 4);
+    if (!pilotAlreadyOccupiesSlot && activeRosterCount >= slots) throw new Error("La plantilla de la escudería está completa.");
     const vendedorId = split.data()?.economia_config?.clausula_al_vendedor === true && tipo === "clausula" && current && current.equipoId !== "agente_libre" && precio > 0 ? current.equipoId : null;
     const seller = vendedorId ? await transaction.get(doc(db, `splits/${splitId}/equipos`, vendedorId)) : null;
 
@@ -296,6 +301,126 @@ export async function ficharPiloto(params: {
     };
   } catch (error: any) {
     return { success: false, message: `Error al fichar: ${error.message}` };
+  }
+}
+
+/**
+ * Corrects the purchase price of an existing roster entry and settles only the
+ * difference against the team's balance. A lower positive price refunds the
+ * difference (54M → 44M credits 10M back). The original purchase ledger entry
+ * stays intact; each correction gets its own revisioned audit entry.
+ */
+export async function ajustarPrecioCompraPiloto(params: {
+  splitId: string;
+  teamId: string;
+  pilotId: string;
+  pilotName: string;
+  newPrice: number;
+  reason: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const { splitId, teamId, pilotId, pilotName, newPrice, reason } = params;
+  if (!Number.isFinite(newPrice)) return { ok: false, message: "El precio debe ser un número válido." };
+  if (!reason.trim()) return { ok: false, message: "Indica el motivo de la corrección." };
+
+  try {
+    const circuitsSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
+    const calendar = circuitsSnap.docs.map(circuit => ({
+      id: circuit.id,
+      data: circuit.data() as any,
+      order: Number((circuit.data() as any).numero_carrera ?? 0),
+    })).sort((a, b) => {
+      if (a.order && b.order) return a.order - b.order;
+      if (a.order) return -1;
+      if (b.order) return 1;
+      const fa = a.data.fecha?.toMillis?.() ?? 0;
+      const fb = b.data.fecha?.toMillis?.() ?? 0;
+      return fa !== fb ? fa - fb : a.id.localeCompare(b.id);
+    });
+    const firstUnprocessed = calendar.findIndex(circuit => !circuit.data.economia_procesada);
+    if (firstUnprocessed >= 0 && calendar.slice(firstUnprocessed + 1).some(circuit => circuit.data.economia_procesada)) {
+      return { ok: false, message: "Hay carreras posteriores procesadas. Revierte primero la economía desde la última carrera." };
+    }
+    const nextRaceIndex = firstUnprocessed < 0 ? Math.max(0, calendar.length - 1) : firstUnprocessed;
+    const previousRaceIndex = firstUnprocessed < 0 ? nextRaceIndex : nextRaceIndex - 1;
+    const currentPrices = precioPilotoEnCarrera(newPrice, nextRaceIndex, calendar.length || CARRERAS_POR_BLOQUE);
+    const previousPrices = precioPilotoEnCarrera(newPrice, Math.max(0, previousRaceIndex), calendar.length || CARRERAS_POR_BLOQUE);
+
+    const pilotRef = doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotId);
+    const teamRef = doc(db, `splits/${splitId}/equipos`, teamId);
+    const outcome = await runTransaction(db, async transaction => {
+      const [pilotSnap, teamSnap] = await Promise.all([transaction.get(pilotRef), transaction.get(teamRef)]);
+      if (!pilotSnap.exists()) throw new Error("La ficha ya no existe en esa escudería.");
+      if (!teamSnap.exists()) throw new Error("La escudería ya no existe.");
+      const pilot = pilotSnap.data();
+      if (pilot.pending_equipoId || pilot.pending_precio_compra != null) throw new Error("Deshaz primero el pacto pendiente antes de corregir el precio.");
+      const oldPrice = Number(pilot.precio_compra ?? 0);
+      if (!Number.isFinite(oldPrice)) throw new Error("El precio actual guardado no es válido.");
+      if (oldPrice === newPrice) return "unchanged" as const;
+
+      const currentBalance = Number(teamSnap.data().presupuesto ?? 0);
+      if (!Number.isFinite(currentBalance)) throw new Error("El saldo guardado de la escudería no es válido.");
+      const priceAdjustment = previsualizarAjustePrecio(currentBalance, oldPrice, newPrice);
+      const balanceDelta = priceAdjustment.delta;
+      if (balanceDelta < 0 && priceAdjustment.insuficiente) {
+        throw new Error(`Presupuesto insuficiente: faltan ${priceAdjustment.faltante}M para aplicar el nuevo precio.`);
+      }
+
+      const revision = Number(pilot.precio_ajuste_revision ?? 0) + 1;
+      const operationId = pilot.ultima_operacion_id;
+      const operationRef = operationId ? doc(db, `splits/${splitId}/transfers`, operationId) : null;
+      const operationSnap = operationRef ? await transaction.get(operationRef) : null;
+      if (operationId && (!operationSnap?.exists() || operationSnap.data().estado !== "aplicada")) {
+        throw new Error("El justificante de esta transferencia no está activo. Revisa la ficha antes de corregir el precio.");
+      }
+      if (operationSnap?.exists() && (operationSnap.data().teamId !== teamId || operationSnap.data().pilotoId !== pilotId)) {
+        throw new Error("El justificante del fichaje no corresponde a esta ficha. No se aplicó ningún cambio.");
+      }
+      const pilotUpdate: Record<string, unknown> = {
+        precio_compra: newPrice,
+        mantener_inicial_split: mantenerInicialDe(newPrice),
+        clausula_inicial_split: clausulaInicialDe(newPrice),
+        mantener_actual: currentPrices.mantener,
+        clausula_actual: pilot.clausula_manual ?? currentPrices.clausula,
+        ...(pilot.clausula_manual != null ? { clausula_sin_ajuste: currentPrices.clausula } : {}),
+        precio_carrera_anterior: previousPrices.mantener,
+        precio_ajuste_revision: revision,
+      };
+      if (balanceDelta !== 0) {
+        transaction.update(teamRef, { presupuesto: increment(balanceDelta) });
+        transaction.set(doc(db, "transacciones", `precio_ajuste__${splitId}__${pilotId}__${revision}`), {
+          splitId, equipoId: teamId, equipo: teamSnap.data().nombre || teamId, piloto: pilotName,
+          operacionId: operationId ?? null, tipo: "ajuste", cantidad: Math.abs(balanceDelta),
+          esIngreso: balanceDelta > 0,
+          descripcion: `Corrección de precio de transferencia ${oldPrice}M → ${newPrice}M: ${reason.trim()}`,
+          fecha: serverTimestamp(),
+        });
+      }
+      if (operationRef && operationSnap?.exists() && operationSnap.data().estado === "aplicada") {
+        transaction.update(operationRef, { precio: newPrice, precio_ajuste_revision: revision });
+      }
+      const lastProcessed = previousRaceIndex >= 0 ? calendar[previousRaceIndex] : null;
+      const lastPriceEntry = lastProcessed ? pilot.historial_precios?.[lastProcessed.id] : null;
+      if (lastProcessed && lastPriceEntry?.anterior) {
+        const rollbackState = {
+          mantener_actual: previousPrices.mantener,
+          clausula_actual: pilot.clausula_manual ?? previousPrices.clausula,
+          precio_carrera_anterior: previousPrices.mantener,
+          ...(pilot.clausula_manual != null ? { clausula_sin_ajuste: previousPrices.clausula } : {}),
+        };
+        Object.assign(pilotUpdate, Object.fromEntries(Object.entries(rollbackState).map(([field, value]) => [
+          `historial_precios.${lastProcessed.id}.anterior.${field}`, value,
+        ])));
+      }
+      transaction.update(pilotRef, pilotUpdate);
+      return "updated" as const;
+    });
+    if (outcome === "unchanged") return { ok: true, message: "El precio ya tenía ese valor; no se movió presupuesto." };
+    return {
+      ok: true,
+      message: `Precio corregido a ${newPrice}M. ${outcome === "updated" ? "El saldo se ajustó solo por la diferencia respecto al precio anterior." : ""}`,
+    };
+  } catch (error: any) {
+    return { ok: false, message: `No se pudo corregir el precio: ${error.message}` };
   }
 }
 
@@ -448,8 +573,7 @@ export async function procesarEconomiaCarrera(
         if (!teamId || teamId === "agente_libre") continue;
 
         const nombre = pilotNombre[raceResult.pilotoId] || raceResult.pilotoId;
-        const isDNF = raceResult.racePos === 99;
-        const ptsPos = isDNF ? 0 : calcularPuntosPosicion(raceResult.racePos);
+        const ptsPos = calcularPuntosPosicion(raceResult.racePos);
         const ptsPole = raceResult.qualyPos === 1 ? 2 : 0;
         const totalPts = ptsPos + ptsPole;
         if (totalPts > 0) {
@@ -594,6 +718,94 @@ export async function procesarEconomiaCarrera(
   }
 }
 
+// Liquidación adicional de premios de cierre: se suman a los ingresos por carrera y se
+// registran por separado para que el desglose conserve su origen.
+export async function procesarPremiosCierreSplit(
+  splitId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const [splitSnap, circuitsSnap, teamsSnap] = await Promise.all([
+      getDoc(doc(db, "splits", splitId)),
+      getDocs(collection(db, `splits/${splitId}/circuitos`)),
+      getDocs(collection(db, `splits/${splitId}/equipos`)),
+    ]);
+    if (!splitSnap.exists()) return { ok: false, message: "Split no encontrado." };
+    if (splitSnap.data().premios_cierre_procesados) return { ok: false, message: "Los premios de cierre ya fueron procesados." };
+    if (circuitsSnap.empty) return { ok: false, message: "El split no tiene carreras para liquidar." };
+    const pendientes = circuitsSnap.docs.filter(circuit => !circuit.data().acta_cerrada || !circuit.data().economia_procesada);
+    if (pendientes.length) return { ok: false, message: "Cierra las actas y procesa la economía de todas las carreras antes de liquidar los premios finales." };
+
+    const rules = economyRules(splitSnap.data().economia_config);
+    const teams = teamsSnap.docs.filter(team => team.id !== "agente_libre").map(team => ({
+      id: team.id, ref: team.ref, nombre: String(team.data().nombre || team.id),
+      puntos: Number(team.data().puntos_constructores || 0),
+    }));
+    const rosterSnaps = await Promise.all(teams.map(team => getDocs(collection(db, `splits/${splitId}/equipos/${team.id}/pilotos`))));
+    const pilotRows = rosterSnaps.flatMap(snap => snap.docs.map(pilot => ({
+      id: pilot.id, ref: pilot.ref, nombre: String(pilot.data().nombre || pilot.id),
+      teamId: pilot.ref.parent.parent?.id || "",
+      puntos: Number(pilot.data().puntos_piloto || 0),
+    })));
+    const payouts: Array<{ id: string; teamId: string; teamName: string; amount: number; description: string }> = [];
+    const safeId = (value: string) => value.replaceAll("/", "_");
+
+    for (const { entry: team, puesto } of ordenarPorClasificacion(teams, value => value.puntos)) {
+      const amount = rules.premio_constructores[puesto - 1] ?? 0;
+      if (amount > 0) payouts.push({ id: `constructor__${team.id}`, teamId: team.id, teamName: team.nombre, amount, description: `Premio final de constructores · P${puesto}` });
+    }
+
+    const rivalries = splitSnap.data().rivalries;
+    for (const group of rivalries?.groups || []) {
+      if (group.type === "solo") continue;
+      const members: Array<{ pilot: (typeof pilotRows)[number]; team: (typeof teams)[number] }> = (group.members || []).flatMap((member: any) => {
+        const pilot = pilotRows.find(row => row.id === member.id);
+        const team = teams.find(row => row.id === pilot?.teamId);
+        return pilot && team ? [{ pilot, team }] : [];
+      });
+      const prizes = group.type === "pair" ? rules.rivalidad_duo_etapa : rules.rivalidad_etapa;
+      for (const { entry, puesto } of ordenarPorClasificacion(members, value => value.pilot.puntos)) {
+        const amount = prizes[puesto - 1] ?? 0;
+        if (amount > 0) payouts.push({
+          id: `rivalidad__${safeId(String(group.id))}__${safeId(entry.pilot.id)}`,
+          teamId: entry.team.id,
+          teamName: entry.team.nombre,
+          amount,
+          description: `Premio de rivalidad de etapa · ${group.name || group.id} · P${puesto}`,
+        });
+      }
+    }
+
+    const refs = [...teams.map(team => team.ref), ...pilotRows.map(pilot => pilot.ref)];
+    const result = await runTransaction(db, async transaction => {
+      const fresh = await Promise.all([transaction.get(doc(db, "splits", splitId)), ...refs.map(ref => transaction.get(ref))]);
+      if (fresh[0].data()?.premios_cierre_procesados) return false;
+      if (teams.some((team, index) => Number(fresh[index + 1].data()?.puntos_constructores || 0) !== team.puntos)) throw new Error("La clasificación de constructores cambió. Recarga antes de liquidar.");
+      if (pilotRows.some((pilot, index) => Number(fresh[teams.length + index + 1].data()?.puntos_piloto || 0) !== pilot.puntos)) throw new Error("La clasificación de rivalidades cambió. Recarga antes de liquidar.");
+      const totals: Record<string, number> = {};
+      payouts.forEach((payout, index) => {
+        totals[payout.teamId] = (totals[payout.teamId] || 0) + payout.amount;
+        transaction.set(doc(db, "transacciones", `premio_cierre__${splitId}__${payout.id}`), transactionPayload({
+          equipo: payout.teamName, equipoId: payout.teamId, tipo: "premio_temporada", cantidad: payout.amount,
+          esIngreso: true, splitId, descripcion: payout.description,
+        }));
+      });
+      teams.forEach(team => {
+        if (totals[team.id]) transaction.update(team.ref, { presupuesto: increment(totals[team.id]) });
+      });
+      transaction.update(doc(db, "splits", splitId), {
+        premios_cierre_procesados: true,
+        premios_cierre_procesados_en: serverTimestamp(),
+      });
+      return true;
+    });
+    return result
+      ? { ok: true, message: `Premios de cierre añadidos: ${payouts.length} pagos independientes.` }
+      : { ok: false, message: "Los premios de cierre ya fueron procesados." };
+  } catch (error: any) {
+    return { ok: false, message: `Error al procesar premios de cierre: ${error.message}` };
+  }
+}
+
 // ─── REVERTIR LA ECONOMÍA DE UNA CARRERA ─────────────────────────────────────
 // Deshace exactamente lo que procesarEconomiaCarrera aplicó para un circuito: devuelve a
 // cada equipo lo que se le ingresó, borra el registro de transacciones de esa carrera y
@@ -735,7 +947,7 @@ export async function recalcularCurvaPreciosSplit(
   try {
     const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
     const calendario = circSnap.docs
-      .map(d => ({ id: d.id, nombre: (d.data() as any).nombre || d.id, orden: Number((d.data() as any).numero_carrera ?? 0) }))
+      .map(d => ({ id: d.id, nombre: (d.data() as any).nombre || d.id, orden: Number((d.data() as any).numero_carrera ?? 0), procesada: !!(d.data() as any).economia_procesada }))
       .sort((a, b) => (a.orden && b.orden ? a.orden - b.orden : a.id.localeCompare(b.id)));
 
     if (calendario.length === 0) {
@@ -744,6 +956,15 @@ export async function recalcularCurvaPreciosSplit(
       return { pilotos: 0, carreras: 0, message };
     }
     onProgress?.(`Calendario: ${calendario.map(c => c.nombre).join(" → ")}`);
+
+    const primeraPendiente = calendario.findIndex(carrera => !carrera.procesada);
+    if (primeraPendiente >= 0 && calendario.slice(primeraPendiente + 1).some(carrera => carrera.procesada)) {
+      const message = "Hay carreras posteriores procesadas. Revierte primero la economía desde la última carrera.";
+      onProgress?.(`⚠ ${message}`);
+      return { pilotos: 0, carreras: calendario.length, message };
+    }
+    const proximaCarrera = primeraPendiente < 0 ? calendario.length - 1 : primeraPendiente;
+    const ultimaProcesada = primeraPendiente < 0 ? calendario.length - 1 : primeraPendiente - 1;
 
     const equiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
     const batch = writeBatch(db);
@@ -764,27 +985,37 @@ export async function recalcularCurvaPreciosSplit(
         const marcaCongelacion = calendario.findIndex(c => c.id === d.congelado_en);
         const congeladoDesde = !estaCongelado ? -1 : marcaCongelacion >= 0 ? marcaCongelacion : 0;
 
-        const historial_precios = Object.fromEntries(calendario.map((circuito, indice) => [
-          circuito.id,
-          congeladoDesde >= 0 && indice > congeladoDesde
+        const historial_precios = { ...(d.historial_precios ?? {}) };
+        calendario.forEach((circuito, indice) => {
+          // Las carreras liquidadas son evidencia histórica. Recalcular el precio no debe
+          // reescribir lo que ya se procesó ni romper su futura reversión.
+          if (circuito.procesada) return;
+          historial_precios[circuito.id] = congeladoDesde >= 0 && indice > congeladoDesde
             ? { carrera: circuito.nombre, mantener: null, clausula: null, congelado: true }
-            : { carrera: circuito.nombre, mantener: curva[indice].mantener, clausula: curva[indice].clausula, congelado: false },
-        ]));
+            : { carrera: circuito.nombre, mantener: curva[indice].mantener, clausula: curva[indice].clausula, congelado: false };
+        });
 
-        // Con precio pactado el cierre es el de la carrera en la que se congeló.
-        const cierre = curva[congeladoDesde >= 0 ? congeladoDesde : curva.length - 1];
+        // El precio actual es el de la próxima carrera pendiente; no el del cierre
+        // futuro del bloque. Si ya se procesaron todas, corresponde el precio de cierre.
+        const indiceActual = congeladoDesde >= 0 ? Math.min(congeladoDesde, proximaCarrera) : proximaCarrera;
+        const vigente = d.congelado || d.pending_equipoId != null || d.pending_precio_compra != null
+          ? { mantener: Number(d.mantener_actual ?? 0), clausula: Number(d.clausula_actual ?? 0) }
+          : curva[indiceActual];
+        const precioAnterior = ultimaProcesada >= 0
+          ? curva[ultimaProcesada].mantener
+          : curva[0].mantener;
 
         batch.update(pd.ref, {
           historial_precios,
           mantener_inicial_split:  mantenerInicialDe(precioCompra),
           clausula_inicial_split:  clausulaInicialDe(precioCompra),
-          mantener_actual:         cierre.mantener,
-          clausula_actual:         d.clausula_manual ?? cierre.clausula,
-          ...(d.clausula_manual != null ? { clausula_sin_ajuste: cierre.clausula } : {}),
-          precio_carrera_anterior: cierre.mantener,
+          mantener_actual:         vigente.mantener,
+          clausula_actual:         d.clausula_manual ?? vigente.clausula,
+          ...(d.clausula_manual != null ? { clausula_sin_ajuste: vigente.clausula } : {}),
+          precio_carrera_anterior: precioAnterior,
         });
         pilotos++;
-        onProgress?.(`piloto:${d.nombre || pd.id}:${curva[0].mantener}:${cierre.mantener}:${cierre.clausula}:${congeladoDesde >= 0}`);
+        onProgress?.(`piloto:${d.nombre || pd.id}:${curva[0].mantener}:${vigente.mantener}:${vigente.clausula}:${congeladoDesde >= 0}`);
       }
     }
 

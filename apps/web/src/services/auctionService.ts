@@ -7,6 +7,7 @@ import {
   clausulaInicialDe, ficharPiloto,
   findPilotEntry, mantenerInicialDe,
 } from "./economyService";
+import { ajustarPresupuestoAlTope, economyRules } from "../utils/economyRules";
 
 export function formatearNumero(value: number): string {
   return value.toFixed(1).replace(".", ",");
@@ -151,14 +152,18 @@ export async function leerEquiposDeSubasta(
       nombre: data.nombre || equipoDoc.id,
       presupuesto: Number(data.presupuesto ?? 0),
       plantilla,
-      completo: false,
+      completo: equipoCompleto(plantilla, plazasPorEquipo),
     });
   }
   return equipos.sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
-// No hay límite de pilotos por escudería; solo se controla el saldo disponible.
+export function equipoCompleto(plantilla: number, plazasPorEquipo: number): boolean {
+  return plantilla >= Math.max(1, plazasPorEquipo);
+}
+
 export function puedePujar(equipo: EquipoEnSubasta, importe: number): { ok: boolean; motivo?: string } {
+  if (equipo.completo) return { ok: false, motivo: "La plantilla de tu escudería está completa." };
   if (importe > equipo.presupuesto) return { ok: false, motivo: `Te faltan ${(importe - equipo.presupuesto).toFixed(1)}M para esa puja.` };
   return { ok: true };
 }
@@ -269,6 +274,8 @@ export async function pujar(
   const cifra = Math.round(importe * 10) / 10;
 
   try {
+    const rosterSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${equipo.id}/pilotos`));
+    const plantillaActual = rosterSnap.docs.filter(pilot => pilot.data().participa_hasta == null).length;
     const resultado = await runTransaction(db, async transaction => {
       const salaSnap = await transaction.get(salaRef(splitId));
       if (!salaSnap.exists()) return { ok: false, message: "No hay subasta abierta." };
@@ -289,6 +296,9 @@ export async function pujar(
       const splitSnap = await transaction.get(doc(db, "splits", splitId));
       if (!equipoSnap.exists() || equipo.id === "agente_libre") return { ok: false, message: "Escudería no válida." };
       if (splitSnap.data()?.fichajes_abiertos !== true) return { ok: false, message: "El mercado está cerrado." };
+      if (equipoCompleto(plantillaActual, sala.plazas_por_equipo ?? PLAZAS_POR_EQUIPO)) {
+        return { ok: false, message: "La plantilla de tu escudería está completa." };
+      }
       const presupuesto = Number(equipoSnap.data()?.presupuesto ?? 0);
       if (cifra > presupuesto) {
         return { ok: false, message: `Te faltan ${(cifra - presupuesto).toFixed(1)}M para esa puja.` };
@@ -587,36 +597,73 @@ export async function comenzarTemporada(
   splitId: string,
 ): Promise<{ ok: boolean; message: string }> {
   try {
-    const [salaSnap, splitsSnap] = await Promise.all([
-      getDoc(salaRef(splitId)),
+    const [teamsSnap, splitsSnap] = await Promise.all([
+      getDocs(collection(db, `splits/${splitId}/equipos`)),
       getDocs(collection(db, "splits")),
     ]);
-    const sala = salaSnap.exists() ? { ...SALA_VACIA, ...(salaSnap.data() as Partial<SalaSubasta>) } : SALA_VACIA;
-    if (sala.estado === "en_curso" || sala.estado === "esperando_apertura") {
-      return { ok: false, message: "Termina o vacía la subasta antes de comenzar la temporada." };
-    }
-    if (sala.simulacion_reversiones.length > 0) {
-      return { ok: false, message: "Deshaz las adjudicaciones simuladas antes de comenzar la temporada." };
-    }
-
-    const selected = splitsSnap.docs.find(splitDoc => splitDoc.id === splitId);
-    if (!selected) return { ok: false, message: "El split seleccionado no existe." };
-    await cerrarSala(splitId, false);
-    const batch = writeBatch(db);
-    splitsSnap.docs.forEach(splitDoc => {
-      if (splitDoc.id !== splitId && splitDoc.data().activo) {
-        batch.update(splitDoc.ref, { activo: false });
+    const teamRefs = teamsSnap.docs.filter(team => team.id !== "agente_libre").map(team => team.ref);
+    const otherActiveSplitRefs = splitsSnap.docs.filter(split => split.id !== splitId && split.data().activo).map(split => split.ref);
+    const started = await runTransaction(db, async transaction => {
+      const selectedRef = doc(db, "splits", splitId);
+      const [selected, salaSnap, teamSnaps, activeSplitSnaps] = await Promise.all([
+        transaction.get(selectedRef), transaction.get(salaRef(splitId)),
+        Promise.all(teamRefs.map(ref => transaction.get(ref))),
+        Promise.all(otherActiveSplitRefs.map(ref => transaction.get(ref))),
+      ]);
+      if (!selected.exists()) return { ok: false as const, message: "El split seleccionado no existe." };
+      const splitData = selected.data();
+      if (splitData.temporada_iniciada || splitData.economia_tope_aplicado) {
+        return { ok: false as const, message: "La temporada ya comenzó o el tope ya se aplicó." };
       }
+      const sala = salaSnap.exists() ? { ...SALA_VACIA, ...(salaSnap.data() as Partial<SalaSubasta>) } : SALA_VACIA;
+      if (sala.estado === "en_curso" || sala.estado === "esperando_apertura") {
+        return { ok: false as const, message: "Termina o vacía la subasta antes de comenzar la temporada." };
+      }
+      if (sala.simulacion_reversiones.length > 0) {
+        return { ok: false as const, message: "Deshaz las adjudicaciones simuladas antes de comenzar la temporada." };
+      }
+
+      const rules = economyRules(splitData.economia_config);
+      const ajustes = teamSnaps.flatMap((team, index) => {
+        if (!team.exists()) throw new Error(`No existe la escudería ${teamRefs[index].id}.`);
+        const adjusted = ajustarPresupuestoAlTope(Number(team.data().presupuesto ?? 0), rules.tope_presupuesto_subasta);
+        return adjusted.ajuste > 0 ? [{ team, ...adjusted }] : [];
+      });
+
+      // Todas las lecturas se hacen antes de escribir: el marcador del split y los
+      // saldos quedan protegidos contra dos administradores iniciando el mercado a la vez.
+      activeSplitSnaps.forEach(active => {
+        if (active.exists()) transaction.update(active.ref, { activo: false });
+      });
+      transaction.update(selectedRef, {
+        activo: true, completado: false, fichajes_abiertos: false,
+        temporada_iniciada: true, temporada_iniciada_en: serverTimestamp(),
+        economia_tope_aplicado: true, economia_tope_aplicado_en: serverTimestamp(),
+      });
+      transaction.set(salaRef(splitId), {
+        ...SALA_VACIA,
+        modo: sala.modo, apertura_programada: sala.apertura_programada,
+        duracion_segundos: sala.duracion_segundos, prorroga_segundos: sala.prorroga_segundos,
+        plazas_por_equipo: sala.plazas_por_equipo, simulacion_reversiones: [],
+        actualizado_en: serverTimestamp(),
+      });
+      ajustes.forEach(({ team, presupuesto, ajuste }) => {
+        transaction.update(team.ref, { presupuesto, economia_ajuste_tope: rules.tope_presupuesto_subasta });
+        transaction.set(doc(db, "transacciones", `tope_subasta__${splitId}__${team.id}`), {
+          equipo: team.data().nombre || team.id, equipoId: team.id,
+          tipo: "ajuste", cantidad: ajuste, esIngreso: false, splitId,
+          descripcion: `Ajuste de presupuesto al tope de subasta: ${presupuesto}M (reducción de ${ajuste}M).`,
+          fecha: serverTimestamp(),
+        });
+      });
+      return { ok: true as const, name: splitData.nombre || splitId, count: ajustes.length, cap: rules.tope_presupuesto_subasta };
     });
-    batch.update(selected.ref, {
-      activo: true,
-      completado: false,
-      fichajes_abiertos: false,
-      temporada_iniciada: true,
-      temporada_iniciada_en: serverTimestamp(),
-    });
-    await batch.commit();
-    return { ok: true, message: `${selected.data().nombre || splitId} ha comenzado. Mercado cerrado.` };
+    if (!started.ok) return { ok: false, message: started.message };
+
+    let cleanupWarning = "";
+    try { await limpiarPujas(splitId); }
+    catch (error: any) { cleanupWarning = ` La temporada comenzó; no se pudo limpiar el historial de pujas: ${error.message}`; }
+    return { ok: true, message: `${started.name} ha comenzado. Mercado cerrado${started.count ? ` · ${started.count} presupuesto(s) ajustado(s) al tope de ${started.cap}M` : ` · todos los presupuestos ya estaban dentro del tope de ${started.cap}M`}.${cleanupWarning}` };
   } catch (error: any) {
     return { ok: false, message: `Error al comenzar la temporada: ${error.message}` };
   }

@@ -16,6 +16,7 @@
     "preview": "corepack npm@10.9.4 --workspace @f1-bugambra/web run preview",
     "typecheck": "corepack npm@10.9.4 --workspaces --if-present run typecheck",
     "test": "corepack npm@10.9.4 --workspace @f1-bugambra/api test",
+    "guardrails:economy": "npm run typecheck --workspace @f1-bugambra/web && npm test --workspace @f1-bugambra/web",
     "clean": "rm -rf apps/web/dist server.js",
     "lint": "corepack npm@10.9.4 run typecheck"
   }

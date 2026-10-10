@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
+import { runAuditedAdminMutation } from "../services/adminMutationService";
 import { DEFAULT_ECONOMY_RULES, economyRules } from "../utils/economyRules";
 
 const labels: Record<string, string> = {
@@ -8,6 +9,10 @@ const labels: Record<string, string> = {
   participacion: "Participación del equipo", puntos_factor: "Millones por punto", solo: "Piloto sin rival",
   rivalidad_clasificacion: "Rivalidad clasificación (por posición)", rivalidad_carrera: "Rivalidad carrera (por posición)",
   rivalidad_duo_clasificacion: "Dúo clasificación (por posición)", rivalidad_duo_carrera: "Dúo carrera (por posición)",
+  premio_constructores: "Premio de constructores (por puesto final)",
+  rivalidad_etapa: "Premio de rivalidad por etapa (por puesto)",
+  rivalidad_duo_etapa: "Premio de rivalidad de dúo por etapa (por puesto)",
+  tope_presupuesto_subasta: "Tope de presupuesto al cerrar la subasta",
 };
 export function EconomyRulesPanel({ splitId }: { splitId: string }) {
   const [values, setValues] = useState<Record<string, string>>({});
@@ -41,11 +46,14 @@ export function EconomyRulesPanel({ splitId }: { splitId: string }) {
           return [k, Array.isArray(DEFAULT_ECONOMY_RULES[k as keyof typeof DEFAULT_ECONOMY_RULES]) ? v.split(";").map(parse) : parse(v)];
         }));
         const rules = economyRules({ ...parsed, clausula_al_vendedor: seller });
-        await updateDoc(doc(db, "splits", splitId), { economia_config: rules });
+        await runAuditedAdminMutation({ ref: doc(db, "splits", splitId), action: "economy.rules.update", summary: `Reglas económicas actualizadas en ${splitId}.`, apply: current => {
+          if (!current) throw new Error("El split ya no existe.");
+          return { ...current, economia_config: rules };
+        } });
         setMessage("Reglas guardadas.");
-      } catch (error: any) { setMessage(error.message); }
+      } catch (error: any) { setMessage(`Error: ${error.message}`); }
       finally { setReady(true); }
     }}>Guardar reglas</button>
-    <p role="status" className="text-xs mt-2">{message}</p>
+    <p role="status" className={`text-xs mt-2 ${message.startsWith("Error") || message.includes("no existe") ? "text-red-300" : "text-emerald-300"}`}>{message}</p>
   </details>;
 }

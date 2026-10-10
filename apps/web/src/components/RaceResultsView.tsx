@@ -162,7 +162,7 @@ function RaceDetailModal({
     .filter(r => r.racePos >= 1 && r.racePos <= 3)
     .sort((a, b) => a.racePos - b.racePos);
 
-  const candidatos = [...(circuito.resultados || [])].filter(r => r.racePos !== 99);
+  const candidatos = [...(circuito.resultados || [])].filter(r => r.isDnf !== true);
   const votantes = circuito.piloto_dia_votantes || {};
   const conteos: Record<string, number> = {};
   Object.values(votantes).forEach(pid => { conteos[pid] = (conteos[pid] || 0) + 1; });

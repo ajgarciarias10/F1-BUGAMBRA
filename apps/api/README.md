@@ -36,6 +36,10 @@ Firebase Admin verifica firma, caducidad y revocación. Después, la API carga e
 
 En el servidor, `GOOGLE_APPLICATION_CREDENTIALS` debe apuntar a la cuenta de servicio y el archivo debe ser legible únicamente por el usuario del proceso de la API.
 
+## Borrador de imagen del podio
+
+`POST /api/media/race-winner-image` exige Firebase Auth y el rol `admin` de `app_user` en PostgreSQL. Por eso, la cuenta que el frontend presenta como administradora también debe estar habilitada con ese rol en la API; la compatibilidad de administrador heredada solo en la UI no concede acceso a esta ruta. Define `GEMINI_API_KEY` y, opcionalmente, `GEMINI_IMAGE_MODEL` en el entorno privado del proceso API. Configura `CORS_ORIGIN` con el origen exacto de la web si frontend y API tienen distinto origen. El endpoint devuelve una imagen limitada en tamaño al navegador para revisión/descarga; no persiste ni publica la imagen.
+
 ## Correcciones de carrera
 
 Previsualizar una corrección:

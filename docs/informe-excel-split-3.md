@@ -1,5 +1,17 @@
 # Auditoria del presupuesto del Split 3
 
+> **Actualización de fuente (10 de octubre de 2026):** la hoja `2026` del libro vigente
+> identifica a **Alex** como Mimic y fija su precio de subasta T3 en **50,2 M** (`X65` y
+> `X66`). La ficha revisada de Mimic en Firestore guarda **28,9 M**. La corrección de esa
+> compra debe cobrar la diferencia de **21,3 M** mediante el ajuste administrativo con
+> motivo; la cifra 28,9 M que aparece abajo pertenece a la revisión anterior del libro y
+> no debe usarse como precio oficial vigente. El presupuesto completo de Alfa Romero
+> requiere reconciliar además las demás operaciones y los ingresos deportivos.
+>
+> El resto de este informe conserva la revisión histórica del 15 de septiembre y usa una
+> versión anterior del Excel. Sus tablas de presupuesto y fichajes están supersedidas por
+> esta actualización; no deben usarse para aplicar correcciones actuales.
+
 Fecha de revision: 15 de septiembre de 2026
 
 ## Fuentes revisadas

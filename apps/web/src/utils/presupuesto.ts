@@ -23,3 +23,16 @@ export function cargoPorPrecio(precio: number): number {
 export function presupuestoTrasCambiarPrecio(presupuesto: number, antes: number, despues: number): number {
   return r1(presupuesto + cargoPorPrecio(despues) - cargoPorPrecio(antes));
 }
+
+/** Shared preview/validation result for admin transfer-price corrections. */
+export function previsualizarAjustePrecio(presupuesto: number, antes: number, despues: number) {
+  const saldo = r1(presupuesto);
+  const presupuestoNuevo = presupuestoTrasCambiarPrecio(saldo, antes, despues);
+  const delta = r1(presupuestoNuevo - saldo);
+  return {
+    delta,
+    presupuestoNuevo,
+    insuficiente: presupuestoNuevo < 0,
+    faltante: r1(Math.max(0, -presupuestoNuevo)),
+  };
+}

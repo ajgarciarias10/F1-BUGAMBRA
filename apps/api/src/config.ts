@@ -5,6 +5,8 @@ interface Config {
   databaseUrl: string;
   firebaseProjectId: string;
   corsOrigin: string;
+  geminiApiKey?: string;
+  geminiImageModel: string;
 }
 
 function required(name: string): string {
@@ -26,4 +28,6 @@ export const config: Config = {
   databaseUrl: required("DATABASE_URL"),
   firebaseProjectId: required("FIREBASE_PROJECT_ID"),
   corsOrigin: process.env.CORS_ORIGIN?.trim() || "http://localhost:3000",
+  ...(process.env.GEMINI_API_KEY?.trim() ? { geminiApiKey: process.env.GEMINI_API_KEY.trim() } : {}),
+  geminiImageModel: process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-nano-banana-2.1",
 };
