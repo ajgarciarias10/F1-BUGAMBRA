@@ -107,6 +107,14 @@ export interface SalaSubasta {
 const salaRef = (splitId: string) => doc(db, `splits/${splitId}/subasta`, "sala");
 const pujasRef = (splitId: string) => collection(db, `splits/${splitId}/subasta/sala/pujas`);
 
+function saldoValido(data: Record<string, any> | undefined, label: string): number {
+  const value = data?.presupuesto;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} no tiene un presupuesto válido. No se aplicó ningún cambio.`);
+  }
+  return value;
+}
+
 export const SALA_VACIA: SalaSubasta = {
   estado: "inactiva",
   modo: "simulacro",
@@ -144,13 +152,14 @@ export async function leerEquiposDeSubasta(
   for (const equipoDoc of equiposSnap.docs) {
     if (equipoDoc.id === "agente_libre") continue;
     const data = equipoDoc.data() as any;
+    const presupuesto = saldoValido(data, data.nombre || equipoDoc.id);
     const pilotosSnap = await getDocs(collection(db, `splits/${splitId}/equipos/${equipoDoc.id}/pilotos`));
     // Un fichaje gratuito también ocupa plaza; un piloto que ya salió, no.
     const plantilla = pilotosSnap.docs.filter(pd => pd.data().participa_hasta == null).length;
     equipos.push({
       id: equipoDoc.id,
       nombre: data.nombre || equipoDoc.id,
-      presupuesto: Number(data.presupuesto ?? 0),
+      presupuesto,
       plantilla,
       completo: equipoCompleto(plantilla, plazasPorEquipo),
     });
@@ -299,7 +308,7 @@ export async function pujar(
       if (equipoCompleto(plantillaActual, sala.plazas_por_equipo ?? PLAZAS_POR_EQUIPO)) {
         return { ok: false, message: "La plantilla de tu escudería está completa." };
       }
-      const presupuesto = Number(equipoSnap.data()?.presupuesto ?? 0);
+      const presupuesto = saldoValido(equipoSnap.data(), equipoSnap.data()?.nombre || equipo.id);
       if (cifra > presupuesto) {
         return { ok: false, message: `Te faltan ${(cifra - presupuesto).toFixed(1)}M para esa puja.` };
       }
@@ -354,9 +363,12 @@ async function aplicarAdjudicacionSimulada(
   const ganadorRef = doc(db, `splits/${splitId}/equipos`, ganadorId);
   const initialOrigin = await findPilotEntry(splitId, sala.pilotoId);
   return runTransaction(db, async batch => {
-  const [ganadorSnap, room, originSnap] = await Promise.all([
+  const [ganadorSnap, room, originSnap, splitSnap] = await Promise.all([
     batch.get(ganadorRef), batch.get(salaRef(splitId)), initialOrigin ? batch.get(initialOrigin.ref) : Promise.resolve(null),
+    batch.get(doc(db, "splits", splitId)),
   ]);
+  if (!splitSnap.exists()) throw new Error("El split ya no existe.");
+  const priceRules = economyRules(splitSnap.data()?.economia_config);
   const fresh = room.data();
   if (!fresh || fresh.estado !== "en_curso" || fresh.pilotoId !== sala.pilotoId || fresh.puja_actual !== precio || fresh.puja_equipo_id !== ganadorId || fresh.modo !== "simulacro") throw new Error("La subasta ha cambiado o ya está adjudicada.");
   const origen = originSnap?.exists() ? { ref: originSnap.ref, data: originSnap.data()!, equipoId: initialOrigin!.equipoId } : null;
@@ -365,11 +377,15 @@ async function aplicarAdjudicacionSimulada(
   const destinoRef = doc(db, `splits/${splitId}/equipos/${ganadorId}/pilotos`, sala.pilotoId);
   const destinoAnteriorSnap = origen?.equipoId === ganadorId ? null : await batch.get(destinoRef);
   const seller = vendedorId ? await batch.get(doc(db, `splits/${splitId}/equipos`, vendedorId)) : null;
-  const presupuestoAnterior = Number(ganadorSnap.data().presupuesto ?? 0);
+  const presupuestoAnterior = saldoValido(ganadorSnap.data(), ganadorSnap.data().nombre || ganadorId);
   if (presupuestoAnterior < precio) throw new Error("Presupuesto insuficiente para adjudicar.");
+  if (vendedorId && !seller?.exists()) throw new Error("La escudería vendedora ya no existe.");
+  const sellerBudget = seller?.exists()
+    ? saldoValido(seller.data(), seller.data()?.nombre || vendedorId!)
+    : null;
   const delta = precio < 0 ? Math.abs(precio) : -precio;
-  const mantener = mantenerInicialDe(precio);
-  const clausula = clausulaInicialDe(precio);
+  const mantener = mantenerInicialDe(precio, priceRules);
+  const clausula = clausulaInicialDe(precio, priceRules);
   const datosPiloto = origen?.data || {
     pilotoId: sala.pilotoId,
     nombre: sala.pilotoNombre || sala.pilotoId,
@@ -396,7 +412,7 @@ async function aplicarAdjudicacionSimulada(
   });
   if (origen && origen.equipoId !== ganadorId) batch.delete(origen.ref);
   batch.update(ganadorRef, { presupuesto: presupuestoAnterior + delta });
-  if (seller?.exists() && precio > 0) batch.update(seller.ref, { presupuesto: Number(seller.data().presupuesto ?? 0) + precio });
+  if (seller?.exists() && precio > 0) batch.update(seller.ref, { presupuesto: sellerBudget! + precio });
   batch.update(salaRef(splitId), {
     estado: "adjudicada" as EstadoSubasta,
     adjudicacion: {
@@ -434,12 +450,16 @@ async function revertirAdjudicacionSimulada(splitId: string, copia: ReversionSim
   const destinoRef = doc(db, `splits/${splitId}/equipos/${copia.equipoGanadorId}/pilotos`, copia.pilotoId);
   await runTransaction(db, async batch => {
   const [room, team] = await Promise.all([batch.get(salaRef(splitId)), batch.get(ganadorRef)]);
+  if (!team.exists()) throw new Error("La escudería ganadora ya no existe; no se pudo revertir la simulación.");
+  const currentWinnerBudget = saldoValido(team.data(), team.data()?.nombre || copia.equipoGanadorId);
   const copies: ReversionSimulacion[] = room.data()?.simulacion_reversiones ?? [];
   const last = copies.at(-1);
   if (!last || last.pilotoId !== copia.pilotoId || last.equipoGanadorId !== copia.equipoGanadorId) return;
   const seller = copia.vendedorId ? await batch.get(doc(db, `splits/${splitId}/equipos`, copia.vendedorId)) : null;
-  batch.update(ganadorRef, { presupuesto: copia.presupuestoDelta == null ? copia.presupuestoAnterior : Number(team.data()?.presupuesto ?? 0) - copia.presupuestoDelta });
-  if (seller?.exists()) batch.update(seller.ref, { presupuesto: Number(seller.data().presupuesto ?? 0) - (copia.vendedorDelta ?? 0) });
+  if (copia.vendedorId && !seller?.exists()) throw new Error("La escudería vendedora ya no existe; no se pudo revertir la simulación.");
+  const currentSellerBudget = seller?.exists() ? saldoValido(seller.data(), seller.data()?.nombre || copia.vendedorId!) : null;
+  batch.update(ganadorRef, { presupuesto: copia.presupuestoDelta == null ? copia.presupuestoAnterior : currentWinnerBudget - copia.presupuestoDelta });
+  if (seller?.exists()) batch.update(seller.ref, { presupuesto: currentSellerBudget! - (copia.vendedorDelta ?? 0) });
 
   if (copia.equipoOrigenId === copia.equipoGanadorId && copia.pilotoOrigen) {
     batch.set(destinoRef, copia.pilotoOrigen as any);
@@ -626,7 +646,8 @@ export async function comenzarTemporada(
       const rules = economyRules(splitData.economia_config);
       const ajustes = teamSnaps.flatMap((team, index) => {
         if (!team.exists()) throw new Error(`No existe la escudería ${teamRefs[index].id}.`);
-        const adjusted = ajustarPresupuestoAlTope(Number(team.data().presupuesto ?? 0), rules.tope_presupuesto_subasta);
+        const balance = saldoValido(team.data(), team.data()?.nombre || teamRefs[index].id);
+        const adjusted = ajustarPresupuestoAlTope(balance, rules.tope_presupuesto_subasta);
         return adjusted.ajuste > 0 ? [{ team, ...adjusted }] : [];
       });
 

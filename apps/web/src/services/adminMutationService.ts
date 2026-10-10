@@ -7,6 +7,7 @@ import {
   precioPilotoEnCarrera,
 } from "./economyService";
 import { previsualizarCorreccionEconomica } from "../utils/presupuesto";
+import { economyRules } from "../utils/economyRules";
 
 type AuditedMutation = {
   ref: DocumentReference;
@@ -143,14 +144,17 @@ export async function applyTeamEconomyCorrection(input: TeamEconomyCorrectionInp
     ]);
     if (!teamSnap.exists()) throw new Error("La escudería no existe.");
     if (!splitSnap.exists()) throw new Error("El split no existe.");
+    const priceRules = economyRules(splitSnap.data()?.economia_config);
     if (pilotSnaps.some(snap => !snap.exists())) throw new Error("Uno de los pilotos ya no pertenece a esa plantilla.");
     if (pilotSnaps.some(snap => snap.data()?.pending_equipoId || snap.data()?.pending_precio_compra != null)) {
       throw new Error("Deshaz primero el pacto pendiente antes de corregir precios.");
     }
 
     const teamData = teamSnap.data();
-    const oldBalance = Number(teamData.presupuesto ?? 0);
-    if (!Number.isFinite(oldBalance)) throw new Error("El saldo actual no es válido.");
+    const oldBalance = teamData.presupuesto;
+    if (typeof oldBalance !== "number" || !Number.isFinite(oldBalance)) {
+      throw new Error("La escudería no tiene un saldo válido guardado. No se aplicó ningún cambio.");
+    }
     if (Math.round(oldBalance * 10) !== Math.round(input.expectedBalance * 10)) {
       throw new Error("El saldo cambió desde la vista previa. Recarga los datos y vuelve a revisar la corrección.");
     }
@@ -213,13 +217,13 @@ export async function applyTeamEconomyCorrection(input: TeamEconomyCorrectionInp
     const afterPilots = priceChanges.map((change, index) => {
       const pilot = pilotSnaps[index].data()!;
       const carreras = calendar.length;
-      const current = precioPilotoEnCarrera(change.newPrice, nextRaceIndex, carreras);
+      const current = precioPilotoEnCarrera(change.newPrice, nextRaceIndex, carreras, priceRules);
       return {
         pilotId: change.pilotId,
         pilotName: change.pilotName,
         price: change.newPrice,
-        mantenerInicial: mantenerInicialDe(change.newPrice),
-        clausulaInicial: clausulaInicialDe(change.newPrice),
+        mantenerInicial: mantenerInicialDe(change.newPrice, priceRules),
+        clausulaInicial: clausulaInicialDe(change.newPrice, priceRules),
         mantenerActual: current.mantener,
         clausulaActual: pilot.clausula_manual ?? current.clausula,
       };
@@ -230,13 +234,13 @@ export async function applyTeamEconomyCorrection(input: TeamEconomyCorrectionInp
       const change = priceChanges[index];
       const pilot = snap.data()!;
       const carreras = calendar.length;
-      const currentPrices = precioPilotoEnCarrera(change.newPrice, nextRaceIndex, carreras);
-      const previousPrices = precioPilotoEnCarrera(change.newPrice, Math.max(0, previousRaceIndex), carreras);
+      const currentPrices = precioPilotoEnCarrera(change.newPrice, nextRaceIndex, carreras, priceRules);
+      const previousPrices = precioPilotoEnCarrera(change.newPrice, Math.max(0, previousRaceIndex), carreras, priceRules);
       const revision = Number(pilot.precio_ajuste_revision ?? 0) + 1;
       const update: Record<string, unknown> = {
         precio_compra: change.newPrice,
-        mantener_inicial_split: mantenerInicialDe(change.newPrice),
-        clausula_inicial_split: clausulaInicialDe(change.newPrice),
+        mantener_inicial_split: mantenerInicialDe(change.newPrice, priceRules),
+        clausula_inicial_split: clausulaInicialDe(change.newPrice, priceRules),
         mantener_actual: currentPrices.mantener,
         clausula_actual: pilot.clausula_manual ?? currentPrices.clausula,
         precio_carrera_anterior: previousPrices.mantener,

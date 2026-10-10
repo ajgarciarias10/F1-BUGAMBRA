@@ -3,14 +3,14 @@ import {
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import { auth } from "./auth";
-import { POINTS_BY_POSITION, revertirEconomiaCarrera } from "./economyService";
+import { revertirEconomiaCarrera } from "./economyService";
+import { economyRules, pointsForRaceResult } from "../utils/economyRules";
 import { evolucionOVRSplit, mediaPuntosCarrera, OVR_DEBUT } from "../utils/splitResolver";
 import { raceRatingFailureMessage, RaceRatingRecalculationError } from "../utils/racePostProcessing";
 import { buildHistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
 import { getPilotDayCandidates, pilotDayCloseError, pilotDayOpenError, pilotDayVoteError } from "../utils/pilotDayVoting";
 import type { RaceResult, RosterEntry } from "../types";
 
-const POINTS_SCALE = POINTS_BY_POSITION;
 
 // ─── PROCESAR CARRERA ─────────────────────────────────────────────────────────
 
@@ -47,15 +47,19 @@ export async function processRace(
     equiposSnap.docs.forEach(d => { equipoRefMap[d.id] = d.ref; });
 
     const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    const splitRef = doc(db, "splits", splitId);
     const auditRef = doc(collection(db, "admin_audit"));
 
     await runTransaction(db, async (tx) => {
       // ── Lecturas ────────────────────────────────────────────────────────────
 
-      const [circuitDoc, calendarDocs] = await Promise.all([
+      const [circuitDoc, splitDoc, calendarDocs] = await Promise.all([
         tx.get(circuitoRef),
+        tx.get(splitRef),
         Promise.all(calendarRefs.map(ref => tx.get(ref))),
       ]);
+      if (!splitDoc.exists()) throw new Error("El split ya no existe.");
+      const scoringRules = economyRules(splitDoc.data()?.economia_config);
       const correctionPlan = buildHistoricalRaceCorrectionPlan(
         calendarDocs.filter(snapshot => snapshot.exists()).map(snapshot => ({
           id: snapshot.id,
@@ -109,9 +113,7 @@ export async function processRace(
       }
 
       const previousResultsByPilot = new Map(prevResults.map(result => [result.pilotoId, result]));
-      const performanceScore = (result: RaceResult) => result.puntos != null
-        ? Number(result.puntos)
-        : (result.racePos >= 1 && result.racePos <= 12 ? POINTS_SCALE[result.racePos - 1] : 0) + (result.qualyPos === 1 ? 2 : 0);
+      const performanceScore = (result: RaceResult) => pointsForRaceResult(result, scoringRules);
       const bestPerformance = [...results].sort((a, b) => {
         const validRacePositions = a.racePos >= 1 && a.racePos <= 12 && b.racePos >= 1 && b.racePos <= 12;
         return validRacePositions
@@ -126,10 +128,24 @@ export async function processRace(
         equipoId: previousResultsByPilot.get(result.pilotoId)?.equipoId ?? pilotEquipoMap[result.pilotoId],
       }));
 
-      const equipoData: Record<string, { presupuesto: number; puntos_constructores: number }> = {};
+      const equipoData: Record<string, { puntos_constructores: number }> = {};
       equiposSnap.docs.forEach((d, i) => {
-        equipoData[d.id] = equipoTxDocs[i].data() as any ?? { presupuesto: 100, puntos_constructores: 0 };
+        const teamData = equipoTxDocs[i].data();
+        if (!equipoTxDocs[i].exists() || !teamData) {
+          throw new Error(`La escudería ${d.id} ya no existe. No se guardaron los resultados.`);
+        }
+        equipoData[d.id] = {
+          puntos_constructores: Number.isFinite(Number(teamData.puntos_constructores))
+            ? Number(teamData.puntos_constructores)
+            : 0,
+        };
       });
+
+      for (const result of enrichedResults) {
+        if (!result.equipoId || !equipoData[result.equipoId]) {
+          throw new Error(`No se encontró la escudería de ${result.pilotoId}. No se guardaron los resultados.`);
+        }
+      }
 
       // Contribución anterior de esta carrera por piloto (para restarla en correcciones)
       type StatDelta = { pts: number; victorias: number; podios: number; poles: number; dnfs: number; limpias: number };
@@ -400,14 +416,15 @@ async function leerPilotosDeSplit(splitId: string): Promise<FichaPiloto[]> {
   return [...porPiloto.values()];
 }
 
-const puntosDelResultado = (res: RaceResult) => res.puntos != null
-  ? Number(res.puntos)
-  : (res.racePos >= 1 && res.racePos <= 12 ? POINTS_SCALE[res.racePos - 1] : 0) + (res.qualyPos === 1 ? 2 : 0);
+const puntosDelResultado = (res: RaceResult, scoringRules: ReturnType<typeof economyRules>) =>
+  pointsForRaceResult(res, scoringRules);
 
 // Las carreras del split con la media de puntos de cada una, que es la referencia contra la
 // que se mide a cada piloto. Origins solo guarda puntos por carrera: sin posición ni pole no
 // hay bonus que aplicar, y el delta sale del ritmo, que es lo que la hoja registra.
 async function leerBloque(splitId: string) {
+  const splitSnap = await getDoc(doc(db, "splits", splitId));
+  const scoringRules = economyRules(splitSnap.data()?.economia_config);
   const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
   return circSnap.docs
     .map(d => ({ id: d.id, ...(d.data() as any) }))
@@ -421,7 +438,8 @@ async function leerBloque(splitId: string) {
       return {
         id: circuito.id,
         nombre: circuito.nombre || circuito.id,
-        media: mediaPuntosCarrera(resultados.map(res => ({ puntos: puntosDelResultado(res) }))),
+        scoringRules,
+        media: mediaPuntosCarrera(resultados.map(res => ({ puntos: puntosDelResultado(res, scoringRules) }))),
         porPiloto: new Map(resultados.map(res => [res.pilotoId, res])),
         // Piloto del día ya cerrado en este circuito: su bonus se aplica en el SIGUIENTE.
         pilotoDiaGanador: circuito.piloto_dia_cerrado ? (circuito.piloto_dia_ganador ?? null) : null,
@@ -443,7 +461,7 @@ function evolucionDePiloto(pilotId: string, base: number, bloque: Awaited<Return
       media: circuito.media,
       // Sin resultado el piloto no corrió esa carrera: el rating se arrastra intacto.
       resultado: res
-        ? { puntos: puntosDelResultado(res), racePos: res.racePos, qualyPos: res.qualyPos, dnf: res.isDnf === true }
+        ? { puntos: puntosDelResultado(res, circuito.scoringRules), racePos: res.racePos, qualyPos: res.qualyPos, dnf: res.isDnf === true }
         : null,
       bonusOVR: anterior?.pilotoDiaGanador === pilotId ? BONUS_PILOTO_DEL_DIA : 0,
     };
@@ -502,6 +520,9 @@ export async function recalcSplitPoints(
   splitId: string
 ): Promise<{ ok: number; notFound: string[]; message: string }> {
   try {
+    const splitSnap = await getDoc(doc(db, "splits", splitId));
+    if (!splitSnap.exists()) throw new Error("El split ya no existe.");
+    const scoringRules = economyRules(splitSnap.data()?.economia_config);
     const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
     const completed = circSnap.docs
       .map(d => ({ id: d.id, ...d.data() as any }))
@@ -546,9 +567,7 @@ export async function recalcSplitPoints(
 
     for (const circ of completed) {
       for (const res of circ.resultados as RaceResult[]) {
-        const pts = res.puntos != null
-          ? Number(res.puntos)
-          : (res.racePos >= 1 && res.racePos <= 12 ? POINTS_SCALE[res.racePos - 1] : 0) + (res.qualyPos === 1 ? 2 : 0);
+        const pts = pointsForRaceResult(res, scoringRules);
         const teamId = res.equipoId ?? pilotTeamMap[res.pilotoId];
         if (teamId) teamPts[teamId] = (teamPts[teamId] ?? 0) + pts;
 

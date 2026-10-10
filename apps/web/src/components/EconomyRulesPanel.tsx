@@ -5,6 +5,11 @@ import { runAuditedAdminMutation } from "../services/adminMutationService";
 import { DEFAULT_ECONOMY_RULES, economyRules } from "../utils/economyRules";
 
 const labels: Record<string, string> = {
+  puntos_por_posicion: "Puntos por posición (1.º en adelante)", puntos_pole: "Puntos deportivos por pole",
+  mantener_factor_positivo: "Mantener: multiplicador de precio positivo",
+  mantener_divisor_negativo: "Mantener: divisor de precio negativo",
+  clausula_factor_positivo: "Cláusula: multiplicador de precio positivo",
+  clausula_divisor_negativo: "Cláusula: divisor de precio negativo",
   pole: "Pole", vuelta_rapida: "Vuelta rápida", sin_sancionados: "Equipo sin sanciones",
   participacion: "Participación del equipo", puntos_factor: "Millones por punto", solo: "Piloto sin rival",
   rivalidad_clasificacion: "Rivalidad clasificación (por posición)", rivalidad_carrera: "Rivalidad carrera (por posición)",
@@ -33,7 +38,7 @@ export function EconomyRulesPanel({ splitId }: { splitId: string }) {
   }, [splitId]);
   return <details className="border border-white/10 p-4 my-4">
     <summary className="cursor-pointer font-bold">Reglas económicas del split</summary>
-    <p className="text-xs text-white/60 my-3">Importes en millones. Se aplican a las próximas operaciones. Para corregir una carrera ya liquidada, revierte su economía y vuelve a procesarla. Separa los premios por posición con punto y coma.</p>
+    <p className="text-xs text-white/60 my-3">Las reglas de precios y puntos se aplican a las próximas operaciones o recálculos. Los datos de precio ya guardados en el historial se conservan. Para corregir una carrera ya liquidada, revierte su economía y vuelve a procesarla. Separa las listas por posición con punto y coma.</p>
     <div className="grid sm:grid-cols-2 gap-3">{Object.entries(values).map(([key, value]) => <label key={key} className="text-xs">{labels[key] || key}
       <input className="block bg-black border border-white/20 p-2 w-full" value={value} onChange={e => setValues(v => ({ ...v, [key]: e.target.value }))} />
     </label>)}</div>

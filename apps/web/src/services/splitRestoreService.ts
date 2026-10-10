@@ -68,6 +68,9 @@ export function planRestauracion(sourceId: string, targetId: string, entries: En
     if (!teamId) throw new Error(`El piloto ${id} no tiene escudería de origen.`);
     if (data.pending_equipoId) {
       if (data.pending_splitId && data.pending_splitId !== targetId) throw new Error(`El piloto ${id} tiene un pacto con otro split.`);
+      if (typeof data.pending_precio_compra !== "number" || !Number.isFinite(data.pending_precio_compra)) {
+        throw new Error(`El pacto pendiente del piloto ${id} no tiene un precio válido; corrígelo antes de restaurar.`);
+      }
       refunds[data.pending_equipoId] = (refunds[data.pending_equipoId] ?? 0) + money(data.pending_precio_compra ?? 0);
       if (data.pending_vendedor_id) refunds[data.pending_vendedor_id] = (refunds[data.pending_vendedor_id] ?? 0) - money(data.pending_vendedor_delta ?? 0);
       changes.set(entry.path, { ...data, congelado: false, congelado_en: null, pending_equipoId: null,
@@ -84,8 +87,12 @@ export function planRestauracion(sourceId: string, targetId: string, entries: En
     const id = entry.path.split("/").at(-1)!;
     const data = entry.data;
     const historical = data.economia_historica?.presupuesto_cierre;
-    const saldo = money(historical ?? (money(data.presupuesto ?? 0) + (refunds[id] ?? 0)));
-    if (refunds[id]) changes.set(entry.path, { ...data, presupuesto: money(money(data.presupuesto ?? 0) + refunds[id]) });
+    const currentBalance = typeof data.presupuesto === "number" && Number.isFinite(data.presupuesto) ? data.presupuesto : null;
+    const historicalBalance = typeof historical === "number" && Number.isFinite(historical) ? historical : null;
+    if (refunds[id] && currentBalance == null) throw new Error(`No se puede revertir el pacto de ${id}: falta su saldo actual.`);
+    if (historicalBalance == null && currentBalance == null) throw new Error(`No se puede restaurar ${id}: no hay saldo actual ni saldo de cierre conciliado.`);
+    const saldo = money(historicalBalance ?? (currentBalance! + (refunds[id] ?? 0)));
+    if (refunds[id]) changes.set(entry.path, { ...data, presupuesto: money(currentBalance! + refunds[id]) });
     // Conservar identidad/escudo del origen, sin arrastrar cuentas y estadísticas de otra temporada.
     const { economia_historica, puntos_carreras, ...identity } = data;
     changes.set(`splits/${targetId}/equipos/${id}`, { ...identity, presupuesto: saldo, presupuesto_inicial: saldo,

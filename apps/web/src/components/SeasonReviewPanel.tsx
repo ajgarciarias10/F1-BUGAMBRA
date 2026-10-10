@@ -5,7 +5,7 @@ import { Check, FileSpreadsheet, Loader2, MousePointer2, Save, ShieldCheck, X } 
 import { db } from "../services/firebase";
 import { auth } from "../services/auth";
 import { recalcSplitPoints } from "../services/raceProcessor";
-import { POINTS_BY_POSITION, calcularMillonesRivalidadClasificacion, calcularMillonesRivalidadCarrera } from "../services/economyService";
+import { historicalResultPositions, requireHistoricalPriceDerivedValues, requireOpeningBudget, rivalryPayoutFromPositions } from "../utils/seasonReviewImport";
 
 type SheetCell = { formattedValue?: string; effectiveValue?: Record<string, unknown>; effectiveFormat?: { textFormat?: { bold?: boolean; foregroundColor?: { red?: number; green?: number; blue?: number }; foregroundColorStyle?: { rgbColor?: { red?: number; green?: number; blue?: number } } } } };
 type Sheet = { properties: { sheetId: number; title: string; gridProperties?: { rowCount?: number; columnCount?: number } }; data?: Array<{ rowData?: Array<{ values?: SheetCell[] }> }> };
@@ -20,6 +20,9 @@ const FIELD_OPTIONS = [
   ["equipos", "Equipos de temporada"],
   ["equipoPiloto", "Equipo de cada piloto"],
   ["puntuacionPilotoCircuito", "Puntuación piloto por circuito"],
+  ["posicionQualyPilotoCircuito", "Posición qualy por piloto y circuito (opcional)"],
+  ["posicionCarreraPilotoCircuito", "Posición de carrera por piloto y circuito (opcional)"],
+  ["dnfPilotoCircuito", "DNF explícito por piloto y circuito (opcional)"],
   ["puntuacionTotalPiloto", "Puntuación total de piloto"],
   ["puntuacionEquipoCircuito", "Puntuación equipo por circuito"],
   ["puntuacionTotalEquipo", "Puntuación total de equipo"],
@@ -28,6 +31,7 @@ const FIELD_OPTIONS = [
   ["sinSancionesTemporada", "Sin sanciones acumuladas de la temporada"],
   ["participacionesTemporada", "Participaciones acumuladas de la temporada"],
   ["fichajesSplit", "Ajuste de fichajes (opcional)"],
+  ["presupuestoInicialEquipo", "Presupuesto inicial por equipo (para el primer split)"],
   ["rivalidadesSplit", "Ajuste de rivalidades (opcional)"],
   ["premiosSplit", "Ajuste de premios (opcional)"],
   ["precioCompraPiloto", "Precio de compra (valores en orden economía)"],
@@ -38,7 +42,7 @@ const FIELD_OPTIONS = [
 
 const ECONOMY_FIELD_KEYS = [
   "polesTemporada", "vueltasRapidasTemporada", "sinSancionesTemporada", "participacionesTemporada",
-  "fichajesSplit", "rivalidadesSplit", "premiosSplit", "precioCompraPiloto",
+  "fichajesSplit", "presupuestoInicialEquipo", "rivalidadesSplit", "premiosSplit", "precioCompraPiloto",
   "mantenerPiloto", "clausulaPiloto", "tipoCompraPiloto",
   "pilotosEconomia",
 ];
@@ -369,6 +373,9 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       const pilotTeams = readEntries("equipoPiloto").flat().map(value => normalizeTeamName(clean(value))).filter(Boolean);
        const scoreCellMatrix = readCellMatrix("puntuacionPilotoCircuito");
        const scoreMatrix = scoreCellMatrix.map(row => row.map(cell => cell.value));
+       const qualyPositionMatrix = mappings.posicionQualyPilotoCircuito?.length ? readMatrix("posicionQualyPilotoCircuito") : [];
+       const racePositionMatrix = mappings.posicionCarreraPilotoCircuito?.length ? readMatrix("posicionCarreraPilotoCircuito") : [];
+       const dnfMatrix = mappings.dnfPilotoCircuito?.length ? readMatrix("dnfPilotoCircuito") : [];
        if (scoreMatrix.length !== pilotNames.length) throw new Error(`El rango Pilotos tiene ${pilotNames.length} filas, pero la matriz de puntuaciones tiene ${scoreMatrix.length}. Para Split 1 selecciona los 10 nombres de pilotos, no una sola celda.`);
        if (economyPilotNames.length !== pilotNames.length) throw new Error(`Pilotos para economía tiene ${economyPilotNames.length} filas y la lista de puntuación tiene ${pilotNames.length}. Selecciona los mismos pilotos en el orden del bloque económico.`);
        const scoringPilots = new Set(pilotNames.map(pilotNameKey));
@@ -376,6 +383,9 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
        if (missingEconomyPilots.length) throw new Error(`Estos pilotos de economía no aparecen en la lista de puntuación: ${missingEconomyPilots.join(", ")}.`);
       if (pilotTeams.length !== pilotNames.length) throw new Error(`Equipo de cada piloto: hay ${pilotTeams.length} valores para ${pilotNames.length} pilotos.`);
       if (scoreMatrix.some(row => row.length !== circuitNames.length)) throw new Error(`La matriz tiene ${scoreMatrix.length} filas, pero no todas tienen ${circuitNames.length} columnas.`);
+       for (const [label, matrix] of [["Posiciones de qualy", qualyPositionMatrix], ["Posiciones de carrera", racePositionMatrix], ["DNF explícitos", dnfMatrix]] as const) {
+         if (matrix.length && (matrix.length !== pilotNames.length || matrix.some(row => row.length !== circuitNames.length))) throw new Error(`${label}: el rango debe tener ${pilotNames.length} filas y ${circuitNames.length} columnas.`);
+       }
        const number = (value: string, label: string) => { const parsed = Number(value.replace(/\s*M\s*$/i, "").replace(",", ".").trim()); if (!Number.isFinite(parsed)) throw new Error(`${label} no es un número válido.`); return parsed; };
        const pilotTotals = readEntries("puntuacionTotalPiloto").flat().filter(Boolean).map((value, index) => number(value, `Total de ${pilotNames[index]}`));
        const teamTotals = readEntries("puntuacionTotalEquipo").flat().filter(Boolean).map((value, index) => number(value, `Total de ${teamNames[index]}`));
@@ -459,35 +469,21 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
       const circuitIds = circuitNames.map(name => id(name, "circuito"));
        const teamIds = teamNames.map(name => teamIdByName.get(clean(name).toLowerCase())!);
        const resolvedTeamIds = pilotTeams.map((team, index) => teamIdByName.get(clean(team).toLowerCase()) || (() => { throw new Error(`No se encontró el equipo "${team}" del piloto ${pilotNames[index]}.`); })());
-        const deriveRaceResults = (racePoints: number[], explicitPoleIndex: number) => {
-          const used = new Set<number>();
-          const assignments = racePoints.map((points, pilotIndex) => {
-            if (points === 0) return { pilotIndex, racePos: 99, pole: false };
-            const basePoints = points - (pilotIndex === explicitPoleIndex ? 2 : 0);
-            // Poleman que abandona: se queda con los 2 puntos de la pole y nada de carrera.
-            if (basePoints === 0) return { pilotIndex, racePos: 99, pole: true };
-            const racePos = POINTS_BY_POSITION.indexOf(basePoints) + 1;
-            if (racePos === 0 || used.has(racePos)) throw new Error(`No se pueden deducir posiciones únicas para la carrera con puntos: ${racePoints.join(", ")}.`);
-            used.add(racePos);
-            return { pilotIndex, racePos, pole: pilotIndex === explicitPoleIndex };
-          });
-          return assignments;
-        };
         const races = circuitNames.map((name, circuitIndex) => {
           const rawValues = pilotNames.map((_, pilotIndex) => scoreMatrix[pilotIndex][circuitIndex]);
           const poleIndexes = pilotNames.flatMap((_, pilotIndex) => scoreCellMatrix[pilotIndex][circuitIndex]?.isBold ? [pilotIndex] : []);
           const fastestIndexes = pilotNames.flatMap((_, pilotIndex) => scoreCellMatrix[pilotIndex][circuitIndex]?.isFastestLap ? [pilotIndex] : []);
           if (poleIndexes.length !== 1 || fastestIndexes.length !== 1) throw new Error(`${name}: el formato del Excel no identifica exactamente una pole y una vuelta rápida.`);
           const racePoints = rawValues.map((value, pilotIndex) => value === "" ? 0 : number(value, `${pilotNames[pilotIndex]} en ${name}`));
-          const assignments = deriveRaceResults(racePoints, poleIndexes[0]);
           return {
             id: circuitIds[circuitIndex], name,
             resultados: pilotNames.flatMap((pilotName, pilotIndex) => rawValues[pilotIndex] === "" ? [] : [{
               pilotoId: pilotIds[pilotIndex], pilotoNombre: pilotName, equipoId: resolvedTeamIds[pilotIndex],
-              puntos: racePoints[pilotIndex], racePos: assignments[pilotIndex].racePos,
-              qualyPos: assignments[pilotIndex].pole ? 1 : 99,
+              puntos: racePoints[pilotIndex],
+              racePos: racePositionMatrix.length && racePositionMatrix[pilotIndex][circuitIndex] ? number(racePositionMatrix[pilotIndex][circuitIndex], `Posición de ${pilotNames[pilotIndex]} en ${name}`) : 99,
+              qualyPos: qualyPositionMatrix.length && qualyPositionMatrix[pilotIndex][circuitIndex] ? number(qualyPositionMatrix[pilotIndex][circuitIndex], `Qualy de ${pilotNames[pilotIndex]} en ${name}`) : historicalResultPositions(poleIndexes[0] === pilotIndex).qualyPos,
               fastestLap: fastestIndexes[0] === pilotIndex,
-              isDnf: false,
+              isDnf: dnfMatrix.length ? ["1", "true", "sí", "si", "dnf"].includes(dnfMatrix[pilotIndex][circuitIndex].trim().toLowerCase()) : false,
               isDnfOwnError: false,
             }]),
           };
@@ -495,6 +491,11 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         const existingSplit = await getDoc(doc(db, "splits", seasonId));
         const rivalryGroups: any[] = existingSplit.data()?.rivalries?.groups || [];
         if (!rivalryGroups.length) throw new Error("Configura y guarda las rivalidades históricas antes de importar la economía del split.");
+        const storedRules = existingSplit.data()?.economia_config;
+        const requiredRuleKeys = ["puntos_factor", "pole", "vuelta_rapida", "sin_sancionados", "participacion", "solo", "rivalidad_clasificacion", "rivalidad_carrera", "rivalidad_duo_clasificacion", "rivalidad_duo_carrera"];
+        const missingRules = requiredRuleKeys.filter(key => storedRules?.[key] === undefined);
+        if (missingRules.length) throw new Error(`Configura primero las reglas económicas del split; faltan: ${missingRules.join(", ")}.`);
+        const rules = storedRules;
         const economyByTeam = new Map(teamIds.map((teamId, index) => [teamId, {
           points: teamTotals[index] || 0, poles: 0, fastestLaps: 0, cleanRaces: 0, participations: 0, rivalryIncome: 0,
         }]));
@@ -515,11 +516,15 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
                 : { pilotoId: member.id, teamId: member.equipoId, qualyPos: 99, racePos: 99 };
             }).filter((member: any) => economyByTeam.has(member.teamId));
             if (members.length < 2) return;
+            const qualifyingPrizes = members.length === 2 ? rules.rivalidad_duo_clasificacion : rules.rivalidad_clasificacion;
+            const racePrizes = members.length === 2 ? rules.rivalidad_duo_carrera : rules.rivalidad_carrera;
+            const payout = rivalryPayoutFromPositions(members, qualifyingPrizes, racePrizes);
+            if (payout == null) return;
             [...members].sort((a: any, b: any) => a.qualyPos - b.qualyPos).forEach((member: any, index) => {
-              economyByTeam.get(member.teamId)!.rivalryIncome += calcularMillonesRivalidadClasificacion(index + 1, members.length);
+              economyByTeam.get(member.teamId)!.rivalryIncome += qualifyingPrizes[index] ?? 0;
             });
             [...members].sort((a: any, b: any) => a.racePos - b.racePos).forEach((member: any, index) => {
-              economyByTeam.get(member.teamId)!.rivalryIncome += calcularMillonesRivalidadCarrera(index + 1, members.length);
+              economyByTeam.get(member.teamId)!.rivalryIncome += racePrizes[index] ?? 0;
             });
           });
         });
@@ -540,6 +545,8 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
 
         // El presupuesto es un saldo único de temporada: este split abre donde cerró el anterior.
         const openingBudgets = new Map<string, number>();
+        const mappedOpeningBudgets = mappings.presupuestoInicialEquipo?.length ? readTeamEconomicValues("presupuestoInicialEquipo") : [];
+        mappedOpeningBudgets.forEach((budget, index) => openingBudgets.set(teamIds[index], budget));
         const previousTeamSplit = earlierTeamSplits.at(-1);
         if (previousTeamSplit) {
           const previousTeams = await getDocs(collection(db, `splits/${previousTeamSplit.id}/equipos`));
@@ -635,15 +642,15 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
         teamNames.forEach((name, index) => {
           const teamId = teamIds[index];
           const economy = economyByTeam.get(teamId)!;
-          const income = economy.points * 0.1 + economy.poles * 2 + economy.fastestLaps + economy.cleanRaces * 3 + economy.participations * 4 + economy.rivalryIncome;
-          const openingBudget = openingBudgets.get(teamId) ?? 100;
+          const income = economy.points * rules.puntos_factor + economy.poles * rules.pole + economy.fastestLaps * rules.vuelta_rapida + economy.cleanRaces * rules.sin_sancionados + economy.participations * rules.participacion + economy.rivalryIncome;
+          const openingBudget = requireOpeningBudget(name, openingBudgets.get(teamId), undefined);
           const budget = Math.round((openingBudget + income - signingAdjustments[index] - rivalryAdjustments[index] - prizeAdjustments[index]) * 10) / 10;
-          const economia_historica = { conciliado: true, puntos_constructores: economy.points, ingresos_puntos: economy.points * 0.1, poles: economy.poles, ingresos_poles: economy.poles * 2, vueltas_rapidas: economy.fastestLaps, ingresos_vueltas_rapidas: economy.fastestLaps, carreras_limpias: economy.cleanRaces, ingresos_carreras_limpias: economy.cleanRaces * 3, participaciones: economy.participations, ingresos_participacion: economy.participations * 4, ingresos_rivalidades_carreras: economy.rivalryIncome, ajuste_fichajes: signingAdjustments[index], ajuste_rivalidades: rivalryAdjustments[index], ajuste_premios: prizeAdjustments[index], presupuesto_cierre: budget };
+          const economia_historica = { conciliado: true, puntos_constructores: economy.points, ingresos_puntos: economy.points * rules.puntos_factor, poles: economy.poles, ingresos_poles: economy.poles * rules.pole, vueltas_rapidas: economy.fastestLaps, ingresos_vueltas_rapidas: economy.fastestLaps * rules.vuelta_rapida, carreras_limpias: economy.cleanRaces, ingresos_carreras_limpias: economy.cleanRaces * rules.sin_sancionados, participaciones: economy.participations, ingresos_participacion: economy.participations * rules.participacion, ingresos_rivalidades_carreras: economy.rivalryIncome, ajuste_fichajes: signingAdjustments[index], ajuste_rivalidades: rivalryAdjustments[index], ajuste_premios: prizeAdjustments[index], presupuesto_cierre: budget };
           batch.set(doc(db, `splits/${seasonId}/equipos`, teamId), { nombre: name, puntos_constructores: economy.points, presupuesto: budget, presupuesto_inicial: openingBudget, ...(escudosPorEquipo.has(teamId) ? { logo_url: escudosPorEquipo.get(teamId) } : {}), puntos_carreras: teamScoreMatrix[index]?.slice(0, circuitNames.length) || [], economia_historica });
           const ledger = [
-            ["puntos", economy.points * 0.1, "ingreso_puntos"], ["poles", economy.poles * 2, "pole"],
-            ["vueltas_rapidas", economy.fastestLaps, "vuelta_rapida"], ["carreras_limpias", economy.cleanRaces * 3, "sin_sancionados"],
-            ["participaciones", economy.participations * 4, "premio_carrera"], ["rivalidades_carreras", economy.rivalryIncome, "rivalidad"],
+            ["puntos", economy.points * rules.puntos_factor, "ingreso_puntos"], ["poles", economy.poles * rules.pole, "pole"],
+            ["vueltas_rapidas", economy.fastestLaps * rules.vuelta_rapida, "vuelta_rapida"], ["carreras_limpias", economy.cleanRaces * rules.sin_sancionados, "sin_sancionados"],
+            ["participaciones", economy.participations * rules.participacion, "premio_carrera"], ["rivalidades_carreras", economy.rivalryIncome, "rivalidad"],
             ["ajuste_fichajes", -signingAdjustments[index], signingAdjustments[index] < 0 ? "piloto_negativo" : "fichaje"],
             ["ajuste_rivalidades", -rivalryAdjustments[index], "rivalidad"], ["ajuste_premios", -prizeAdjustments[index], "premio_carrera"],
           ] as const;
@@ -669,12 +676,12 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
             return mantener == null && clausula == null ? [] : [[circuitId, { carrera: circuitNames[circuitIndex], mantener, clausula, congelado: false }]];
           }));
           // Sin rangos de mantener/cláusula se derivan del precio: si es negativo divide en vez de multiplicar.
-          const derivedKeep = Math.round((purchasePrice < 0 ? purchasePrice / 3 : purchasePrice * 3) * 10) / 10;
-          const derivedClause = Math.round((purchasePrice < 0 ? purchasePrice / 2 : purchasePrice * 2) * 10) / 10;
-          const initialKeep = keep ?? derivedKeep;
-          const finalKeep = currentKeep ?? derivedKeep;
-          const initialClause = clause ?? derivedClause;
-          const finalClause = currentClause ?? derivedClause;
+          const initialValues = requireHistoricalPriceDerivedValues(name, keep, clause);
+          const finalValues = requireHistoricalPriceDerivedValues(name, currentKeep, currentClause);
+          const initialKeep = initialValues.keep;
+          const finalKeep = finalValues.keep;
+          const initialClause = initialValues.clause;
+          const finalClause = finalValues.clause;
           const pilotData = { pilotoId: pilotIds[pilotIndex], nombre: name, equipoId: resolvedTeamIds[pilotIndex], puntos_piloto: pilotTotals[pilotIndex] || 0, puntos_equipos: 0, precio_compra: purchasePrice, mantener_actual: finalKeep, mantener_inicial_split: initialKeep, precio_carrera_anterior: finalKeep, clausula_actual: finalClause, clausula_inicial_split: initialClause, ...(Object.keys(historial_precios).length ? { historial_precios } : {}), ...(signingTypes.has(key) ? { tipo_fichaje: signingTypes.get(key) } : {}) };
           batch.set(doc(db, "pilotos", pilotIds[pilotIndex]), { nombre: name }, { merge: true });
           batch.set(doc(db, `splits/${seasonId}/roster`, pilotIds[pilotIndex]), pilotData);

@@ -4,12 +4,13 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { TipoTransaccion } from "../types";
-import { economyRules, ordenarPorClasificacion } from "../utils/economyRules";
+import { DEFAULT_ECONOMY_RULES, economyRules, ordenarPorClasificacion, pointsForRaceResult } from "../utils/economyRules";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
 
 // ─── CONSTANTES ECONÓMICAS ────────────────────────────────────────────────────
 
-export const POINTS_BY_POSITION = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+// Backwards-compatible default for display-only consumers. Settlement paths read split config.
+export const POINTS_BY_POSITION = DEFAULT_ECONOMY_RULES.puntos_por_posicion;
 
 const MCLASIF  = [1, 0.5, 0];
 const MCARRERA = [2, 1, 0];
@@ -43,8 +44,8 @@ export function calcularMillonesRivalidadCarrera(pos: number, total: number): nu
   return (total === 2 ? MCARRERA_DUO : MCARRERA)[pos - 1] ?? 0;
 }
 
-export function calcularPuntosPosicion(pos: number): number {
-  return POINTS_BY_POSITION[pos - 1] ?? 0;
+export function calcularPuntosPosicion(pos: number, config?: Parameters<typeof economyRules>[0]): number {
+  return economyRules(config).puntos_por_posicion[pos - 1] ?? 0;
 }
 
 function r1(n: number): number {
@@ -65,14 +66,14 @@ function r1(n: number): number {
 // Las dos series se interpolan por separado: derivar el mantener de la cláusula ya
 // redondeada mete saltos no monótonos en precios pequeños.
 
-export const CARRERAS_POR_BLOQUE = 6;
-
-export function mantenerInicialDe(precioCompra: number): number {
-  return r1(precioCompra < 0 ? precioCompra / 3 : precioCompra * 3);
+export function mantenerInicialDe(precioCompra: number, config?: Parameters<typeof economyRules>[0]): number {
+  const rules = economyRules(config);
+  return r1(precioCompra < 0 ? precioCompra / rules.mantener_divisor_negativo : precioCompra * rules.mantener_factor_positivo);
 }
 
-export function clausulaInicialDe(precioCompra: number): number {
-  return r1(precioCompra < 0 ? precioCompra / 2 : precioCompra * 2);
+export function clausulaInicialDe(precioCompra: number, config?: Parameters<typeof economyRules>[0]): number {
+  const rules = economyRules(config);
+  return r1(precioCompra < 0 ? precioCompra / rules.clausula_divisor_negativo : precioCompra * rules.clausula_factor_positivo);
 }
 
 // Precio vigente en la carrera `indiceCarrera` (0 = primera del bloque). Es función pura
@@ -80,13 +81,17 @@ export function clausulaInicialDe(precioCompra: number): number {
 export function precioPilotoEnCarrera(
   precioCompra: number,
   indiceCarrera: number,
-  carrerasDelBloque: number = CARRERAS_POR_BLOQUE,
+  carrerasDelBloque: number,
+  config?: Parameters<typeof economyRules>[0],
 ): { mantener: number; clausula: number } {
-  const clausulaInicial = clausulaInicialDe(precioCompra);
-  const mantenerInicial = mantenerInicialDe(precioCompra);
+  if (!Number.isInteger(carrerasDelBloque) || carrerasDelBloque < 1) {
+    throw new Error("El calendario debe tener al menos una carrera para calcular el precio.");
+  }
+  const clausulaInicial = clausulaInicialDe(precioCompra, config);
+  const mantenerInicial = mantenerInicialDe(precioCompra, config);
   if (clausulaInicial === 0) return { mantener: mantenerInicial, clausula: clausulaInicial };
 
-  const tramos = Math.max(1, (carrerasDelBloque || CARRERAS_POR_BLOQUE) - 1);
+  const tramos = Math.max(1, carrerasDelBloque - 1);
   const indice = Math.max(0, Math.min(indiceCarrera, tramos));
   // La cláusula termina en el precio de compra; el mantener, en su proporción con ella.
   const mantenerFinal = precioCompra * (mantenerInicial / clausulaInicial);
@@ -100,10 +105,14 @@ export function precioPilotoEnCarrera(
 // Serie completa del bloque, para los cargadores que escriben un split ya disputado.
 export function curvaPreciosBloque(
   precioCompra: number,
-  carrerasDelBloque: number = CARRERAS_POR_BLOQUE,
+  carrerasDelBloque: number,
+  config?: Parameters<typeof economyRules>[0],
 ): Array<{ mantener: number; clausula: number }> {
+  if (!Number.isInteger(carrerasDelBloque) || carrerasDelBloque < 1) {
+    throw new Error("El calendario debe tener al menos una carrera para generar la curva de precios.");
+  }
   return Array.from({ length: carrerasDelBloque }, (_, indice) =>
-    precioPilotoEnCarrera(precioCompra, indice, carrerasDelBloque));
+    precioPilotoEnCarrera(precioCompra, indice, carrerasDelBloque, config));
 }
 
 // ─── LOG DE TRANSACCIÓN ───────────────────────────────────────────────────────
@@ -169,8 +178,6 @@ export async function ficharPiloto(params: {
     const delta     = esPrecioNegativo ? Math.abs(precio) : -precio;
     const precioAbs = Math.abs(precio);
     // Un precio negativo divide en vez de multiplicar, conservando el signo (Excel T2/T3).
-    const nuevaMantener = mantenerInicialDe(precio);
-    const nuevaClausula = clausulaInicialDe(precio);
 
     if (!Number.isFinite(precio) || teamId === "agente_libre") throw new Error("Equipo o importe no válido.");
     const teamRef = doc(db, `splits/${splitId}/equipos`, teamId);
@@ -180,6 +187,7 @@ export async function ficharPiloto(params: {
     const rosterBefore = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
     const activeRosterCount = rosterBefore.docs.filter(pilot => pilot.data().participa_hasta == null).length;
     const operationRef = doc(collection(db, `splits/${splitId}/transfers`));
+    let appliedValuation: { mantener: number; clausula: number } | null = null;
     await runTransaction(db, async transaction => {
     const [team, locations, split, room] = await Promise.all([
       transaction.get(teamRef), Promise.all(locationRefs.map(ref => transaction.get(ref))),
@@ -187,7 +195,14 @@ export async function ficharPiloto(params: {
       params.adjudicacion ? transaction.get(doc(db, `splits/${splitId}/subasta`, "sala")) : Promise.resolve(null),
     ]);
     if (!team.exists()) throw new Error("La escudería no existe.");
-    if (precio > 0 && Number(team.data().presupuesto ?? 0) < precio) throw new Error("Presupuesto insuficiente.");
+    if (!split.exists()) throw new Error("El split no existe.");
+    const priceRules = economyRules(split.data()?.economia_config);
+    const nuevaMantener = mantenerInicialDe(precio, priceRules);
+    const nuevaClausula = clausulaInicialDe(precio, priceRules);
+    appliedValuation = { mantener: nuevaMantener, clausula: nuevaClausula };
+    const teamBalance = team.data().presupuesto;
+    if (typeof teamBalance !== "number" || !Number.isFinite(teamBalance)) throw new Error("El saldo de la escudería no está registrado; concílialo antes de fichar.");
+    if (precio > 0 && teamBalance < precio) throw new Error("Presupuesto insuficiente.");
     if (room) {
       const sala = room.data();
       if (!sala || sala.estado !== "en_curso" || sala.pilotoId !== pilotoId || sala.puja_equipo_id !== teamId || sala.puja_actual !== precio || sala.modo !== "real") throw new Error("La subasta ha cambiado o ya fue adjudicada.");
@@ -278,7 +293,7 @@ export async function ficharPiloto(params: {
       splitId,
       descripcion: esPrecioNegativo
         ? `Piloto precio negativo — ingreso al fichar: +${precioAbs}M`
-        : `${tipo.charAt(0).toUpperCase() + tipo.slice(1)}: −${precioAbs}M → mantener ${nuevaMantener}M / cláusula ${nuevaClausula}M`
+        : `${tipo.charAt(0).toUpperCase() + tipo.slice(1)}: −${precioAbs}M → mantener ${appliedValuation.mantener}M / cláusula ${appliedValuation.clausula}M`
           + (nombreVendedor ? ` · pagados a ${nombreVendedor}` : ""),
     }));
     transaction.set(operationRef, {
@@ -294,9 +309,11 @@ export async function ficharPiloto(params: {
     });
     });
 
+    if (!appliedValuation) throw new Error("No se pudo calcular la valoración del fichaje.");
+
     return {
       success: true,
-      message: `${esPrecioNegativo ? "Ingreso" : "Gasto"}: ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}M | Valoración: ${nuevaMantener}M / ${nuevaClausula}M`
+      message: `${esPrecioNegativo ? "Ingreso" : "Gasto"}: ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}M | Valoración: ${appliedValuation.mantener}M / ${appliedValuation.clausula}M`
         ,
     };
   } catch (error: any) {
@@ -336,29 +353,35 @@ export async function ajustarPrecioCompraPiloto(params: {
       const fb = b.data.fecha?.toMillis?.() ?? 0;
       return fa !== fb ? fa - fb : a.id.localeCompare(b.id);
     });
+    if (!calendar.length) return { ok: false, message: "No se puede corregir el precio: este split no tiene carreras configuradas." };
     const firstUnprocessed = calendar.findIndex(circuit => !circuit.data.economia_procesada);
     if (firstUnprocessed >= 0 && calendar.slice(firstUnprocessed + 1).some(circuit => circuit.data.economia_procesada)) {
       return { ok: false, message: "Hay carreras posteriores procesadas. Revierte primero la economía desde la última carrera." };
     }
     const nextRaceIndex = firstUnprocessed < 0 ? Math.max(0, calendar.length - 1) : firstUnprocessed;
     const previousRaceIndex = firstUnprocessed < 0 ? nextRaceIndex : nextRaceIndex - 1;
-    const currentPrices = precioPilotoEnCarrera(newPrice, nextRaceIndex, calendar.length || CARRERAS_POR_BLOQUE);
-    const previousPrices = precioPilotoEnCarrera(newPrice, Math.max(0, previousRaceIndex), calendar.length || CARRERAS_POR_BLOQUE);
 
     const pilotRef = doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotId);
     const teamRef = doc(db, `splits/${splitId}/equipos`, teamId);
     const outcome = await runTransaction(db, async transaction => {
-      const [pilotSnap, teamSnap] = await Promise.all([transaction.get(pilotRef), transaction.get(teamRef)]);
+      const [pilotSnap, teamSnap, splitSnap] = await Promise.all([
+        transaction.get(pilotRef), transaction.get(teamRef), transaction.get(doc(db, "splits", splitId)),
+      ]);
       if (!pilotSnap.exists()) throw new Error("La ficha ya no existe en esa escudería.");
       if (!teamSnap.exists()) throw new Error("La escudería ya no existe.");
+      if (!splitSnap.exists()) throw new Error("El split ya no existe.");
+      const priceRules = economyRules(splitSnap.data()?.economia_config);
+      const currentPrices = precioPilotoEnCarrera(newPrice, nextRaceIndex, calendar.length, priceRules);
+      const previousPrices = precioPilotoEnCarrera(newPrice, Math.max(0, previousRaceIndex), calendar.length, priceRules);
       const pilot = pilotSnap.data();
       if (pilot.pending_equipoId || pilot.pending_precio_compra != null) throw new Error("Deshaz primero el pacto pendiente antes de corregir el precio.");
       const oldPrice = Number(pilot.precio_compra ?? 0);
       if (!Number.isFinite(oldPrice)) throw new Error("El precio actual guardado no es válido.");
       if (oldPrice === newPrice) return "unchanged" as const;
 
-      const currentBalance = Number(teamSnap.data().presupuesto ?? 0);
-      if (!Number.isFinite(currentBalance)) throw new Error("El saldo guardado de la escudería no es válido.");
+      const rawBalance = teamSnap.data().presupuesto;
+      if (typeof rawBalance !== "number" || !Number.isFinite(rawBalance)) throw new Error("El saldo guardado de la escudería no está registrado o no es válido.");
+      const currentBalance = rawBalance;
       const priceAdjustment = previsualizarAjustePrecio(currentBalance, oldPrice, newPrice);
       const balanceDelta = priceAdjustment.delta;
       if (balanceDelta < 0 && priceAdjustment.insuficiente) {
@@ -377,8 +400,8 @@ export async function ajustarPrecioCompraPiloto(params: {
       }
       const pilotUpdate: Record<string, unknown> = {
         precio_compra: newPrice,
-        mantener_inicial_split: mantenerInicialDe(newPrice),
-        clausula_inicial_split: clausulaInicialDe(newPrice),
+        mantener_inicial_split: mantenerInicialDe(newPrice, priceRules),
+        clausula_inicial_split: clausulaInicialDe(newPrice, priceRules),
         mantener_actual: currentPrices.mantener,
         clausula_actual: pilot.clausula_manual ?? currentPrices.clausula,
         ...(pilot.clausula_manual != null ? { clausula_sin_ajuste: currentPrices.clausula } : {}),
@@ -477,7 +500,10 @@ export async function procesarEconomiaCarrera(
         const fa = a.fecha?.toMillis?.() ?? 0, fb = b.fecha?.toMillis?.() ?? 0;
         return fa !== fb ? fa - fb : a.id.localeCompare(b.id);
       });
-    const carrerasDelBloque = calendario.length || CARRERAS_POR_BLOQUE;
+    if (!calendario.length) {
+      return { processed: 0, message: "No se puede procesar la economía: este split no tiene carreras configuradas." };
+    }
+    const carrerasDelBloque = calendario.length;
     const indiceEnCalendario = calendario.findIndex(c => c.id === circuitoId);
     const indiceCarrera = indiceEnCalendario >= 0 ? indiceEnCalendario : (previousCircuitIds?.length ?? 0);
 
@@ -573,9 +599,7 @@ export async function procesarEconomiaCarrera(
         if (!teamId || teamId === "agente_libre") continue;
 
         const nombre = pilotNombre[raceResult.pilotoId] || raceResult.pilotoId;
-        const ptsPos = calcularPuntosPosicion(raceResult.racePos);
-        const ptsPole = raceResult.qualyPos === 1 ? 2 : 0;
-        const totalPts = ptsPos + ptsPole;
+        const totalPts = pointsForRaceResult(raceResult, rules);
         if (totalPts > 0) {
           const mPts = parseFloat((totalPts * M_PUNTOS_FACTOR).toFixed(2));
           add(teamId, mPts, "ingreso_puntos", nombre, `${totalPts} pts × ${M_PUNTOS_FACTOR}M = +${mPts}M`);
@@ -644,8 +668,8 @@ export async function procesarEconomiaCarrera(
         const hasPendingTransfer = d.pending_equipoId != null || d.pending_precio_compra != null;
         // Precio vigente en esta carrera y el que regirá en la siguiente. En la última del
         // bloque la curva ya no avanza: la cláusula se queda clavada en el precio de compra.
-        const vigente  = precioPilotoEnCarrera(precioCompra, indiceCarrera, carrerasDelBloque);
-        const proximo  = precioPilotoEnCarrera(precioCompra, indiceCarrera + 1, carrerasDelBloque);
+        const vigente  = precioPilotoEnCarrera(precioCompra, indiceCarrera, carrerasDelBloque, rules);
+        const proximo  = precioPilotoEnCarrera(precioCompra, indiceCarrera + 1, carrerasDelBloque, rules);
         const mantenerEstaCarrera = vigente.mantener;
         const isFrozenHere = (() => {
           if (!d.congelado && !hasPendingTransfer) return false;
@@ -945,6 +969,9 @@ export async function recalcularCurvaPreciosSplit(
   onProgress?: (msg: string) => void
 ): Promise<{ pilotos: number; carreras: number; message: string }> {
   try {
+    const splitSnap = await getDocFromServer(doc(db, "splits", splitId));
+    if (!splitSnap.exists()) throw new Error("El split no existe.");
+    const priceRules = economyRules(splitSnap.data()?.economia_config);
     const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
     const calendario = circSnap.docs
       .map(d => ({ id: d.id, nombre: (d.data() as any).nombre || d.id, orden: Number((d.data() as any).numero_carrera ?? 0), procesada: !!(d.data() as any).economia_procesada }))
@@ -977,7 +1004,7 @@ export async function recalcularCurvaPreciosSplit(
         const precioCompra = Number(d.precio_compra ?? 0);
         if (precioCompra === 0) continue;
 
-        const curva = curvaPreciosBloque(precioCompra, calendario.length);
+        const curva = curvaPreciosBloque(precioCompra, calendario.length, priceRules);
         // Índice de la carrera en la que se pactó el precio, −1 si el piloto no está
         // congelado. Sin `congelado_en` reconocible se congela desde la primera: es lo que
         // hace el procesado de carrera y así no se le sigue moviendo un precio ya pactado.
@@ -1007,8 +1034,8 @@ export async function recalcularCurvaPreciosSplit(
 
         batch.update(pd.ref, {
           historial_precios,
-          mantener_inicial_split:  mantenerInicialDe(precioCompra),
-          clausula_inicial_split:  clausulaInicialDe(precioCompra),
+          mantener_inicial_split:  mantenerInicialDe(precioCompra, priceRules),
+          clausula_inicial_split:  clausulaInicialDe(precioCompra, priceRules),
           mantener_actual:         vigente.mantener,
           clausula_actual:         d.clausula_manual ?? vigente.clausula,
           ...(d.clausula_manual != null ? { clausula_sin_ajuste: vigente.clausula } : {}),
@@ -1037,6 +1064,9 @@ export async function procesarEconomiaRetroactivaSplit(
   onProgress?: (msg: string) => void
 ): Promise<{ ok: number; skipped: number; message: string }> {
   try {
+    const splitSnap = await getDocFromServer(doc(db, "splits", splitId));
+    if (!splitSnap.exists()) throw new Error("El split no existe.");
+    const priceRules = economyRules(splitSnap.data()?.economia_config);
     const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
     const alreadyProcessed = circSnap.docs.filter(d => d.data().economia_procesada);
     if (alreadyProcessed.length > 0) {
@@ -1059,8 +1089,8 @@ export async function procesarEconomiaRetroactivaSplit(
         const d = pd.data();
         const precioCompra = d.precio_compra ?? 0;
 
-        const mantenerInicial = d.mantener_inicial_split != null ? d.mantener_inicial_split : mantenerInicialDe(precioCompra);
-        const clausulaInicial = d.clausula_inicial_split != null ? d.clausula_inicial_split : clausulaInicialDe(precioCompra);
+        const mantenerInicial = d.mantener_inicial_split != null ? d.mantener_inicial_split : mantenerInicialDe(precioCompra, priceRules);
+        const clausulaInicial = d.clausula_inicial_split != null ? d.clausula_inicial_split : clausulaInicialDe(precioCompra, priceRules);
         if (mantenerInicial === 0 && clausulaInicial === 0) continue;
 
         resetBatch.update(pd.ref, {

@@ -1,6 +1,21 @@
 import { collection, doc, getDocs, increment, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { clausulaInicialDe, mantenerInicialDe } from "./economyService";
+import { economyRules } from "../utils/economyRules";
+
+function saldoValido(data: Record<string, any> | undefined, label: string): number {
+  const value = data?.presupuesto;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} no tiene un presupuesto válido. No se aplicó ningún cambio.`);
+  }
+  return value;
+}
+
+function validarDelta(balance: number, delta: number, label: string): void {
+  if (delta < 0 && balance + delta < 0) {
+    throw new Error(`Presupuesto insuficiente en ${label}: faltan ${Math.abs(balance + delta)}M. No se aplicó ningún cambio.`);
+  }
+}
 
 // Todos los equipos, incluido el contenedor libre aunque todavía no tenga documento padre.
 async function pilotLocations(splitId: string, pilotoId: string) {
@@ -26,6 +41,8 @@ export async function guardarPacto(params: {
     if (data.pending_equipoId && data.pending_fichas_previas_v2 == null && data.pending_fichas_previas == null) throw new Error("Este pacto antiguo no guardó su estado anterior. Anúlalo y revisa la plantilla antes de registrarlo de nuevo.");
     if (data.pending_splitId && data.pending_splitId !== nextSplitId) throw new Error("Deshaz primero el pacto con el split anterior de destino.");
     const split = await tx.get(doc(db, "splits", splitId));
+    if (!split.exists()) throw new Error("El split de origen ya no existe.");
+    const priceRules = economyRules(split.data()?.economia_config);
     const sellerId = split.data()?.economia_config?.clausula_al_vendedor === true && tipo === "clausula" && precio > 0 && equipoOrigenId !== "agente_libre" && equipoOrigenId !== equipoDestinoId ? equipoOrigenId : null;
     const ids = [...new Set([equipoDestinoId, data.pending_equipoId, sellerId, data.pending_vendedor_id].filter(id => id && id !== "agente_libre"))] as string[];
     const [teams, destinations, next] = await Promise.all([
@@ -46,8 +63,11 @@ export async function guardarPacto(params: {
     }
     if (data.pending_vendedor_id) deltas[data.pending_vendedor_id] = (deltas[data.pending_vendedor_id] ?? 0) - Number(data.pending_vendedor_delta ?? 0);
     if (sellerId) deltas[sellerId] = (deltas[sellerId] ?? 0) + precio;
-    const buyer = teams.find(t => t.id === equipoDestinoId)!;
-    if (deltas[equipoDestinoId] < 0 && Number(buyer.data()!.presupuesto ?? 0) + deltas[equipoDestinoId] < 0) throw new Error("Presupuesto insuficiente para pactar.");
+    const balances = new Map(teams.map(team => [team.id, saldoValido(team.data(), team.data()!.nombre || team.id)]));
+    for (const team of teams) {
+      const delta = deltas[team.id] ?? 0;
+      validarDelta(balances.get(team.id)!, delta, team.data()!.nombre || team.id);
+    }
     tx.update(targetTeam!.ref, { mercado_revision: increment(1) });
     for (const team of teams) {
       const delta = deltas[team.id] ?? 0;
@@ -61,6 +81,8 @@ export async function guardarPacto(params: {
     for (const team of inheritedTeams) {
       if (team.data()?.presupuesto_origen_splitId !== splitId) continue;
       const delta = deltas[team.id] ?? 0;
+      const inheritedBalance = saldoValido(team.data(), team.data()?.nombre || team.id);
+      validarDelta(inheritedBalance, delta, team.data()?.nombre || team.id);
       tx.update(team.ref, { presupuesto: increment(delta) });
     }
     const previas = data.pending_fichas_previas_v2 ?? data.pending_fichas_previas?.map((p: any) => ({ equipoId: p.equipoId, datos: JSON.parse(p.datos_json) })) ?? destinations.filter(s => s.exists()).map(s => ({
@@ -78,9 +100,9 @@ export async function guardarPacto(params: {
         pilotoId, nombre: data.nombre || pilotoId, equipoId: equipoDestinoId, tipo_fichaje: tipo,
         rating_piloto: data.rating_piloto ?? 0, rating_base: data.rating_piloto ?? 0,
         puntos_piloto: 0, victorias: 0, podios: 0, poles: 0, dnfs: 0, carreras_limpias: 0,
-        precio_compra: precio, mantener_actual: mantenerInicialDe(precio), clausula_actual: clausulaInicialDe(precio),
-        mantener_inicial_split: mantenerInicialDe(precio), clausula_inicial_split: clausulaInicialDe(precio),
-        precio_carrera_anterior: mantenerInicialDe(precio), historial_precios: {},
+        precio_compra: precio, mantener_actual: mantenerInicialDe(precio, priceRules), clausula_actual: clausulaInicialDe(precio, priceRules),
+        mantener_inicial_split: mantenerInicialDe(precio, priceRules), clausula_inicial_split: clausulaInicialDe(precio, priceRules),
+        precio_carrera_anterior: mantenerInicialDe(precio, priceRules), historial_precios: {},
         pacto_origen: source.path,
       });
     }
@@ -112,6 +134,20 @@ export async function anularPacto(splitId: string, equipoId: string, pilotoId: s
     const previas = data.pending_fichas_previas_v2 ?? data.pending_fichas_previas?.map((p: any) => ({ equipoId: p.equipoId, datos: JSON.parse(p.datos_json) }));
     const delta = Number(data.pending_precio_compra ?? 0);
     if (!Number.isFinite(delta)) throw new Error("El precio guardado no es válido.");
+    const teamBalance = saldoValido(team.data(), team.data()?.nombre || team.id);
+    validarDelta(teamBalance, delta, team.data()?.nombre || team.id);
+    if (seller) {
+      const sellerBalance = saldoValido(seller.data(), seller.data()?.nombre || seller.id);
+      validarDelta(sellerBalance, -Number(data.pending_vendedor_delta ?? 0), seller.data()?.nombre || seller.id);
+    }
+    if (inheritedTeam?.data()?.presupuesto_origen_splitId === splitId) {
+      const inheritedBalance = saldoValido(inheritedTeam.data(), inheritedTeam.data()?.nombre || inheritedTeam.id);
+      validarDelta(inheritedBalance, delta, inheritedTeam.data()?.nombre || inheritedTeam.id);
+    }
+    if (inheritedSeller?.data()?.presupuesto_origen_splitId === splitId) {
+      const inheritedBalance = saldoValido(inheritedSeller.data(), inheritedSeller.data()?.nombre || inheritedSeller.id);
+      validarDelta(inheritedBalance, -Number(data.pending_vendedor_delta ?? 0), inheritedSeller.data()?.nombre || inheritedSeller.id);
+    }
     tx.update(team.ref, { presupuesto: increment(delta) });
     if (inheritedTeam?.data()?.presupuesto_origen_splitId === splitId) {
       tx.update(inheritedTeam.ref, { presupuesto: increment(delta) });
@@ -164,6 +200,12 @@ export async function deshacerAlta(splitId: string, equipoId: string, pilotoId: 
     const previous = origin ? await tx.get(origin) : null;
     if (previous?.exists() && origin?.path !== ref.path) throw new Error("Ya existe otra ficha en la escudería de origen.");
     if (!team.exists() || (seller && !seller.exists())) throw new Error("Falta una escudería de la operación.");
+    const teamBalance = saldoValido(team.data(), team.data()?.nombre || team.id);
+    validarDelta(teamBalance, Number(data.precio), team.data()?.nombre || team.id);
+    if (seller) {
+      const sellerBalance = saldoValido(seller.data(), seller.data()?.nombre || seller.id);
+      validarDelta(sellerBalance, -Number(data.vendedorDelta ?? 0), seller.data()?.nombre || seller.id);
+    }
     tx.update(team.ref, { presupuesto: increment(data.precio) });
     if (seller) tx.update(seller.ref, { presupuesto: increment(-data.vendedorDelta) });
     tx.delete(ref);

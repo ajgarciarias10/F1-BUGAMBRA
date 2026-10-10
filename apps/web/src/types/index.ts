@@ -38,6 +38,7 @@ export interface Split {
     puntos_carreras?: number[];
   }>;
   rivalries?: RivalryConfig;
+  economia_config?: Record<string, number | number[] | boolean>;
   /** Fuente cruda que edita el admin: {id, pilotoIds}[]. `rivalries.groups` es lo derivado
    *  de esto (con nombre, equipo, rating...) para el cálculo económico. */
   rivalidades_manual?: Array<{ id: string; pilotoIds: string[] }>;
@@ -53,7 +54,7 @@ export interface Split {
 export interface Equipo {
   id: string;
   nombre: string;
-  presupuesto: number;
+  presupuesto: number | null;
   puntos_constructores: number;
   logo_url?: string;
   /** Máximo de pilotos permitidos en la plantilla para este split (default 4). */

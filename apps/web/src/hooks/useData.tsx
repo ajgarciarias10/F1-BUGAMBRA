@@ -5,35 +5,18 @@ import type { Usuario, Piloto, SplitView, Circuito, Equipo, PilotInRoster, Roste
 import { computePilotOVR } from "../utils/splitResolver";
 
 const normalizeRaceResults = (results: any[]) => {
-  if (results.every(result => result.racePos != null && result.qualyPos != null)) return results;
-  const points = results.map(result => Number(result.puntos ?? 0));
-  const poleCandidates = points.some(value => value > 16)
-    ? points.map((value, index) => ({ value, index })).filter(item => item.value > 16)
-    : [...points.map((value, index) => ({ value, index })), { value: 0, index: -1 }];
-  const assignments = poleCandidates.flatMap(pole => {
-    const used = new Set<number>();
-    const rows = points.map((value, index) => {
-      if (value === 0) return { position: 99, pole: false };
-      const base = value - (index === pole.index ? 2 : 0);
-      const position = [16, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1].indexOf(base) + 1;
-      if (position === 0 || used.has(position)) return null;
-      used.add(position);
-      return { position, pole: index === pole.index };
-    });
-    return rows.every(Boolean) ? [{ rows: rows as Array<{ position: number; pole: boolean }>, poleIndex: pole.index }] : [];
+  return results.map(result => {
+    const racePos = Number.isInteger(result.racePos) ? result.racePos : 99;
+    const qualyPos = Number.isInteger(result.qualyPos) ? result.qualyPos : 99;
+    return {
+      ...result,
+      racePos,
+      qualyPos,
+      // Los imports antiguos usaron 99 para posición desconocida y marcaron como DNF
+      // a todo piloto con 0 puntos. Sin una posición real no se puede afirmar un abandono.
+      isDnf: racePos === 99 ? false : result.isDnf === true,
+    };
   });
-  const selected = assignments.sort((a, b) =>
-    Number((b.poleIndex >= 0 && points[b.poleIndex] > 16)) - Number((a.poleIndex >= 0 && points[a.poleIndex] > 16)) ||
-    b.poleIndex - a.poleIndex
-  ).at(0);
-  if (!selected) return results;
-  const bestPosition = Math.min(...selected.rows.map(row => row.position));
-  return results.map((result, index) => ({
-    ...result,
-    racePos: result.racePos ?? selected.rows[index].position,
-    qualyPos: result.qualyPos ?? (selected.rows[index].pole ? 1 : 99),
-    isDotd: result.isDotd ?? (selected.rows[index].position === bestPosition),
-  }));
 };
 
 // ─── USUARIOS ─────────────────────────────────────────────────────────────────
@@ -168,7 +151,13 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
   const equiposMap = raw.equipos.get(sid) ?? new Map();
   const equipos: Equipo[] = [...equiposMap.entries()]
     .filter(([id]) => id !== "agente_libre")
-    .map(([id, data]) => ({ id, nombre: id, presupuesto: 100, puntos_constructores: 0, ...data })) as Equipo[];
+    .map(([id, data]) => ({
+      ...data,
+      id,
+      nombre: data.nombre ?? id,
+      presupuesto: typeof data.presupuesto === "number" && Number.isFinite(data.presupuesto) ? data.presupuesto : null,
+      puntos_constructores: typeof data.puntos_constructores === "number" ? data.puntos_constructores : 0,
+    })) as Equipo[];
 
   const rosterByPilot = new Map<string, PilotInRoster>();
   const pilotosPorEquipoDelSplit = raw.pilotosPorEquipo.get(sid) ?? new Map();

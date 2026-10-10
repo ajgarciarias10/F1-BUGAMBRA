@@ -51,7 +51,7 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
           ...e,
           pilotos,
           valorPilotos,
-          valorTotal: (e.presupuesto || 0) + valorPilotos,
+          valorTotal: e.presupuesto == null ? null : e.presupuesto + valorPilotos,
         };
       });
   }, [split]);
@@ -111,6 +111,10 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
     const pilot = split?.roster?.find((p: any) => p.pilotoId === pilotId);
     if (!team) {
       setStatus({ tone: "error", message: "No se encuentra la escudería compradora." });
+      return;
+    }
+    if (typeof team.presupuesto !== "number" || !Number.isFinite(team.presupuesto)) {
+      setStatus({ tone: "error", message: `El saldo de ${team.nombre} no está registrado. Pide al administrador que lo concilie antes de fichar.` });
       return;
     }
 
@@ -292,11 +296,11 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
                     </div>
                   ) : (
                     <>
-                      <span className="text-4xl font-extrabold italic text-white leading-none">{miEquipo.presupuesto.toFixed(1)}</span>
+                      <span className="text-4xl font-extrabold italic text-white leading-none">{miEquipo.presupuesto == null ? "—" : miEquipo.presupuesto.toFixed(1)}</span>
                       <span className="text-xl font-bold text-white/50">M</span>
                       {canManage && (
                         <button
-                          onClick={() => { setEditingBudget(miEquipo.id); setBudgetInput(String(miEquipo.presupuesto)); }}
+                          onClick={() => { setEditingBudget(miEquipo.id); setBudgetInput(miEquipo.presupuesto == null ? "" : String(miEquipo.presupuesto)); }}
                           className="ml-3 inline-flex min-h-9 items-center gap-1.5 border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase tracking-[0.15em] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
                         >
                           <Wallet className="h-3.5 w-3.5" /> Editar
@@ -309,7 +313,7 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
               <div className="text-right">
                 <p className="text-[9px] text-[#e10600] uppercase font-bold tracking-[0.15em] mb-1">Valor Total de Plantilla</p>
                 <div className="flex items-baseline justify-end gap-0.5">
-                  <span className="text-2xl font-black italic text-white leading-none">{miEquipo.valorTotal.toFixed(1)}</span>
+                  <span className="text-2xl font-black italic text-white leading-none">{miEquipo.valorTotal == null ? "—" : miEquipo.valorTotal.toFixed(1)}</span>
                   <span className="text-sm font-bold text-white/50">M</span>
                 </div>
               </div>
@@ -342,7 +346,7 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
               </div>
               {canManage && (
                 <button
-                  onClick={() => { setEditingBudget(equipo.id); setBudgetInput(String(equipo.presupuesto)); }}
+                  onClick={() => { setEditingBudget(equipo.id); setBudgetInput(equipo.presupuesto == null ? "" : String(equipo.presupuesto)); }}
                   className="min-h-9 shrink-0 px-3 text-[10px] font-black uppercase tracking-[0.15em] text-white/60 hover:text-white transition-colors bg-white/5 border border-white/10 rounded-xl md:rounded-none md:py-1.5"
                   aria-label={`Editar presupuesto de ${equipo.nombre}`}
                 >
@@ -385,7 +389,7 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
               ) : (
                 <div className="flex justify-between text-[11px] font-mono text-white/40">
                   <span>Presupuesto</span>
-                  <span className="text-white font-bold tabular-nums">{formatearMillones(equipo.presupuesto)}</span>
+                  <span className="text-white font-bold tabular-nums">{equipo.presupuesto == null ? "—" : formatearMillones(equipo.presupuesto)}</span>
                 </div>
               )}
               <div className="flex justify-between text-[11px] font-mono text-white/40">
@@ -423,7 +427,7 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
                             </div>
                             {canManage && miEquipo && p.equipoId !== escuderiaId && (() => {
                               const precio = p.clausula_actual || 0;
-                              const sinDinero = miEquipo.presupuesto < precio;
+                              const sinDinero = miEquipo.presupuesto == null || miEquipo.presupuesto < precio;
                               const cargando = busy === `sign:${p.pilotoId}`;
                               return (
                                 <button
@@ -492,10 +496,10 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
                         </div>
                         <button
                           onClick={() => handleSignPilot(miEquipo.id, p.pilotoId, p.clausula_actual || 0)}
-                           disabled={!!busy || !mercadoAbierto || miEquipo.presupuesto < (p.clausula_actual || 0)}
+                           disabled={!!busy || !mercadoAbierto || miEquipo.presupuesto == null || miEquipo.presupuesto < (p.clausula_actual || 0)}
                           title={!mercadoAbierto
                             ? "La ventana de fichajes está cerrada"
-                            : miEquipo.presupuesto < (p.clausula_actual || 0)
+                            : miEquipo.presupuesto == null || miEquipo.presupuesto < (p.clausula_actual || 0)
                               ? "Presupuesto insuficiente"
                               : `Fichar por ${formatearMillones(p.clausula_actual || 0)}`}
                           className="mt-1 flex w-full min-h-9 items-center justify-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 text-[9px] font-black uppercase tracking-[0.1em] text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-30"

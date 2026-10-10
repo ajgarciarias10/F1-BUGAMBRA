@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { processRace, RaceResult, revertirCarreraCompleta, recalcSplitPoints } from "../services/raceProcessor";
-import { procesarEconomiaCarrera, revertirEconomiaCarrera } from "../services/economyService";
+import { procesarEconomiaCarrera, revertirEconomiaCarrera, mantenerInicialDe, clausulaInicialDe } from "../services/economyService";
 import { db } from "../services/firebase";
 import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch } from "firebase/firestore";
 import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
@@ -493,7 +493,8 @@ export function AdminDashboard() {
 
           prevTeamsSnap.docs.forEach(team => {
             const data = team.data();
-            const budget = Number(data.presupuesto ?? 100);
+            const budget = Number(data.presupuesto);
+            if (!Number.isFinite(budget)) throw new Error(`${data.nombre || team.id} no tiene un presupuesto válido; corrígelo antes de crear el siguiente split.`);
             planSet(doc(db, `splits/${splitId}/equipos`, team.id), {
               id: team.id, nombre: data.nombre || team.id, presupuesto: budget,
               presupuesto_inicial: budget, presupuesto_arrastre: budget,
@@ -530,8 +531,9 @@ export function AdminDashboard() {
             if (!teamIds.has(nextTeamId)) throw new Error(`La escudería ${nextTeamId} de ${r.nombre || pid} no existe en el split anterior.`);
             const price = Number(r.precio_inicio_siguiente_split);
             if (!Number.isFinite(price)) throw new Error(`Falta el precio inicial manual del siguiente split para ${r.nombre || pid}.`);
-            const keep = Math.round((price < 0 ? price / 3 : price * 3) * 10) / 10;
-            const clause = Math.round((price < 0 ? price / 2 : price * 2) * 10) / 10;
+            const priceRules = splits.find(s => s.id === splitId)?.economia_config;
+            const keep = mantenerInicialDe(price, priceRules);
+            const clause = clausulaInicialDe(price, priceRules);
             planSet(doc(db, `splits/${splitId}/equipos/${nextTeamId}/pilotos`, pid), {
               pilotoId: pid, equipoId: nextTeamId, rating_piloto: inheritedRating,
               rating_base: inheritedRating, participa_desde: 1, participa_hasta: null,

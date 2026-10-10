@@ -308,3 +308,35 @@ test("sin cierre conciliado se recuperan los pactos del saldo vivo; respeta agen
   await services.restaurarSplitDesdeCierre("s1", "s2", preview.version);
   assert.equal(state.docs.get(path("s2", "agente_libre")).clausula_actual, 10);
 });
+
+test("guardar pacto rechaza saldo de comprador ausente o inválido sin modificar datos", async () => {
+  for (const invalid of [undefined, Number.NaN]) {
+    state.docs = new Map(); state.failCommit = false;
+    for (const split of ["s1", "s2"]) {
+      state.docs.set(`splits/${split}`, { nombre: split });
+      for (const team of ["a", "b", "agente_libre"]) state.docs.set(`splits/${split}/equipos/${team}`, { nombre: team, presupuesto: 100 });
+    }
+    state.docs.set(path("s1", "a"), { pilotoId: "p", nombre: "Piloto", equipoId: "a", precio_compra: 5, rating_piloto: 80 });
+    state.docs.set(path("s2", "agente_libre"), { pilotoId: "p", equipoId: "agente_libre", precio_compra: 0 });
+    if (invalid === undefined) delete state.docs.get("splits/s1/equipos/b").presupuesto;
+    else state.docs.get("splits/s1/equipos/b").presupuesto = invalid;
+    const before = structuredClone([...state.docs]);
+    await assert.rejects(services.guardarPacto(pacto), /presupuesto válido/);
+    assert.deepEqual([...state.docs], before);
+  }
+});
+
+test("pujar rechaza presupuesto ausente y no abre ni modifica la subasta", async () => {
+  state.docs = new Map(); state.failCommit = false;
+  state.docs.set("splits/s1", { fichajes_abiertos: true });
+  state.docs.set("splits/s1/equipos/b", { nombre: "b" });
+  state.docs.set("splits/s1/subasta/sala", {
+    ...services.SALA_VACIA,
+    estado: "esperando_apertura", pilotoId: "p", pilotoNombre: "Piloto",
+  });
+  const before = structuredClone([...state.docs]);
+  const result = await services.pujar("s1", { id: "b", nombre: "b" }, 10);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /presupuesto válido/);
+  assert.deepEqual([...state.docs], before);
+});

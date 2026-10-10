@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cargoPorPrecio, presupuestoTrasCambiarPrecio, previsualizarAjustePrecio } from "./presupuesto";
+import { cargoPorPrecio, presupuestoTrasCambiarPrecio, previsualizarAjustePrecio, previsualizarCorreccionEconomica } from "./presupuesto";
 
 test("un fichaje positivo se paga y uno negativo ingresa", () => {
   assert.equal(cargoPorPrecio(70), -70);
@@ -49,4 +49,16 @@ test("cruzar de negativo a positivo cobra el precio nuevo y retira el ingreso an
 test("cobrar y devolver el mismo cambio deja el presupuesto igual", () => {
   const tras = presupuestoTrasCambiarPrecio(163.9, 0, 28.9);
   assert.equal(presupuestoTrasCambiarPrecio(tras, 28.9, 0), 163.9);
+});
+
+test("calcula el saldo pre-Hungría desde diferencias de fichajes y ajuste histórico separado", () => {
+  const plan = previsualizarCorreccionEconomica(135, [
+    { pilotId: "mimic", antes: 28.9, despues: 50.2 },
+    { pilotId: "carlos", antes: 0, despues: 21.2 },
+    { pilotId: "dani", antes: 0, despues: 21.2 },
+  ], -21.3);
+  assert.equal(plan.ajustePrecios, -63.7);
+  assert.equal(plan.ajusteManual, -21.3);
+  assert.equal(plan.presupuestoNuevo, 50);
+  assert.equal(plan.insuficiente, false);
 });

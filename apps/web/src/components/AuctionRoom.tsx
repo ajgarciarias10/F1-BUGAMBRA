@@ -253,10 +253,10 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const enAtril = sala.estado === "esperando_apertura" || sala.estado === "en_curso";
   const puedoOfertar = puedoAbrir || puedoPujar;
   const minimo = sala.puja_actual != null ? Math.round((sala.puja_actual + 0.1) * 10) / 10 : null;
-  const saldo = miEquipo?.presupuesto ?? 0;
+  const saldo = miEquipo?.presupuesto ?? null;
   const ofertaNumero = parsearImporte(oferta);
   const ofertaValida = oferta.trim() !== "" && oferta !== "-" && Number.isFinite(ofertaNumero)
-    && (minimo == null || ofertaNumero >= minimo) && ofertaNumero <= saldo;
+    && saldo != null && (minimo == null || ofertaNumero >= minimo) && ofertaNumero <= saldo;
 
   const ajustarOferta = (paso: number) => setOferta(actual => {
     const actualNumero = parsearImporte(actual);
@@ -539,7 +539,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   ["Venía de", sala.equipo_anterior_nombre ?? "agente libre"],
                   ["Oferta actual", sala.puja_actual == null ? "—" : formatearMillones(sala.puja_actual)],
                   ["Máxima puja de", sala.puja_equipo_nombre ?? "—"],
-                  ["Tu saldo", miEquipo ? formatearMillones(saldo) : "—"],
+                  ["Tu saldo", saldo == null ? "—" : formatearMillones(saldo)],
                   ["Tiempo restante", sala.estado === "en_curso" ? `${restante.toFixed(1)}s` : "—"],
                 ] as const).map(([etiqueta, valor], indice) => (
                   <div key={etiqueta}
@@ -720,11 +720,11 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
               <div className="border-t border-white/[0.06] pt-4 space-y-1.5 text-[10px] font-mono">
                 <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Mínimo</span><span className="text-white/60 tabular-nums">{minimo == null ? "Libre" : formatearMillones(minimo)}</span></div>
-                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Tu saldo</span><span className="text-white/60 tabular-nums">{formatearMillones(saldo)}</span></div>
+                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Tu saldo</span><span className="text-white/60 tabular-nums">{saldo == null ? "—" : formatearMillones(saldo)}</span></div>
                 <div className="flex justify-between">
                   <span className="text-white/30 uppercase tracking-[0.14em]">Te quedarían</span>
-                  <span className={`tabular-nums font-black ${saldo - ofertaNumero < 0 ? "text-[#e10600]" : "text-emerald-400"}`}>
-                    {Number.isFinite(ofertaNumero) ? formatearMillones(saldo - ofertaNumero) : "—"}
+                  <span className={`tabular-nums font-black ${saldo != null && saldo - ofertaNumero < 0 ? "text-[#e10600]" : "text-emerald-400"}`}>
+                    {saldo != null && Number.isFinite(ofertaNumero) ? formatearMillones(saldo - ofertaNumero) : "—"}
                   </span>
                 </div>
               </div>
@@ -757,7 +757,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 : "border-white/[0.08] text-white/45"
               }`}>
               <span className="font-bold uppercase tracking-wider">{equipo.nombre}</span>
-              <span className="ml-2 tabular-nums">{formatearMillones(equipo.presupuesto)}</span>
+              <span className="ml-2 tabular-nums">{equipo.presupuesto == null ? "—" : formatearMillones(equipo.presupuesto)}</span>
               <span className="ml-2 inline-flex items-center gap-1 text-white/25">
                  <Users className="w-2.5 h-2.5" />{equipo.plantilla} pilotos
                </span>

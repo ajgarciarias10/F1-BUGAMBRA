@@ -6,7 +6,7 @@ import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { ShieldAlert, Award, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay, Crown } from "lucide-react";
 import { isSplitUnlocked } from "../utils/splitResolver";
-import { POINTS_BY_POSITION } from "../services/economyService";
+import { pointsForRaceResult } from "../utils/economyRules";
 import { PilotRivalryPanel } from "./RivalryPanels";
 import { NextRaceWidget } from "./NextRaceWidget";
 import { PilotCardF1 } from "./PilotCardF1";
@@ -139,7 +139,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
     return {
       ...equipo,
-      valor_total: (equipo.presupuesto || 0) + pilotsVal,
+      valor_total: equipo.presupuesto == null ? null : equipo.presupuesto + pilotsVal,
     };
   }, [currentSplit, currentUserPilotId, escuderiaId]);
 
@@ -234,7 +234,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
       .map(e => ({ id: e.id, nombre: e.nombre, puntos: "puntos" in e ? e.puntos : e.puntos_constructores || 0 }))
       .sort((a, b) => b.puntos - a.puntos);
 
-    const localPOINTS_SCALE = POINTS_BY_POSITION;
     const rRes: any[] = [];
     currentSplit.circuitos.filter((c: any) => c.completado && c.resultados).forEach((c: any) => {
       rRes.push({
@@ -244,9 +243,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
            name: r.pilotoNombre || currentSplit.roster.find((p: any) => p.pilotoId === r.pilotoId)?.nombre || r.pilotoId,
            racePos: r.racePos,
            pole: r.qualyPos === 1,
-           pts: r.puntos != null
-             ? Number(r.puntos)
-             : (r.racePos >= 1 && r.racePos <= 12 ? localPOINTS_SCALE[r.racePos - 1] : 0) + (r.qualyPos === 1 ? 2 : 0),
+           pts: pointsForRaceResult(r, currentSplit.economia_config),
           team: currentSplit.tipo === "individual" ? "Individual" : equipoNombreMap[r.equipoId ?? r.escuderiaId] || "",
         })),
       });
@@ -262,8 +259,6 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
     let totalPoints = 0, victories = 0, podiums = 0, poles = 0, dnfs = 0;
     let cleanRaces = 0, dotds = 0, mvps = 0, fastestLaps = 0;
     const history: any[] = [];
-    const localPOINTS_SCALE = POINTS_BY_POSITION;
-
     const splitsToSearch = isGlobalView ? splits : splits.filter(s => s.id === activeSplitId);
 
     splitsToSearch.forEach((s: any) => {
@@ -274,9 +269,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
         const res = c.resultados.find((r: any) => r.pilotoId === pilotId);
         if (res) {
           const isIndividual = s.tipo === "individual";
-           const points = res.puntos != null
-             ? Number(res.puntos)
-             : (res.racePos >= 1 && res.racePos <= 12 ? localPOINTS_SCALE[res.racePos - 1] : 0) + (res.qualyPos === 1 ? 2 : 0);
+           const points = pointsForRaceResult(res, s.economia_config);
           totalPoints += points;
           if (!isIndividual) {
             if (res.racePos === 1) victories++;
@@ -547,7 +540,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 <div>
                   <h4 className="text-[9px] uppercase font-bold tracking-[0.15em] text-[#e10600] mb-1">Presupuesto Disponible</h4>
                   <div className="flex items-baseline gap-0.5">
-                    <span className="text-4xl font-extrabold italic text-white leading-none">{miEscuderia.presupuesto.toFixed(1)}</span><span className="text-xl font-bold text-white/50">M</span>
+                    <span className="text-4xl font-extrabold italic text-white leading-none">{miEscuderia.presupuesto == null ? "—" : miEscuderia.presupuesto.toFixed(1)}</span><span className="text-xl font-bold text-white/50">M</span>
                   </div>
                 </div>
               )}

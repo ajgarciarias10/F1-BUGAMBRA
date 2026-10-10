@@ -4,7 +4,7 @@ import { EconomyRulesPanel } from "./EconomyRulesPanel";
 import { SplitRestorePanel } from "./SplitRestorePanel";
 import { db } from "../services/firebase";
 import {
-  procesarEconomiaCarrera, revertirEconomiaCarrera, ficharPiloto, recalcularCurvaPreciosSplit,
+  procesarEconomiaCarrera, revertirEconomiaCarrera, ficharPiloto,
   ajustarPrecioCompraPiloto,
   mantenerInicialDe, clausulaInicialDe,
 } from "../services/economyService";
@@ -15,6 +15,7 @@ import { previsualizarAjustePrecio } from "../utils/presupuesto";
 import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, totalEconomyAdjustments, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
 import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
 import { applyTeamEconomyCorrection } from "../services/adminMutationService";
+import { economyRules } from "../utils/economyRules";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ interface PilotRow {
 interface TeamRow {
   id: string;
   nombre: string;
-  presupuesto: number;
+  presupuesto: number | null;
   presupuesto_inicial: number | null;
   puntos_constructores: number;
   poles: number;
@@ -126,6 +127,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [pilots, setPilots] = useState<PilotRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -134,6 +136,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const [editingBudget, setEditingBudget] = useState<Record<string, string>>({});
   const [savingBudget, setSavingBudget] = useState<string | null>(null);
   const [processLog, setProcessLog] = useState<string[]>([]);
+  const selectedEconomyRules = economyRules(splits.find((split: any) => split.id === selectedSplitId)?.economia_config);
   const [viewMode, setViewMode] = useState<"precios" | "rendimiento">("precios");
   const loadRequestRef = useRef(0);
 
@@ -192,6 +195,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   async function loadData(splitId: string) {
     const requestId = ++loadRequestRef.current;
     setLoading(true);
+    setLoadError(null);
     setCircuits([]);
     setTeams([]);
     setPilots([]);
@@ -227,7 +231,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         }
         newTeams.push({
           id: teamDoc.id, nombre: td.nombre || teamDoc.id,
-          presupuesto: td.presupuesto ?? 0,
+          presupuesto: typeof td.presupuesto === "number" && Number.isFinite(td.presupuesto) ? td.presupuesto : null,
           presupuesto_inicial: td.presupuesto_inicial ?? null,
           puntos_constructores: td.puntos_constructores ?? 0,
           poles: 0, vueltas_rapidas: 0, sin_sanc: 0,
@@ -335,6 +339,10 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
       setCircuits(nextCircuits);
       setTeams(newTeams.sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setPilots(allPilots.sort((a, b) => a.equipoNombre.localeCompare(b.equipoNombre) || a.nombre.localeCompare(b.nombre)));
+    } catch (error: any) {
+      if (requestId === loadRequestRef.current) {
+        setLoadError(`No se pudo cargar la economía de ${splitId}: ${error?.message || "error desconocido"}`);
+      }
     } finally {
       if (requestId === loadRequestRef.current) setLoading(false);
     }
@@ -423,6 +431,10 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   }
 
   async function applyBudgetAdjustment(team: TeamRow, delta: number, reason: string) {
+    if (team.presupuesto == null) {
+      setProcessLog([`No se puede ajustar ${team.nombre}: falta un saldo registrado.`]);
+      return;
+    }
     const result = await applyTeamEconomyCorrection({
       splitId: selectedSplitId,
       teamId: team.id,
@@ -432,23 +444,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     });
     if (result.applied) await loadData(selectedSplitId);
     setProcessLog([result.message]);
-  }
-
-  async function recalcularPrecios() {
-    if (!confirm(
-      `Recalcula mantener y cláusula de cada carrera de ${selectedSplitId} desde el precio de compra.\n\n` +
-      "No toca presupuestos, transacciones ni resultados. Los precios pactados en mercado se respetan.\n\n¿Continuar?"
-    )) return;
-    setLoading(true);
-    setProcessLog([`Recalculando la curva de precios de ${selectedSplitId}…`]);
-    try {
-      await recalcularCurvaPreciosSplit(selectedSplitId, msg => setProcessLog(prev => [...prev, msg]));
-      await loadData(selectedSplitId);
-    } catch (err: any) {
-      setProcessLog(prev => [...prev, `Error: ${err.message}`]);
-    } finally {
-      setLoading(false);
-    }
   }
 
   async function resetEconomia() {
@@ -478,6 +473,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     try {
     const team = teams.find(row => row.id === pilot.equipoId);
     if (!team) throw new Error("No se encontró el saldo actual de la escudería. Recarga la tabla.");
+    if (team.presupuesto == null) throw new Error(`No se puede corregir el precio: falta el saldo registrado de ${team.nombre}.`);
     const result = await applyTeamEconomyCorrection({
       splitId: pilot.splitId,
       teamId: pilot.equipoId,
@@ -796,16 +792,17 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
             className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-400/60 hover:text-emerald-300 transition-colors disabled:opacity-30">
             + Añadir piloto
           </button>
-          <button onClick={recalcularPrecios} disabled={loading}
-            className="text-[9px] font-mono uppercase tracking-[0.3em] text-amber-400/60 hover:text-amber-300 transition-colors disabled:opacity-30">
-            Recalcular precios
-          </button>
           <button onClick={resetEconomia} disabled={loading}
             className="text-[9px] font-mono uppercase tracking-[0.3em] text-[#e10600]/50 hover:text-[#e10600] transition-colors disabled:opacity-30">
             Reset economía
           </button>
         </div>
       </div>
+
+      {loadError && <div role="alert" className="border border-red-400/30 bg-red-400/5 px-4 py-3 text-xs text-red-200">
+        {loadError} No se muestran importes parciales como si fueran datos completos.
+        <button type="button" onClick={() => loadData(selectedSplitId)} className="ml-3 underline underline-offset-2">Reintentar</button>
+      </div>}
 
       {/* ── LOG ── */}
       {processLog.length > 0 && (
@@ -1021,7 +1018,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                   </tr>
                 );
               })}
-              {teams.length === 0 && !loading && (
+              {teams.length === 0 && !loading && !loadError && (
                 <tr><td colSpan={7} className="py-8 text-center text-[10px] font-mono text-white/15 uppercase tracking-widest">Sin escuderías</td></tr>
               )}
             </tbody>
@@ -1290,8 +1287,8 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                             <td className="py-2.5 px-3 text-right">
                               {transfer ? (() => {
                                 const pp = transfer.precio;
-                                const nextM = mantenerInicialDe(pp);
-                                const nextCl = clausulaInicialDe(pp);
+                                const nextM = mantenerInicialDe(pp, selectedEconomyRules);
+                                const nextCl = clausulaInicialDe(pp, selectedEconomyRules);
                                 return (
                                   <div className="space-y-0.5">
                                     <span className={`block tabular-nums font-bold text-[10px] ${cellBg(nextM)}`}>{r1(nextM)}</span>
@@ -1454,7 +1451,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 <select value={altaEquipoId} onChange={e => setAltaEquipoId(e.target.value)}
                   className="w-full bg-[#0a0a0a] border border-white/10 text-white text-[11px] px-3 py-2 outline-none focus:border-[#e10600] transition-colors font-mono">
                   {teams.map(t => (
-                    <option key={t.id} value={t.id}>{t.nombre} — presup. {t.presupuesto}M</option>
+                    <option key={t.id} value={t.id}>{t.nombre} — presup. {r1(t.presupuesto)}M</option>
                   ))}
                 </select>
               </div>
@@ -1472,9 +1469,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                   const precio = parseFloat(altaPrecio || "");
                   if (Number.isNaN(precio)) return null;
                   const destTeam = teams.find(t => t.id === altaEquipoId);
-                  const nuevoPresupuesto = destTeam ? destTeam.presupuesto + (precio < 0 ? Math.abs(precio) : -precio) : null;
-                  const mantener = Math.round((precio < 0 ? precio / 3 : precio * 3) * 10) / 10;
-                  const clausula = Math.round((precio < 0 ? precio / 2 : precio * 2) * 10) / 10;
+                  const nuevoPresupuesto = destTeam?.presupuesto == null ? null : destTeam.presupuesto + (precio < 0 ? Math.abs(precio) : -precio);
+                  const mantener = mantenerInicialDe(precio, selectedEconomyRules);
+                  const clausula = clausulaInicialDe(precio, selectedEconomyRules);
                   return (
                     <p className="text-[9px] font-mono text-white/30 mt-1">
                       Mantener {mantener}M · cláusula {clausula}M
@@ -1605,9 +1602,8 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 {/* Preview mantener/clausula del próximo split */}
                 {pendingPrecioCompra && !isNaN(parseFloat(pendingPrecioCompra)) && (() => {
                   const pp = parseFloat(pendingPrecioCompra);
-                  const ppAbs = Math.abs(pp);
-                  const nextM  = pp < 0 ? Math.round(ppAbs / 3 * 10) / 10 : Math.round(ppAbs * 3 * 10) / 10;
-                  const nextCl = pp < 0 ? Math.round(ppAbs / 2 * 10) / 10 : Math.round(ppAbs * 2 * 10) / 10;
+                  const nextM  = mantenerInicialDe(pp, selectedEconomyRules);
+                  const nextCl = clausulaInicialDe(pp, selectedEconomyRules);
                   return (
                     <div className="flex gap-3 text-[9px] font-mono text-white/40 mt-1">
                       <span>Mant. próx. split: <span className="text-white/70 font-bold">{nextM}M</span></span>
@@ -1625,15 +1621,15 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 <select value={fichajeEquipoId} onChange={e => setFichajeEquipoId(e.target.value)}
                   className="w-full bg-[#0a0a0a] border border-white/10 text-white text-[11px] px-3 py-2 outline-none focus:border-[#e10600] transition-colors font-mono">
                   {teams.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.nombre}{t.id === fichajeModal.equipoId ? " (actual)" : ""} — presup. {t.presupuesto}M
+                      <option key={t.id} value={t.id}>
+                      {t.nombre}{t.id === fichajeModal.equipoId ? " (actual)" : ""} — presup. {r1(t.presupuesto)}M
                     </option>
                   ))}
                 </select>
                 {fichajeEquipoId !== fichajeModal.equipoId && (() => {
                   const pp = parseFloat(pendingPrecioCompra || "0");
                   const destTeam = teams.find(t => t.id === fichajeEquipoId);
-                  if (!destTeam || isNaN(pp) || pp === 0) return null;
+                  if (!destTeam || destTeam.presupuesto == null || isNaN(pp) || pp === 0) return null;
                   const newBudget = destTeam.presupuesto + (pp < 0 ? Math.abs(pp) : -pp);
                   return (
                     <p className="text-[9px] font-mono text-white/30 mt-1">

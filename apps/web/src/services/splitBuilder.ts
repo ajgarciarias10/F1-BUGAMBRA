@@ -2,6 +2,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, updateDoc, writeBatch, run
 import { db } from "./firebase";
 import { clausulaInicialDe, mantenerInicialDe, procesarPremiosCierreSplit } from "./economyService";
 import { OVR_DEBUT } from "../utils/splitResolver";
+import { economyRules } from "../utils/economyRules";
 import type { TipoFichaje } from "../types";
 
 // ─── CICLO DE VIDA DE UN SPLIT ───────────────────────────────────────────────
@@ -51,10 +52,14 @@ export async function leerCierreDeSplit(
     if (equipoDoc.id !== "agente_libre") {
       // El cierre conciliado manda: el `presupuesto` vivo puede llevar ya descontados
       // fichajes del bloque siguiente y usarlo como apertura los cobraría dos veces.
+      const saldoCierre = data.economia_historica?.presupuesto_cierre ?? data.presupuesto;
+      if (typeof saldoCierre !== "number" || !Number.isFinite(saldoCierre)) {
+        throw new Error(`${nombre}: falta un saldo válido en ${splitId}; no se puede heredar el presupuesto.`);
+      }
       equipos.push({
         id: equipoDoc.id,
         nombre,
-        saldoCierre: Number(data.economia_historica?.presupuesto_cierre ?? data.presupuesto ?? 0),
+        saldoCierre,
         conciliado: typeof data.economia_historica?.presupuesto_cierre === "number",
       });
     }
@@ -132,6 +137,9 @@ export async function derivarAperturas(
     if (equipoDoc.id === "agente_libre") continue;
     const data = equipoDoc.data() as any;
     const nombre = data.nombre || equipoDoc.id;
+    if (typeof data.presupuesto !== "number" || !Number.isFinite(data.presupuesto)) {
+      throw new Error(`${nombre}: falta un presupuesto válido en ${splitId}; no se puede previsualizar el arrastre.`);
+    }
     const cierre = cierres.get(equipoDoc.id);
     if (!cierre) {
       avisos.push(`${nombre}: no existe en ${splitAnteriorId}, su apertura se queda como está.`);
@@ -274,6 +282,8 @@ export async function crearSplit(
   try {
     if (!config.splitId) return { ok: false, message: "Falta el identificador del split.", avisos };
     if (config.circuitos.length === 0) return { ok: false, message: "El split necesita al menos un circuito.", avisos };
+    const targetSplit = await getDoc(doc(db, "splits", config.splitId));
+    const priceRules = economyRules(targetSplit.data()?.economia_config);
 
     const anterior = config.splitAnteriorId
       ? await leerCierreDeSplit(config.splitAnteriorId)
@@ -359,11 +369,11 @@ export async function crearSplit(
             }
           : {
               precio_compra: precio,
-              mantener_actual: mantenerInicialDe(precio),
-              clausula_actual: clausulaInicialDe(precio),
-              mantener_inicial_split: mantenerInicialDe(precio),
-              clausula_inicial_split: clausulaInicialDe(precio),
-              precio_carrera_anterior: mantenerInicialDe(precio),
+              mantener_actual: mantenerInicialDe(precio, priceRules),
+              clausula_actual: clausulaInicialDe(precio, priceRules),
+              mantener_inicial_split: mantenerInicialDe(precio, priceRules),
+              clausula_inicial_split: clausulaInicialDe(precio, priceRules),
+              precio_carrera_anterior: mantenerInicialDe(precio, priceRules),
             }),
       });
 

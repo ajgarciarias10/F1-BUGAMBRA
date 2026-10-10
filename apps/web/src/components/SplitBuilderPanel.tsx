@@ -27,7 +27,7 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
   const [circuitos, setCircuitos] = useState("");
   const [primeraCarrera, setPrimeraCarrera] = useState(1);
   const [rookies, setRookies] = useState("");
-  const [presupuestoArranque, setPresupuestoArranque] = useState("100");
+  const [presupuestoArranque, setPresupuestoArranque] = useState("");
   const [activo, setActivo] = useState(true);
   const [fichajesAbiertos, setFichajesAbiertos] = useState(true);
   const [cerrarAnterior, setCerrarAnterior] = useState(true);
@@ -99,6 +99,11 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
   const crear = async () => {
     const listaCircuitos = circuitos.split(/[\n,]/).map(c => c.trim()).filter(Boolean);
     if (listaCircuitos.length === 0) { add("⚠ Escribe al menos un circuito."); return; }
+    const saldoArranque = Number(presupuestoArranque.replace(",", "."));
+    if (modo === "temporada" && (!presupuestoArranque.trim() || !Number.isFinite(saldoArranque))) {
+      add("⚠ Indica el presupuesto de arranque de la nueva temporada.");
+      return;
+    }
 
     const repetidos = listaCircuitos.map(slug).filter((s, i, a) => a.indexOf(s) !== i);
     if (repetidos.length) { add(`⚠ Circuitos repetidos: ${repetidos.join(", ")}.`); return; }
@@ -124,7 +129,7 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
       destinos,
       rookies: rookies.split(/[\n,]/).map(r => r.trim()).filter(Boolean),
       aperturas: Object.fromEntries(Object.entries(aperturas).map(([id, valor]) => [id, valor.trim() === "" ? null : Number(valor)])),
-      presupuestoDeArranque: modo === "temporada" ? Number(presupuestoArranque) || 0 : null,
+      presupuestoDeArranque: modo === "temporada" ? saldoArranque : null,
       activo, fichajesAbiertos, cerrarAnterior,
     };
     try {
