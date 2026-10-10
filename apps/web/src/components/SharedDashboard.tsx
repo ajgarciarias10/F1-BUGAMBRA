@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { compressAndConvertImage } from "../utils/imageHelper";
@@ -971,20 +971,25 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                               </tr>
                             </thead>
                             <tbody>
-                              {pilotProfileStats.history.map((h: any, idx: number) => (
-                                <tr key={`gp-hist-${h.splitId}-${h.circuitId}-${idx}`} className="border-b border-white/5 hover:bg-white/5 last:border-0 transition-colors">
-                                  <td className="p-3 text-[#e10600] font-bold">{h.splitName}</td>
-                                  <td className="p-3 text-white font-bold">{h.circuitName}</td>
+                              {pilotProfileStats.history.map((h: any, idx: number) => {
+                                const esDnf = h.splitTipo !== "individual" && (h.isDnfOwnError === true || h.racePos === 99 || h.racePos > 12);
+                                return (
+                                <tr key={`gp-hist-${h.splitId}-${h.circuitId}-${idx}`} className={`border-b border-white/5 last:border-0 transition-colors ${esDnf ? "bg-red-500/[0.06] hover:bg-red-500/[0.10]" : "hover:bg-white/5"}`}>
+                                  <td className={`p-3 text-[#e10600] font-bold ${esDnf ? "border-l-2 border-red-500/70" : ""}`}>{h.splitName}</td>
+                                  <td className={`p-3 font-bold ${esDnf ? "text-white/60" : "text-white"}`}>{h.circuitName}</td>
                                     <td className="p-3 text-center">{h.splitTipo === "individual" ? "N/D" : h.qualyPos === 1 ? "Sí" : "-"}</td>
-                                   <td className={`p-3 text-center font-bold ${h.splitTipo === "individual" ? "text-white/30" : h.racePos === 1 ? 'text-amber-400' : h.racePos <= 3 ? 'text-yellow-500' : h.isDnfOwnError ? 'text-red-500' : 'text-white'}`}>
-                                     {h.splitTipo === "individual" ? "N/D" : h.isDofOwnError || h.isDnfOwnError ? "DNF 💥" : `P${h.racePos}`}
+                                   <td className={`p-3 text-center font-bold ${h.splitTipo === "individual" ? "text-white/30" : esDnf ? "" : h.racePos === 1 ? 'text-amber-400' : h.racePos <= 3 ? 'text-yellow-500' : 'text-white'}`}>
+                                     {h.splitTipo === "individual" ? "N/D" : esDnf ? (
+                                       <span title="No terminó la carrera" className="inline-block rounded-sm border border-red-500/60 bg-red-500/20 px-2 py-0.5 text-[10px] font-black tracking-wider text-red-200">DNF</span>
+                                     ) : `P${h.racePos}`}
                                   </td>
-                                  <td className="p-3 text-center text-white font-bold text-sm bg-white/[0.02] tabular-nums">{h.points} pts</td>
+                                  <td className={`p-3 text-center font-bold text-sm bg-white/[0.02] tabular-nums ${esDnf ? "text-white/40" : "text-white"}`}>{h.points} pts</td>
                                   <td className="p-3">
                                      <div className="flex justify-center items-center">{h.isDotd ? <span className="bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded text-[8px] font-bold">Sí</span> : <span className="text-white/20 italic">-</span>}</div>
                                   </td>
                                 </tr>
-                              ))}
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>

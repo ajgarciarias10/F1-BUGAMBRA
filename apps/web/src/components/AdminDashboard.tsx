@@ -1,4 +1,4 @@
-﻿import React, { lazy, Suspense, useState, useEffect, useMemo } from "react";
+import React, { lazy, Suspense, useState, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { UserHeader } from "./Dashboards";
 import { useUsuarios, useSplits } from "../hooks/useData";
@@ -127,14 +127,16 @@ export function AdminDashboard() {
 
   // Form State
   const [results, setResults] = useState<Record<string, Partial<RaceResult>>>({});
+  // Pilotos marcados como «no corrió»: no se guardan en resultados (sin puntos, sin DNF,
+  // sin economía y el rating se arrastra intacto).
+  const [noCorrieron, setNoCorrieron] = useState<Set<string>>(new Set());
 
   // Real-time counts of positions to detect duplicates during editing
   const qualyCount = useMemo(() => {
     const counts: Record<number, number> = {};
     (Object.values(results) as Partial<RaceResult>[]).forEach(res => {
       const q = res.qualyPos;
-      const isPilotDnf = res.isDnfOwnError || false;
-      if (!isPilotDnf && q !== undefined && q !== null && typeof q === "number" && !isNaN(q) && q !== 99) {
+      if (q !== undefined && q !== null && typeof q === "number" && !isNaN(q) && q !== 99) {
         counts[q] = (counts[q] || 0) + 1;
       }
     });
@@ -257,11 +259,18 @@ export function AdminDashboard() {
           savedResults[res.pilotoId] = res;
         });
         setResults(savedResults);
+        const raceSequence = Number(circuito.numero_carrera ?? 1);
+        setNoCorrieron(new Set(
+          (split?.roster || [])
+            .filter((pilot: any) => canPilotParticipateInRace(pilot, raceSequence) && !savedResults[pilot.pilotoId])
+            .map((pilot: any) => pilot.pilotoId)
+        ));
       } else {
         setIsEditingFinished(false);
         setIsActaCerrada(false);
         setIsEconomiaProcesada(false);
         setResults({});
+        setNoCorrieron(new Set());
       }
     }
   }, [selectedSplitId, selectedCircuitoId, splits]);
@@ -696,11 +705,11 @@ export function AdminDashboard() {
     const selectedRace = currentSplit?.circuitos.find((race: any) => race.id === selectedCircuitoId);
     const selectedRaceSequence = Number(selectedRace?.numero_carrera ?? 1);
     const splitPilots = (currentSplit?.roster || []).filter((pilot: any) =>
-      canPilotParticipateInRace(pilot, selectedRaceSequence)
+      canPilotParticipateInRace(pilot, selectedRaceSequence) && !noCorrieron.has(pilot.pilotoId)
     );
 
     if (splitPilots.length === 0) {
-      setMsg("No hay pilotos registrados en este split.");
+      setMsg("No hay pilotos que hayan corrido esta carrera.");
       return;
     }
 
@@ -711,19 +720,19 @@ export function AdminDashboard() {
          const item = results[p.pilotoId] || {};
          const enteredQualy = typeof item.qualyPos === "number" ? item.qualyPos : parseInt(item.qualyPos as any);
          const enteredRace = typeof item.racePos === "number" ? item.racePos : parseInt(item.racePos as any);
+         const isDnf = item.isDnfOwnError === true || enteredRace === 99;
          if (isNaN(enteredQualy) || enteredQualy <= 0) {
            throw new Error(`Falta la posición de clasificación de ${p.nombre}.`);
          }
-         if (isNaN(enteredRace) || enteredRace <= 0) {
+         if (!isDnf && (isNaN(enteredRace) || enteredRace <= 0)) {
           throw new Error(`Falta la posición de carrera de ${p.nombre}.`);
         }
-        const isDnf = enteredRace === 99;
 
          return {
            pilotoId: p.pilotoId,
            pilotoNombre: p.nombre,
            qualyPos: enteredQualy,
-           racePos: enteredRace,
+           racePos: isDnf ? 99 : enteredRace,
            isDnfOwnError: isDnf,
            fastestLap: item.fastestLap === true,
            isClean: !isDnf && item.isClean !== false,
@@ -1343,9 +1352,11 @@ export function AdminDashboard() {
               <thead>
                 <tr className="text-[9px] text-white/30 uppercase tracking-[0.2em] font-mono border-b border-white/10 pb-2">
                    <th className="pb-2 pl-3 font-normal">Piloto</th>
+                   <th className="pb-2 text-center font-normal">No corrió</th>
                    <th className="pb-2 text-center font-normal">Qualy</th>
                    <th className="pb-2 text-center font-normal">V. rápida</th>
                    <th className="pb-2 text-center font-normal">Limpio</th>
+                   <th className="pb-2 text-center font-normal">DNF</th>
                    <th className="pb-2 font-normal">Race</th>
                 </tr>
               </thead>
@@ -1356,7 +1367,9 @@ export function AdminDashboard() {
                    const qPosVal = results[p.pilotoId]?.qualyPos;
                     const isQualyDuplicated = typeof qPosVal === "number" && qPosVal !== 99 && (qualyCount[qPosVal] || 0) > 1;
                   const rPosVal = results[p.pilotoId]?.racePos;
-                   const isRaceDuplicated = typeof rPosVal === "number" && rPosVal !== 99 && (raceCount[rPosVal] || 0) > 1;
+                   const isPilotDnf = results[p.pilotoId]?.isDnfOwnError === true || rPosVal === 99;
+                   const isRaceDuplicated = !isPilotDnf && typeof rPosVal === "number" && rPosVal !== 99 && (raceCount[rPosVal] || 0) > 1;
+                   const didNotRace = noCorrieron.has(p.pilotoId);
                   return (
                     <tr key={`pilot-row-${p.pilotoId}-${i}`} className="group border-b border-white/5 hover:bg-white/5 transition-colors">
                       <td className="py-2.5 pl-3">
@@ -1372,6 +1385,30 @@ export function AdminDashboard() {
                           </div>
                         </div>
                       </td>
+                      <td className="py-2.5 text-center">
+                        <input type="checkbox" checked={didNotRace} disabled={isActaCerrada} title="Marcar si el piloto no corrió esta carrera"
+                          className="w-4 h-4 accent-zinc-400 disabled:opacity-40"
+                          onChange={e => {
+                            const skip = e.target.checked;
+                            setNoCorrieron(prev => {
+                              const next = new Set(prev);
+                              if (skip) next.add(p.pilotoId); else next.delete(p.pilotoId);
+                              return next;
+                            });
+                            if (skip) {
+                              setResults(prev => {
+                                const { [p.pilotoId]: _removed, ...rest } = prev;
+                                return rest;
+                              });
+                            }
+                          }} />
+                      </td>
+                      {didNotRace ? (
+                        <td colSpan={5} className="py-2.5 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">
+                          No corrió · sin puntos ni cambios de rating
+                        </td>
+                      ) : (
+                      <>
                        <td className="py-2.5 text-center">
                          <input type="number" min="1" max="20" disabled={isActaCerrada}
                            value={qPosVal ?? ""} title={isQualyDuplicated ? "¡Posición de clasificación duplicada!" : qPosVal === 1 ? "Pole position" : undefined}
@@ -1387,11 +1424,30 @@ export function AdminDashboard() {
                            onChange={e => handleUpdate(p.pilotoId, "fastestLap", e.target.checked)} />
                        </td>
                        <td className="py-2.5 text-center">
-                         <input type="checkbox" checked={results[p.pilotoId]?.isClean !== false} disabled={isActaCerrada} title="Desmarcar si el piloto fue sancionado"
-                           className="w-4 h-4 accent-emerald-500"
+                         <input type="checkbox" checked={!isPilotDnf && results[p.pilotoId]?.isClean !== false} disabled={isActaCerrada || isPilotDnf} title="Desmarcar si el piloto fue sancionado"
+                           className="w-4 h-4 accent-emerald-500 disabled:opacity-40"
                            onChange={e => handleUpdate(p.pilotoId, "isClean", e.target.checked)} />
                        </td>
+                       <td className="py-2.5 text-center">
+                         <input type="checkbox" checked={isPilotDnf} disabled={isActaCerrada} title="Marcar si el piloto no terminó la carrera (DNF)"
+                           className="w-4 h-4 accent-red-600 disabled:opacity-40"
+                           onChange={e => {
+                             const dnf = e.target.checked;
+                             setResults(prev => ({
+                               ...prev,
+                               [p.pilotoId]: {
+                                 ...prev[p.pilotoId],
+                                 pilotoId: p.pilotoId,
+                                 isDnfOwnError: dnf,
+                                 racePos: dnf ? 99 : ("" as any),
+                               }
+                             }));
+                           }} />
+                       </td>
                        <td className="py-2.5">
+                        {isPilotDnf ? (
+                          <span className="inline-block w-12 rounded-sm border border-red-600/50 bg-red-600/10 px-2 py-1.5 text-center font-mono text-xs font-bold text-red-400">DNF</span>
+                        ) : (
                         <input
                           type="number"
                           min="1"
@@ -1409,7 +1465,10 @@ export function AdminDashboard() {
                             handleUpdate(p.pilotoId, "racePos", isNaN(val) ? "" : val);
                           }}
                         />
+                        )}
                       </td>
+                      </>
+                      )}
                     </tr>
                   );
                 })}
