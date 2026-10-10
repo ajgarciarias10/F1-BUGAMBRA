@@ -58,3 +58,26 @@ export function sumEconomyMarketTransactions<T extends { tipo: TipoTransaccion; 
     return total + (transaction.esIngreso ? amount : -amount);
   }, 0);
 }
+
+/** Net price and clause adjustments from ledger entries (pilot price or clause corrections). */
+export function sumClausePriceAdjustments<T extends {
+  tipo: TipoTransaccion | string;
+  cantidad?: number;
+  esIngreso?: boolean;
+  piloto?: string;
+  descripcion?: string;
+}>(transactions: readonly T[]): number {
+  return transactions.reduce((total, transaction) => {
+    const isClauseAdjustment = transaction.tipo === "ajuste" && (
+      Boolean(transaction.piloto) ||
+      Boolean(transaction.descripcion?.toLowerCase().includes("precio")) ||
+      Boolean(transaction.descripcion?.toLowerCase().includes("cláusula")) ||
+      Boolean(transaction.descripcion?.toLowerCase().includes("clausula"))
+    );
+    if (!isClauseAdjustment) return total;
+    const amount = Number(transaction.cantidad ?? 0);
+    if (!Number.isFinite(amount)) return total;
+    return total + (transaction.esIngreso ? amount : -amount);
+  }, 0);
+}
+

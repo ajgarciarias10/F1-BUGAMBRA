@@ -10,7 +10,7 @@ import {
 import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
 import { resolveTransferView, type TransferView } from "../utils/transferView";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
-import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
+import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, sumClausePriceAdjustments, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
 import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
 import { applyTeamEconomyCorrection } from "../services/adminMutationService";
 import { economyRules } from "../utils/economyRules";
@@ -67,6 +67,8 @@ interface TeamRow {
   ingresos: EconomyIncomeBreakdown;
   movimientos_mercado: number;
   asientos_mercado: number;
+  ajustes_clausulas: number;
+  asientos_clausulas: number;
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -228,6 +230,8 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           ingresos: { points: 0, pole: 0, fastestLap: 0, participation: 0, cleanTeam: 0, rivalry: 0, seasonPrize: 0 },
           movimientos_mercado: 0,
           asientos_mercado: 0,
+          ajustes_clausulas: 0,
+          asientos_clausulas: 0,
         });
         teamNameMap[teamDoc.id] = td.nombre || teamDoc.id;
       }
@@ -311,10 +315,17 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
       for (const team of newTeams) {
         const entries = incomeLedger.docs
           .map(entry => entry.data())
-          .filter(data => data.equipoId === team.id) as Array<{ tipo: any; cantidad?: number; esIngreso?: boolean }>;
+          .filter(data => data.equipoId === team.id) as Array<{ tipo: any; cantidad?: number; esIngreso?: boolean; piloto?: string; descripcion?: string }>;
         team.ingresos = sumEconomyIncomeTransactions(entries);
         team.movimientos_mercado = sumEconomyMarketTransactions(entries);
         team.asientos_mercado = entries.filter(entry => ["fichaje", "clausula", "subasta", "piloto_negativo"].includes(entry.tipo)).length;
+        team.ajustes_clausulas = sumClausePriceAdjustments(entries);
+        team.asientos_clausulas = entries.filter(entry => entry.tipo === "ajuste" && (
+          Boolean(entry.piloto) ||
+          Boolean(entry.descripcion?.toLowerCase().includes("precio")) ||
+          Boolean(entry.descripcion?.toLowerCase().includes("cláusula")) ||
+          Boolean(entry.descripcion?.toLowerCase().includes("clausula"))
+        )).length;
       }
 
       if (requestId !== loadRequestRef.current) return;
@@ -791,6 +802,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 <th className="py-3 px-4 text-left font-normal">Escudería</th>
                 <th className="py-3 px-4 text-right font-normal">Inicial</th>
                 <th className="py-3 px-4 text-right font-normal">Mercado (ledger)</th>
+                <th className="py-3 px-4 text-right font-normal text-amber-300/60">Ajuste cláusulas</th>
                 {ECONOMY_INCOME_SOURCES.map(source => (
                   <th key={source.key} className="py-3 px-4 text-right font-normal text-emerald-500/50">+ {source.label}</th>
                 ))}
@@ -834,6 +846,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                     <td className={`py-3 px-4 text-right font-black font-mono text-sm tabular-nums ${fichajes < 0 ? "text-[#e10600]" : "text-white/70"}`} title={t.asientos_mercado ? `${t.asientos_mercado} asientos de mercado` : "El ledger no tiene asientos de mercado para este equipo"}>
                       {t.asientos_mercado ? `${r1(fichajes)}M` : <span className="text-white/25 text-[9px]">Sin registro</span>}
                     </td>
+                    <td className={`py-3 px-4 text-right font-mono text-xs tabular-nums ${t.ajustes_clausulas < 0 ? "text-amber-400" : t.ajustes_clausulas > 0 ? "text-emerald-400" : "text-white/30"}`} title={t.asientos_clausulas ? `${t.asientos_clausulas} ajustes de cláusulas/precios` : "Sin ajustes de cláusulas"}>
+                      {t.ajustes_clausulas ? `${t.ajustes_clausulas > 0 ? "+" : ""}${r1(t.ajustes_clausulas)}M` : <span className="text-white/15">—</span>}
+                    </td>
                     {ECONOMY_INCOME_SOURCES.map(source => {
                       const amount = t.ingresos[source.key];
                       return <td key={source.key} className="py-3 px-4 text-right font-mono text-emerald-400/70 text-xs tabular-nums">
@@ -861,7 +876,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 );
               })}
               {teams.length === 0 && !loading && !loadError && (
-                <tr><td colSpan={7} className="py-8 text-center text-[10px] font-mono text-white/15 uppercase tracking-widest">Sin escuderías</td></tr>
+                <tr><td colSpan={13} className="py-8 text-center text-[10px] font-mono text-white/15 uppercase tracking-widest">Sin escuderías</td></tr>
               )}
             </tbody>
           </table>

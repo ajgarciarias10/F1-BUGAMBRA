@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { totalEconomyAdjustments, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, totalEconomyIncome } from "./economyIncomeBreakdown";
+import { totalEconomyAdjustments, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, totalEconomyIncome, sumClausePriceAdjustments } from "./economyIncomeBreakdown";
 
 test("separa cada origen de ingreso según el tipo de asiento del ledger", () => {
   const breakdown = sumEconomyIncomeTransactions([
@@ -51,3 +51,16 @@ test("muestra el mercado solo desde los movimientos reales del ledger", () => {
     { tipo: "ingreso_puntos", cantidad: 4, esIngreso: true },
   ]), -40.2);
 });
+
+test("suma ajustes por cláusulas y precios aislando ajustes manuales de saldo", () => {
+  const transactions = [
+    { tipo: "ajuste", cantidad: 21.2, esIngreso: false, piloto: "Carlos", descripcion: "Corrección de precio 0M → 21.2M" },
+    { tipo: "ajuste", cantidad: 21.2, esIngreso: false, piloto: "Dani", descripcion: "Corrección de precio 0M → 21.2M" },
+    { tipo: "ajuste", cantidad: 5, esIngreso: true, piloto: "Piloto X", descripcion: "Corrección de precio 15M → 10M" },
+    { tipo: "ajuste", cantidad: 85, esIngreso: false, descripcion: "Ajuste administrativo de saldo (-85M)" },
+    { tipo: "fichaje", cantidad: 30, esIngreso: false },
+  ];
+  // -21.2 - 21.2 + 5 = -37.4 (ignoring the 85 manual adjustment and 30 transfer)
+  assert.equal(sumClausePriceAdjustments(transactions), -37.4);
+});
+
