@@ -7,13 +7,14 @@ import {
   ajustarPrecioCompraPiloto,
   mantenerInicialDe, clausulaInicialDe,
 } from "../services/economyService";
-import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
+import { Loader2, Trash2, RefreshCw, ArrowRightLeft, FileText } from "lucide-react";
 import { resolveTransferView, type TransferView } from "../utils/transferView";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
 import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, sumClausePriceAdjustments, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
 import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
 import { applyTeamEconomyCorrection } from "../services/adminMutationService";
 import { economyRules } from "../utils/economyRules";
+import { FiaFinancialReportModal } from "./FiaFinancialReportModal";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,8 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const [processLog, setProcessLog] = useState<string[]>([]);
   const selectedEconomyRules = economyRules(splits.find((split: any) => split.id === selectedSplitId)?.economia_config);
   const [viewMode, setViewMode] = useState<"precios" | "rendimiento">("precios");
+  const [fiaReportOpen, setFiaReportOpen] = useState(false);
+  const [rawLedgerEntries, setRawLedgerEntries] = useState<any[]>([]);
   const loadRequestRef = useRef(0);
 
   // Modal de fichaje
@@ -329,6 +332,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
       }
 
       if (requestId !== loadRequestRef.current) return;
+      setRawLedgerEntries(incomeLedger.docs.map(entry => ({ id: entry.id, ...entry.data() })));
       setGlobalPilots(
         Object.entries(pilotGlobalMap)
           .map(([id, data]) => ({ id, nombre: (data as any).nombre || id }))
@@ -730,6 +734,11 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           <button onClick={openAltaModal} disabled={loading || altaCandidates.length === 0 || teams.length === 0}
             className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-400/60 hover:text-emerald-300 transition-colors disabled:opacity-30">
             + Añadir piloto
+          </button>
+          <button onClick={() => setFiaReportOpen(true)} disabled={loading || teams.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-amber-500/10 border border-amber-500/30 text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 transition-colors disabled:opacity-30">
+            <FileText className="w-3 h-3" />
+            Boletín FIA (PDF)
           </button>
 
         </div>
@@ -1515,6 +1524,16 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           </div>
         </div>
       )}
+
+      <FiaFinancialReportModal
+        isOpen={fiaReportOpen}
+        onClose={() => setFiaReportOpen(false)}
+        splitId={selectedSplitId}
+        splitName={splits.find((s: any) => s.id === selectedSplitId)?.nombre || selectedSplitId}
+        teams={teams}
+        pilots={pilots}
+        ledgerEntries={rawLedgerEntries}
+      />
     </div>
   );
 }
