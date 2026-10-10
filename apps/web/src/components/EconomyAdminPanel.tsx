@@ -3,7 +3,7 @@ import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBa
 import { EconomyRulesPanel } from "./EconomyRulesPanel";
 import { db } from "../services/firebase";
 import {
-  procesarEconomiaCarrera, revertirEconomiaCarrera, ficharPiloto,
+  procesarEconomiaCarrera, ficharPiloto,
   ajustarPrecioCompraPiloto,
   mantenerInicialDe, clausulaInicialDe,
 } from "../services/economyService";
@@ -445,24 +445,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     setProcessLog([result.message]);
   }
 
-  async function resetEconomia() {
-    if (!confirm(`¿Revertir las liquidaciones de carreras de ${selectedSplitId}, empezando por la última? Los fichajes y ajustes se conservan.`)) return;
-    setLoading(true);
-    setProcessLog([]);
-    try {
-      for (const circuit of [...circuits].reverse().filter(c => c.economia_procesada)) {
-        const result = await revertirEconomiaCarrera(selectedSplitId, circuit.id);
-        if (!result.ok) throw new Error(result.message);
-        setProcessLog(prev => [...prev, result.message]);
-      }
-      await loadData(selectedSplitId);
-    } catch (err: any) {
-      setProcessLog([`Error: ${err.message}`]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function savePrecio(pilot: PilotRow, rawVal: string) {
     const newPrecio = Number(rawVal.replace(",", "."));
     if (!rawVal.trim() || !Number.isFinite(newPrecio)) return;
@@ -789,10 +771,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           <button onClick={openAltaModal} disabled={loading || altaCandidates.length === 0 || teams.length === 0}
             className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-400/60 hover:text-emerald-300 transition-colors disabled:opacity-30">
             + Añadir piloto
-          </button>
-          <button onClick={resetEconomia} disabled={loading}
-            className="text-[9px] font-mono uppercase tracking-[0.3em] text-[#e10600]/50 hover:text-[#e10600] transition-colors disabled:opacity-30">
-            Reset economía
           </button>
         </div>
       </div>
