@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { totalEconomyAdjustments, sumEconomyIncomeTransactions, totalEconomyIncome } from "./economyIncomeBreakdown";
+import { totalEconomyAdjustments, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, totalEconomyIncome } from "./economyIncomeBreakdown";
 
 test("separa cada origen de ingreso según el tipo de asiento del ledger", () => {
   const breakdown = sumEconomyIncomeTransactions([
@@ -42,4 +42,12 @@ test("mantiene los ajustes de saldo separados del desglose de ingresos de carrer
     { tipo: "ajuste", cantidad: 4, esIngreso: false },
     { tipo: "fichaje", cantidad: 90, esIngreso: false },
   ]), 6);
+});
+
+test("muestra el mercado solo desde los movimientos reales del ledger", () => {
+  assert.equal(sumEconomyMarketTransactions([
+    { tipo: "fichaje", cantidad: 50.2, esIngreso: false },
+    { tipo: "clausula", cantidad: 10, esIngreso: true },
+    { tipo: "ingreso_puntos", cantidad: 4, esIngreso: true },
+  ]), -40.2);
 });

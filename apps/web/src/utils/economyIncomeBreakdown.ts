@@ -46,3 +46,15 @@ export function totalEconomyAdjustments<T extends { tipo: TipoTransaccion; canti
     return total + (transaction.esIngreso ? amount : -amount);
   }, 0);
 }
+
+const MARKET_TYPES: readonly TipoTransaccion[] = ["fichaje", "clausula", "subasta", "piloto_negativo"];
+
+/** Net market movements from actual ledger entries; never infer them from balances. */
+export function sumEconomyMarketTransactions<T extends { tipo: TipoTransaccion; cantidad?: number; esIngreso?: boolean }>(transactions: readonly T[]): number {
+  return transactions.reduce((total, transaction) => {
+    if (!MARKET_TYPES.includes(transaction.tipo)) return total;
+    const amount = Number(transaction.cantidad ?? 0);
+    if (!Number.isFinite(amount)) return total;
+    return total + (transaction.esIngreso ? amount : -amount);
+  }, 0);
+}
