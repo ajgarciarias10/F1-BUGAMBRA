@@ -3,10 +3,8 @@ import {
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import { auth } from "./auth";
-import { revertirEconomiaCarrera } from "./economyService";
 import { economyRules, pointsForRaceResult } from "../utils/economyRules";
 import { evolucionOVRSplit, mediaPuntosCarrera, OVR_DEBUT } from "../utils/splitResolver";
-import { raceRatingFailureMessage, RaceRatingRecalculationError } from "../utils/racePostProcessing";
 import { buildHistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
 import { getPilotDayCandidates, pilotDayCloseError, pilotDayOpenError, pilotDayVoteError } from "../utils/pilotDayVoting";
 import type { RaceResult, RosterEntry } from "../types";
@@ -20,6 +18,15 @@ export async function processRace(
   splitId: string,
   circuitoId: string,
   results: RaceResult[]
+) {
+  return saveRaceResults(splitId, circuitoId, results, false);
+}
+
+async function saveRaceResults(
+  splitId: string,
+  circuitoId: string,
+  results: RaceResult[],
+  reset: boolean,
 ) {
   try {
     // The correction must not leave already liquidated later races based on stale results.
@@ -59,6 +66,7 @@ export async function processRace(
         Promise.all(calendarRefs.map(ref => tx.get(ref))),
       ]);
       if (!splitDoc.exists()) throw new Error("El split ya no existe.");
+      if (!circuitDoc.exists()) throw new Error("La carrera ya no existe.");
       const scoringRules = economyRules(splitDoc.data()?.economia_config);
       const correctionPlan = buildHistoricalRaceCorrectionPlan(
         calendarDocs.filter(snapshot => snapshot.exists()).map(snapshot => ({
@@ -75,7 +83,7 @@ export async function processRace(
           .join(", ");
         throw new Error(`No se pueden guardar estos resultados mientras haya economías posteriores procesadas (${laterNames}). Revierte esas carreras de más nueva a más antigua y vuelve a intentarlo.`);
       }
-      if (circuitDoc.data()?.acta_cerrada) {
+      if (!reset && circuitDoc.data()?.acta_cerrada) {
         throw new Error("El acta de esta carrera está CERRADA y no puede modificarse.");
       }
       if (circuitDoc.data()?.economia_procesada) {
@@ -86,9 +94,10 @@ export async function processRace(
       const isCorrection = prevResults.length > 0;
 
       const pilotDocEntries = Object.entries(pilotDocRefs);
-      const [pilotTxDocs, equipoTxDocs] = await Promise.all([
+      const [pilotTxDocs, equipoTxDocs, flatPilotDocs] = await Promise.all([
         Promise.all(pilotDocEntries.map(([, ref]) => tx.get(ref))),
         Promise.all(equiposSnap.docs.map(d => tx.get(d.ref))),
+        Promise.all(pilotDocEntries.map(([id]) => tx.get(doc(db, `splits/${splitId}/roster`, id)))),
       ]);
 
       const rosterData: Record<string, RosterEntry> = {};
@@ -199,19 +208,38 @@ export async function processRace(
         if (res?.equipoId) newTeamPoints[res.equipoId] = (newTeamPoints[res.equipoId] ?? 0) + pts;
       }
 
+      // Ratings depend on every result in the split. Calculate from the same fresh
+      // transaction snapshot, replacing this race before committing any derived values.
+      const ratingBlock = bloqueDeCircuitos(calendarDocs.filter(snapshot => snapshot.exists()).map(snapshot => ({
+        id: snapshot.id,
+        ...snapshot.data(),
+        ...(snapshot.id === circuitoId ? { completado: !reset, resultados: enrichedResults } : {}),
+      })), scoringRules);
+      const ratingUpdates = new Map<string, Record<string, unknown>>();
+      for (const [pilotId, roster] of Object.entries(rosterData)) {
+        if (!roster) throw new Error(`La ficha de ${pilotId} ha cambiado. Recarga antes de guardar.`);
+        const base = Number(roster.rating_base) > 0 ? Number(roster.rating_base)
+          : Number(roster.rating_piloto) > 0 ? Number(roster.rating_piloto) : OVR_DEBUT;
+        ratingUpdates.set(pilotId, actualizacionDeRating(base, evolucionDePiloto(pilotId, base, ratingBlock)));
+      }
+
       // ── Escrituras ──────────────────────────────────────────────────────────
 
       // Stats de pilotos en el doc anidado del split
-      for (const [pilotoId, updates] of Object.entries(rosterUpdates)) {
+      for (const [pilotoId, ratings] of ratingUpdates) {
         if (pilotDocRefs[pilotoId]) {
-          tx.update(pilotDocRefs[pilotoId], {
+          const updates = rosterUpdates[pilotoId];
+          const update = { ...ratings, ...(updates ? {
             puntos_piloto:    updates.puntos_piloto    ?? 0,
             victorias:        updates.victorias        ?? 0,
             podios:           updates.podios           ?? 0,
             poles:            updates.poles            ?? 0,
             dnfs:             updates.dnfs             ?? 0,
             carreras_limpias: updates.carreras_limpias ?? 0,
-          });
+          } : {}) };
+          tx.update(pilotDocRefs[pilotoId], update);
+          const flat = flatPilotDocs.find(snapshot => snapshot.id === pilotoId);
+          if (flat?.exists()) tx.update(flat.ref, update);
         }
       }
 
@@ -225,7 +253,11 @@ export async function processRace(
         });
       }
 
-      tx.update(circuitoRef, { completado: true, resultados: enrichedResults });
+      tx.update(circuitoRef, {
+        completado: !reset,
+        resultados: enrichedResults,
+        ...(reset ? { acta_cerrada: false } : {}),
+      });
       const pilotStats = ["puntos_piloto", "victorias", "podios", "poles", "dnfs", "carreras_limpias"] as const;
       const changedPilots = Object.entries(rosterUpdates).map(([pilotoId, after]) => ({
         pilotoId,
@@ -241,7 +273,7 @@ export async function processRace(
           + (newTeamPoints[equipoId] ?? 0)),
       }));
       tx.set(auditRef, {
-        action: isCorrection ? "race_results_corrected" : "race_results_saved",
+        action: reset ? "race_results_reverted" : isCorrection ? "race_results_corrected" : "race_results_saved",
         summary: `${isCorrection ? "Corrección" : "Guardado"} de resultados: ${circuitDoc.data()?.nombre || circuitoId}`,
         splitId,
         circuitoId,
@@ -249,26 +281,31 @@ export async function processRace(
         actorUid: auth.currentUser?.uid ?? null,
         createdAt: serverTimestamp(),
         before: {
+          completado: circuitDoc.data()?.completado ?? false,
+          acta_cerrada: circuitDoc.data()?.acta_cerrada ?? false,
           resultados: prevResults,
           pilotos: changedPilots.map(({ pilotoId, before }) => ({ pilotoId, stats: before })),
           constructores: changedTeams.map(({ equipoId, before }) => ({ equipoId, puntos: before })),
+          ratings: [...ratingUpdates.keys()].map(pilotoId => ({
+            pilotoId,
+            rating_base: rosterData[pilotoId].rating_base ?? null,
+            rating_exacto: rosterData[pilotoId].rating_exacto ?? null,
+            rating_piloto: rosterData[pilotoId].rating_piloto ?? null,
+            historial_rating: rosterData[pilotoId].historial_rating ?? {},
+          })),
         },
         after: {
+          completado: !reset,
+          acta_cerrada: reset ? false : (circuitDoc.data()?.acta_cerrada ?? false),
           resultados: enrichedResults,
           pilotos: changedPilots.map(({ pilotoId, after }) => ({ pilotoId, stats: after })),
           constructores: changedTeams.map(({ equipoId, after }) => ({ equipoId, puntos: after })),
+          ratings: [...ratingUpdates].map(([pilotoId, rating]) => ({ pilotoId, ...rating })),
         },
       });
     });
 
-    // El OVR se replega desde rating_base con el bloque entero, así que tiene que
-    // esperar a que la carrera esté escrita. Si falla, los puntos ya están salvados:
-    // el rating se puede rehacer luego desde el panel.
-    const ratingResult = await recalcSplitRatings(splitId);
-    const ratingFailure = raceRatingFailureMessage(splitId, ratingResult.message);
-    if (ratingFailure) throw new RaceRatingRecalculationError(ratingFailure);
   } catch (error) {
-    if (error instanceof RaceRatingRecalculationError) throw error;
     handleFirestoreError(error, OperationType.UPDATE, `splits/${splitId}/circuitos/${circuitoId}`);
   }
 }
@@ -426,8 +463,11 @@ async function leerBloque(splitId: string) {
   const splitSnap = await getDoc(doc(db, "splits", splitId));
   const scoringRules = economyRules(splitSnap.data()?.economia_config);
   const circSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
-  return circSnap.docs
-    .map(d => ({ id: d.id, ...(d.data() as any) }))
+  return bloqueDeCircuitos(circSnap.docs.map(d => ({ id: d.id, ...d.data() })), scoringRules);
+}
+
+function bloqueDeCircuitos(circuits: Array<{ id: string; [key: string]: any }>, scoringRules: ReturnType<typeof economyRules>) {
+  return circuits
     .filter(c => c.completado && Array.isArray(c.resultados) && c.resultados.length > 0)
     .sort((a, b) => {
       if (a.numero_carrera && b.numero_carrera) return a.numero_carrera - b.numero_carrera;
@@ -621,36 +661,15 @@ export async function recalcSplitPoints(
 }
 
 // ─── DESHACER UNA CARRERA POR COMPLETO ───────────────────────────────────────
-// Para probar una carrera y poder tirarla atrás entera: economía (si se procesó), puntos,
-// rating y el estado del acta. No hace falta rehacer a mano la resta de puntos/rating —
-// basta con vaciar los resultados de este circuito y recalcSplitPoints los rehace desde
-// cero a partir de lo que queda, exactamente igual que si esta carrera no se hubiera
-// disputado.
+// Economy reversal is a separate atomic operation. Once unpaid, reset results,
+// points, ratings and act state together; never leave a half-reset race on failure.
 export async function revertirCarreraCompleta(
   splitId: string,
   circuitoId: string,
 ): Promise<{ ok: boolean; message: string }> {
   try {
-    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
-    const snap = await getDoc(circuitoRef);
-    if (!snap.exists()) return { ok: false, message: "Circuito no encontrado." };
-    const data = snap.data() as any;
-
-    const pasos: string[] = [];
-
-    if (data.economia_procesada) {
-      const economia = await revertirEconomiaCarrera(splitId, circuitoId);
-      if (!economia.ok) return economia;
-      pasos.push(economia.message);
-    }
-
-    await updateDoc(circuitoRef, { resultados: [], completado: false, acta_cerrada: false });
-    pasos.push("Resultados y acta reiniciados.");
-
-    const recalculo = await recalcSplitPoints(splitId);
-    pasos.push(recalculo.message);
-
-    return { ok: true, message: pasos.join(" ") };
+    await saveRaceResults(splitId, circuitoId, [], true);
+    return { ok: true, message: "Resultados, puntos, rating y acta reiniciados en una sola operación." };
   } catch (error: any) {
     return { ok: false, message: `Error al deshacer la carrera: ${error.message}` };
   }

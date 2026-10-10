@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, updateDoc, writeBatch, runTransaction } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, updateDoc, writeBatch, runTransaction } from "firebase/firestore";
 import { db } from "./firebase";
 import { clausulaInicialDe, mantenerInicialDe, procesarPremiosCierreSplit } from "./economyService";
 import { OVR_DEBUT } from "../utils/splitResolver";
@@ -283,7 +283,9 @@ export async function crearSplit(
     if (!config.splitId) return { ok: false, message: "Falta el identificador del split.", avisos };
     if (config.circuitos.length === 0) return { ok: false, message: "El split necesita al menos un circuito.", avisos };
     const targetSplit = await getDoc(doc(db, "splits", config.splitId));
-    const priceRules = economyRules(targetSplit.data()?.economia_config);
+    if (targetSplit.exists()) throw new Error("Ese split ya existe. Crear un split nunca sustituye sus saldos, pilotos o carreras.");
+    const anteriorSnap = config.splitAnteriorId ? await getDoc(doc(db, "splits", config.splitAnteriorId)) : null;
+    const priceRules = economyRules((anteriorSnap?.data() as any)?.economia_config);
 
     const anterior = config.splitAnteriorId
       ? await leerCierreDeSplit(config.splitAnteriorId)
@@ -297,17 +299,17 @@ export async function crearSplit(
     anterior.equipos.filter(e => !e.conciliado).forEach(e =>
       avisos.push(`${e.nombre}: el split anterior no tiene cierre conciliado, se hereda su presupuesto vivo (${e.saldoCierre}M).`));
 
-    // 1. Vaciar lo que hubiera en el split destino.
-    const equiposActuales = await getDocs(collection(db, `splits/${config.splitId}/equipos`));
-    for (const equipoDoc of equiposActuales.docs) {
-      const pilotosSnap = await getDocs(collection(db, `splits/${config.splitId}/equipos/${equipoDoc.id}/pilotos`));
-      for (const pilotDoc of pilotosSnap.docs) await deleteDoc(pilotDoc.ref);
+    // Refuse orphaned destinations too: creation must never erase existing history.
+    const [equiposActuales, circuitosActuales] = await Promise.all([
+      getDocs(collection(db, `splits/${config.splitId}/equipos`)),
+      getDocs(collection(db, `splits/${config.splitId}/circuitos`)),
+    ]);
+    if (equiposActuales.size || equiposActuales.docs.length || circuitosActuales.size || circuitosActuales.docs.length) {
+      throw new Error("El destino ya contiene datos. Revísalos antes de crear un split con ese identificador.");
     }
-    const circuitosActuales = await getDocs(collection(db, `splits/${config.splitId}/circuitos`));
-    for (const circuitoDoc of circuitosActuales.docs) await deleteDoc(circuitoDoc.ref);
-    add(`${config.splitId} vaciado: ${equiposActuales.docs.length} escuderías y ${circuitosActuales.docs.length} circuitos.`);
-
-    const batch = writeBatch(db);
+    // Prepare writes, then create under a transaction lock on the split document.
+    const writes: Array<{ ref: any; data: any; options?: any }> = [];
+    const batch = { set: (ref: any, data: any, options?: any) => { writes.push({ ref, data, options }); } };
 
     // 2. Movimiento de caja del mercado ya cerrado. El dinero de una cláusula se retira
     //    del sistema, así que solo paga el comprador.
@@ -464,13 +466,20 @@ export async function crearSplit(
       temporada_iniciada: false,
     }, { merge: true });
 
-    await batch.commit();
-
-    // 7. Cerrar el anterior, si se pidió.
-    if (config.cerrarAnterior && config.splitAnteriorId) {
-      await updateDoc(doc(db, "splits", config.splitAnteriorId), { completado: true, activo: false, fichajes_abiertos: false });
-      add(`${config.splitAnteriorId} cerrado.`);
-    }
+    await runTransaction(db, async transaction => {
+      const destinationRef = doc(db, "splits", config.splitId);
+      const destination = await transaction.get(destinationRef);
+      const previousRef = config.cerrarAnterior && config.splitAnteriorId ? doc(db, "splits", config.splitAnteriorId) : null;
+      const previous = previousRef ? await transaction.get(previousRef) : null;
+      if (destination.exists()) throw new Error("El split ya fue creado por otra operación. No se sustituyó ningún dato.");
+      if (previousRef && !previous?.exists()) throw new Error("El split de origen ya no existe.");
+      for (const write of writes) {
+        if (write.options) transaction.set(write.ref, write.data, write.options);
+        else transaction.set(write.ref, write.data);
+      }
+      if (previousRef) transaction.update(previousRef, { completado: true, activo: false, fichajes_abiertos: false });
+    });
+    if (config.cerrarAnterior && config.splitAnteriorId) add(`${config.splitAnteriorId} cerrado.`);
 
     add(`✓ ${config.nombre}: ${anterior.equipos.length} escuderías, ${config.circuitos.length} carreras.`);
     if (fichados.length) { add(`Operaciones cerradas: ${fichados.length}`); fichados.forEach(l => add(`  ${l}`)); }

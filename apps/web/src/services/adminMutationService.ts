@@ -5,10 +5,11 @@ import {
   clausulaInicialDe,
   mantenerInicialDe,
   precioPilotoEnCarrera,
+  historialPreciosTrasCorreccion,
 } from "./economyService";
 import { previsualizarCorreccionEconomica } from "../utils/presupuesto";
 import { economyRules } from "../utils/economyRules";
-import { PRE_HUNGARY_RECONCILIATION, validatePreHungaryPlan } from "../utils/preHungaryReconciliation";
+import { preparePurchaseCorrections, writePurchaseCorrections } from "./purchaseCorrection";
 
 type AuditedMutation = {
   ref: DocumentReference;
@@ -230,6 +231,10 @@ export async function applyTeamEconomyCorrection(input: TeamEconomyCorrectionInp
       };
     });
 
+    const purchasePlan = await preparePurchaseCorrections(transaction, splitId, teamId, priceChanges.map((change, index) => ({
+      pilotId: change.pilotId, pilot: pilotSnaps[index].data()!, oldPrice: beforePilots[index].price, newPrice: change.newPrice,
+    })));
+    writePurchaseCorrections(transaction, splitId, operationId, purchasePlan, reason.trim());
     transaction.update(teamRef, { presupuesto: newBalance });
     pilotSnaps.forEach((snap, index) => {
       const change = priceChanges[index];
@@ -248,6 +253,7 @@ export async function applyTeamEconomyCorrection(input: TeamEconomyCorrectionInp
         precio_ajuste_revision: revision,
       };
       if (pilot.clausula_manual != null) update.clausula_sin_ajuste = currentPrices.clausula;
+      Object.assign(update, historialPreciosTrasCorreccion(pilot, change.newPrice, calendar, priceRules));
       transaction.update(snap.ref, update);
     });
 
@@ -315,75 +321,3 @@ export async function applyTeamEconomyCorrection(input: TeamEconomyCorrectionInp
   });
 }
 
-/** Temporary, audited, idempotent balance reconciliation for the Split 3 Hungary test. */
-export async function applyPreHungaryReconciliation(expectedBalances: Record<string, number>) {
-  const plan = validatePreHungaryPlan();
-  const { splitId, raceId, operationId, source } = PRE_HUNGARY_RECONCILIATION;
-  const splitRef = doc(db, "splits", splitId);
-  const raceRef = doc(db, `splits/${splitId}/circuitos`, raceId);
-  const markerRef = doc(db, `splits/${splitId}/adminOperations`, operationId);
-  const auditRef = doc(db, "admin_audit", operationId);
-  const teamRefs = plan.map(team => doc(db, `splits/${splitId}/equipos`, team.id));
-  const ledgerRefs = plan.map(team => doc(db, "transacciones", `${operationId}_${team.id}`));
-
-  return runTransaction(db, async transaction => {
-    const marker = await transaction.get(markerRef);
-    if (marker.exists()) return { applied: false as const, message: "La conciliación pre-Hungría ya se aplicó." };
-
-    const [splitSnap, raceSnap, teamSnaps, ledgerSnaps] = await Promise.all([
-      transaction.get(splitRef), transaction.get(raceRef),
-      Promise.all(teamRefs.map(ref => transaction.get(ref))),
-      Promise.all(ledgerRefs.map(ref => transaction.get(ref))),
-    ]);
-    if (!splitSnap.exists()) throw new Error("No existe Split 3.");
-    if (!raceSnap.exists()) throw new Error("No existe la carrera de Hungría en Split 3.");
-    if (raceSnap.data()?.economia_procesada === true) {
-      throw new Error("Hungría ya tiene la economía liquidada. Revierte esa liquidación antes de conciliar el saldo pre-carrera.");
-    }
-    if (teamSnaps.some(snap => !snap.exists())) throw new Error("Falta una escudería del plan. No se modificó ningún saldo.");
-    if (ledgerSnaps.some(snap => snap.exists())) throw new Error("Hay movimientos previos con el identificador de esta conciliación. Revisa el ledger antes de continuar.");
-
-    const beforeAfter = plan.map((team, index) => {
-      const data = teamSnaps[index].data()!;
-      const current = data.presupuesto;
-      const opening = data.presupuesto_inicial;
-      if (typeof current !== "number" || !Number.isFinite(current)) {
-        throw new Error(`El saldo de ${team.name} no es válido; no se modificó ningún equipo.`);
-      }
-      if (typeof opening !== "number" || Math.round(opening * 10) !== Math.round(team.opening * 10)) {
-        throw new Error(`El presupuesto inicial de ${team.name} cambió respecto al Excel revisado. No se aplicó la conciliación.`);
-      }
-      const expected = expectedBalances[team.id];
-      if (!Number.isFinite(expected) || Math.round(current * 10) !== Math.round(expected * 10)) {
-        throw new Error(`El saldo actual de ${team.name} cambió desde la vista previa. Recarga y vuelve a revisar.`);
-      }
-      return { id: team.id, name: team.name, before: current, after: team.target, delta: Math.round((team.target - current) * 10) / 10 };
-    });
-
-    for (const [index, balance] of beforeAfter.entries()) {
-      transaction.update(teamRefs[index], { presupuesto: balance.after });
-      if (balance.delta !== 0) transaction.set(ledgerRefs[index], {
-        splitId, equipoId: balance.id, equipo: balance.name, tipo: "ajuste",
-        cantidad: Math.abs(balance.delta), esIngreso: balance.delta > 0,
-        fecha: serverTimestamp(), descripcion: `Conciliación temporal del saldo pre-Hungría · ${source}`,
-        conciliacionId: operationId, saldoAntes: balance.before, saldoDespues: balance.after,
-      });
-    }
-    transaction.set(markerRef, {
-      tipo: "conciliacion_pre_hungria", splitId, raceId, source,
-      balances: beforeAfter, actorUid: auth.currentUser?.uid ?? null, createdAt: serverTimestamp(),
-    });
-    transaction.set(auditRef, {
-      action: "economy.pre_hungary_reconciliation", target: splitId, summary: source,
-      beforeAfter, actorUid: auth.currentUser?.uid ?? null, createdAt: serverTimestamp(),
-    });
-    const summary = beforeAfter
-      .map(balance => `${balance.name} ${balance.before.toFixed(1)}→${balance.after.toFixed(1)}M (${balance.delta > 0 ? "+" : ""}${balance.delta.toFixed(1)}M)`)
-      .join(" · ");
-    return {
-      applied: true as const,
-      message: `Conciliación pre-Hungría aplicada y auditada: ${summary}.`,
-      balances: beforeAfter,
-    };
-  });
-}

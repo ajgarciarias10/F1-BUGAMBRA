@@ -6,6 +6,7 @@ import { db } from "./firebase";
 import type { TipoTransaccion } from "../types";
 import { DEFAULT_ECONOMY_RULES, economyRules, ordenarPorClasificacion, pointsForRaceResult } from "../utils/economyRules";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
+import { preparePurchaseCorrections, writePurchaseCorrections } from "./purchaseCorrection";
 
 // ─── CONSTANTES ECONÓMICAS ────────────────────────────────────────────────────
 
@@ -102,6 +103,30 @@ export function precioPilotoEnCarrera(
   };
 }
 
+/** Keep every rollback snapshot consistent with a corrected purchase price. */
+export function historialPreciosTrasCorreccion(
+  pilot: Record<string, any>, newPrice: number, calendar: Array<{ id: string }>,
+  rules: Parameters<typeof economyRules>[0],
+): Record<string, unknown> {
+  const updates: Record<string, unknown> = {};
+  calendar.forEach((race, index) => {
+    const entry = pilot.historial_precios?.[race.id];
+    if (!entry || entry.congelado) return;
+    const current = precioPilotoEnCarrera(newPrice, index, calendar.length, rules);
+    const previous = precioPilotoEnCarrera(newPrice, Math.max(0, index - 1), calendar.length, rules);
+    updates[`historial_precios.${race.id}`] = {
+      ...entry, mantener: current.mantener, clausula: pilot.clausula_manual ?? current.clausula,
+      anterior: {
+        ...entry.anterior, mantener_actual: current.mantener,
+        clausula_actual: pilot.clausula_manual ?? current.clausula,
+        precio_carrera_anterior: previous.mantener,
+        ...(pilot.clausula_manual != null ? { clausula_sin_ajuste: current.clausula } : {}),
+      },
+    };
+  });
+  return updates;
+}
+
 // Serie completa del bloque, para los cargadores que escriben un split ya disputado.
 export function curvaPreciosBloque(
   precioCompra: number,
@@ -184,8 +209,6 @@ export async function ficharPiloto(params: {
     const teams = await getDocs(collection(db, `splits/${splitId}/equipos`));
     const locationRefs = [...new Set([...teams.docs.map(d => d.id), "agente_libre", teamId])]
       .map(id => doc(db, `splits/${splitId}/equipos/${id}/pilotos`, pilotoId));
-    const rosterBefore = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
-    const activeRosterCount = rosterBefore.docs.filter(pilot => pilot.data().participa_hasta == null).length;
     const operationRef = doc(collection(db, `splits/${splitId}/transfers`));
     let appliedValuation: { mantener: number; clausula: number } | null = null;
     await runTransaction(db, async transaction => {
@@ -215,6 +238,10 @@ export async function ficharPiloto(params: {
     if (current?.equipoId === teamId && !room) throw new Error("El piloto ya pertenece a esta escudería.");
     if (tipo === "fichaje" && current && current.equipoId !== "agente_libre") throw new Error("El piloto ya tiene equipo; registra una cláusula o un pacto, no otra alta libre.");
     if (current?.data.pending_equipoId) throw new Error("Deshaz primero el pacto pendiente del piloto.");
+    // Requery on every transaction retry. All signings write the team document,
+    // so a concurrent signing invalidates this attempt and refreshes the roster.
+    const rosterNow = await getDocs(collection(db, `splits/${splitId}/equipos/${teamId}/pilotos`));
+    const activeRosterCount = rosterNow.docs.filter(pilot => pilot.data().participa_hasta == null).length;
     const pilotAlreadyOccupiesSlot = current?.equipoId === teamId && current.data.participa_hasta == null;
     const slots = Number(room?.data()?.plazas_por_equipo ?? 4);
     if (!pilotAlreadyOccupiesSlot && activeRosterCount >= slots) throw new Error("La plantilla de la escudería está completa.");
@@ -341,7 +368,12 @@ export async function ajustarPrecioCompraPiloto(params: {
 
   try {
     const circuitsSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
-    const calendar = circuitsSnap.docs.map(circuit => ({
+    const calendarRefs = circuitsSnap.docs.map(circuit => circuit.ref);
+    const pilotRef = doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotId);
+    const teamRef = doc(db, `splits/${splitId}/equipos`, teamId);
+    const outcome = await runTransaction(db, async transaction => {
+    const circuits = await Promise.all(calendarRefs.map(ref => transaction.get(ref)));
+    const calendar = circuits.map(circuit => ({
       id: circuit.id,
       data: circuit.data() as any,
       order: Number((circuit.data() as any).numero_carrera ?? 0),
@@ -353,17 +385,14 @@ export async function ajustarPrecioCompraPiloto(params: {
       const fb = b.data.fecha?.toMillis?.() ?? 0;
       return fa !== fb ? fa - fb : a.id.localeCompare(b.id);
     });
-    if (!calendar.length) return { ok: false, message: "No se puede corregir el precio: este split no tiene carreras configuradas." };
+    if (!calendar.length) throw new Error("No se puede corregir el precio: este split no tiene carreras configuradas.");
     const firstUnprocessed = calendar.findIndex(circuit => !circuit.data.economia_procesada);
     if (firstUnprocessed >= 0 && calendar.slice(firstUnprocessed + 1).some(circuit => circuit.data.economia_procesada)) {
-      return { ok: false, message: "Hay carreras posteriores procesadas. Revierte primero la economía desde la última carrera." };
+      throw new Error("Hay carreras posteriores procesadas. Revierte primero la economía desde la última carrera.");
     }
     const nextRaceIndex = firstUnprocessed < 0 ? Math.max(0, calendar.length - 1) : firstUnprocessed;
     const previousRaceIndex = firstUnprocessed < 0 ? nextRaceIndex : nextRaceIndex - 1;
 
-    const pilotRef = doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotId);
-    const teamRef = doc(db, `splits/${splitId}/equipos`, teamId);
-    const outcome = await runTransaction(db, async transaction => {
       const [pilotSnap, teamSnap, splitSnap] = await Promise.all([
         transaction.get(pilotRef), transaction.get(teamRef), transaction.get(doc(db, "splits", splitId)),
       ]);
@@ -390,14 +419,7 @@ export async function ajustarPrecioCompraPiloto(params: {
 
       const revision = Number(pilot.precio_ajuste_revision ?? 0) + 1;
       const operationId = pilot.ultima_operacion_id;
-      const operationRef = operationId ? doc(db, `splits/${splitId}/transfers`, operationId) : null;
-      const operationSnap = operationRef ? await transaction.get(operationRef) : null;
-      if (operationId && (!operationSnap?.exists() || operationSnap.data().estado !== "aplicada")) {
-        throw new Error("El justificante de esta transferencia no está activo. Revisa la ficha antes de corregir el precio.");
-      }
-      if (operationSnap?.exists() && (operationSnap.data().teamId !== teamId || operationSnap.data().pilotoId !== pilotId)) {
-        throw new Error("El justificante del fichaje no corresponde a esta ficha. No se aplicó ningún cambio.");
-      }
+      const purchasePlan = await preparePurchaseCorrections(transaction, splitId, teamId, [{ pilotId, pilot, oldPrice, newPrice }]);
       const pilotUpdate: Record<string, unknown> = {
         precio_compra: newPrice,
         mantener_inicial_split: mantenerInicialDe(newPrice, priceRules),
@@ -413,27 +435,13 @@ export async function ajustarPrecioCompraPiloto(params: {
         transaction.set(doc(db, "transacciones", `precio_ajuste__${splitId}__${pilotId}__${revision}`), {
           splitId, equipoId: teamId, equipo: teamSnap.data().nombre || teamId, piloto: pilotName,
           operacionId: operationId ?? null, tipo: "ajuste", cantidad: Math.abs(balanceDelta),
-          esIngreso: balanceDelta > 0,
+          esIngreso: balanceDelta > 0, saldo_anterior: currentBalance, saldo_nuevo: priceAdjustment.presupuestoNuevo,
           descripcion: `Corrección de precio de transferencia ${oldPrice}M → ${newPrice}M: ${reason.trim()}`,
           fecha: serverTimestamp(),
         });
       }
-      if (operationRef && operationSnap?.exists() && operationSnap.data().estado === "aplicada") {
-        transaction.update(operationRef, { precio: newPrice, precio_ajuste_revision: revision });
-      }
-      const lastProcessed = previousRaceIndex >= 0 ? calendar[previousRaceIndex] : null;
-      const lastPriceEntry = lastProcessed ? pilot.historial_precios?.[lastProcessed.id] : null;
-      if (lastProcessed && lastPriceEntry?.anterior) {
-        const rollbackState = {
-          mantener_actual: previousPrices.mantener,
-          clausula_actual: pilot.clausula_manual ?? previousPrices.clausula,
-          precio_carrera_anterior: previousPrices.mantener,
-          ...(pilot.clausula_manual != null ? { clausula_sin_ajuste: previousPrices.clausula } : {}),
-        };
-        Object.assign(pilotUpdate, Object.fromEntries(Object.entries(rollbackState).map(([field, value]) => [
-          `historial_precios.${lastProcessed.id}.anterior.${field}`, value,
-        ])));
-      }
+      writePurchaseCorrections(transaction, splitId, `precio_ajuste__${splitId}__${pilotId}__${revision}`, purchasePlan, reason.trim());
+      Object.assign(pilotUpdate, historialPreciosTrasCorreccion(pilot, newPrice, calendar, priceRules));
       transaction.update(pilotRef, pilotUpdate);
       return "updated" as const;
     });
@@ -524,15 +532,29 @@ export async function procesarEconomiaCarrera(
     const splitRef = doc(db, "splits", splitId);
     const result = await runTransaction(db, async transaction => {
       // Firestore requires every transaction read to complete before the first write.
-      const [currentCircuit, currentSplit, teamDocs, pilotDocs] = await Promise.all([
+      const [currentCircuit, currentSplit, teamDocs, pilotDocs, calendarDocs] = await Promise.all([
         transaction.get(circuitoRef),
         transaction.get(splitRef),
         Promise.all(equiposSnap.docs.map(teamDoc => transaction.get(teamDoc.ref))),
         Promise.all(pilotRefs.map(ref => transaction.get(ref))),
+        Promise.all(calendarioSnap.docs.map(circuit => transaction.get(circuit.ref))),
       ]);
 
       if (currentCircuit.data()?.economia_procesada) {
         return { applied: false as const };
+      }
+      const processingState = new Map(calendarDocs.map(c => [c.id, c.data()?.economia_procesada === true]));
+      if (calendario.slice(0, indiceCarrera).some(c => !processingState.get(c.id))) {
+        throw new Error("Procesa primero la economía de las carreras anteriores para conservar el orden de precios.");
+      }
+      if (calendario.slice(indiceCarrera + 1).some(c => processingState.get(c.id))) {
+        throw new Error("Hay carreras posteriores procesadas. Revierte primero su economía.");
+      }
+      for (const team of teamDocs) {
+        const balance = team.data()?.presupuesto;
+        if (team.id !== "agente_libre" && (!team.exists() || typeof balance !== "number" || !Number.isFinite(balance))) {
+          throw new Error(`La escudería ${team.id} no tiene un saldo válido. No se aplicó ningún cambio.`);
+        }
       }
       // Se calcula sobre la lectura fresca de la transacción, no sobre la de fuera: Firestore
       // no garantiza el mismo orden de claves entre una lectura normal y una de transacción,
@@ -908,6 +930,17 @@ export async function revertirEconomiaCarrera(
       refund[teamId] = (refund[teamId] || 0) + Number(data.cantidad || 0) * (data.esIngreso ? 1 : -1);
     });
 
+    const balances = Object.entries(refund).map(([teamId, total]) => {
+      const before = freshTeams.find(team => team.id === teamId)?.data()?.presupuesto;
+      if (!Number.isFinite(total) || typeof before !== "number" || !Number.isFinite(before)) throw new Error("No hay saldo o movimientos válidos para revertir.");
+      const after = Math.round((before - total) * 10) / 10;
+      if (total > 0 && after < 0) throw new Error(`Presupuesto insuficiente en ${teamId}: faltan ${-after}M para revertir la carrera.`);
+      return { teamId, before, after };
+    });
+    batch.set(doc(collection(db, "admin_audit")), {
+      action: "race_economy_reversal", splitId, circuitoId, createdAt: serverTimestamp(),
+      balances, movements: freshLogs.map(log => ({ id: log.id, ...log.data() })),
+    });
     for (const [teamId, total] of Object.entries(refund)) {
       if (total === 0) continue;
       batch.update(doc(db, `splits/${splitId}/equipos`, teamId), { presupuesto: increment(-total) });

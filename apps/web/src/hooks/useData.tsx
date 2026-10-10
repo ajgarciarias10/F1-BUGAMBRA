@@ -3,21 +3,7 @@ import { collection, collectionGroup, onSnapshot } from "firebase/firestore";
 import { db } from "../services/firebase";
 import type { Usuario, Piloto, SplitView, Circuito, Equipo, PilotInRoster, RosterEntry } from "../types";
 import { computePilotOVR } from "../utils/splitResolver";
-
-const normalizeRaceResults = (results: any[]) => {
-  return results.map(result => {
-    const racePos = Number.isInteger(result.racePos) ? result.racePos : 99;
-    const qualyPos = Number.isInteger(result.qualyPos) ? result.qualyPos : 99;
-    return {
-      ...result,
-      racePos,
-      qualyPos,
-      // Los imports antiguos usaron 99 para posición desconocida y marcaron como DNF
-      // a todo piloto con 0 puntos. Sin una posición real no se puede afirmar un abandono.
-      isDnf: racePos === 99 ? false : result.isDnf === true,
-    };
-  });
-};
+import { normalizeRaceResults } from "../utils/normalizeRaceResults";
 
 // ─── USUARIOS ─────────────────────────────────────────────────────────────────
 
@@ -199,6 +185,7 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
     tipo: splitData.tipo ?? "equipos",
     duos: splitData.duos ?? [],
     rivalries: splitData.rivalries,
+    economia_config: splitData.economia_config,
     rivalidades_manual: splitData.rivalidades_manual,
     // "" significa "sin intro"; null o ausente significa "nunca se editó".
     video_intro: splitData.video_intro === null ? undefined : splitData.video_intro,

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 // Adaptador de Firestore en memoria: impone lecturas antes de escrituras y commit atómico.
 // Se ejecutan los servicios reales, incluidas sus referencias y cálculos económicos.
-const state = { docs: new Map<string, any>(), failCommit: false, sequence: 0 };
+const state = { docs: new Map<string, any>(), failCommit: false, sequence: 0, retryBeforeCommit: null as null | (() => void) };
 (globalThis as any).__transferTest = state;
 const firestore = `
 const state = globalThis.__transferTest;
@@ -28,6 +28,7 @@ export async function runTransaction(db, callback) {
     delete: r => writes.push(['delete', r]),
   };
   const result = await callback(tx);
+  if (state.retryBeforeCommit) { const mutate = state.retryBeforeCommit; state.retryBeforeCommit = null; mutate(); return runTransaction(db, callback); }
   if (state.failCommit) throw Error('Injected commit failure');
   const next = new Map(structuredClone([...state.docs]));
   for (const [kind, r, data, options] of writes) {
@@ -53,12 +54,13 @@ export const writeBatch = () => { throw Error('Unexpected non-transactional writ
 export const updateDoc = writeBatch, setDoc = writeBatch, deleteDoc = writeBatch, addDoc = writeBatch;
 `;
 const bundle = await build({
-  stdin: { contents: `export * from './transferService'; export * from './economyService'; export * from './auctionService'; export * from './splitRestoreService'; export { derivarAperturas, aplicarAperturas } from './splitBuilder';`, resolveDir: fileURLToPath(new URL(".", import.meta.url)) },
+  stdin: { contents: `export * from './transferService'; export * from './adminMutationService'; export * from './economyService'; export * from './auctionService'; export * from './splitRestoreService'; export { crearSplit, derivarAperturas, aplicarAperturas } from './splitBuilder';`, resolveDir: fileURLToPath(new URL(".", import.meta.url)) },
   bundle: true, write: false, format: "esm", platform: "node",
   plugins: [{ name: "memory-firestore", setup(builder) {
     builder.onResolve({ filter: /^firebase\/firestore$/ }, () => ({ path: "firestore", namespace: "test" }));
+    builder.onResolve({ filter: /^\.\/auth$/ }, () => ({ path: "auth", namespace: "test" }));
     builder.onResolve({ filter: /^\.\/firebase$/ }, () => ({ path: "db", namespace: "test" }));
-    builder.onLoad({ filter: /.*/, namespace: "test" }, args => ({ contents: args.path === "db" ? "export const db = {};" : firestore, loader: "js" }));
+    builder.onLoad({ filter: /.*/, namespace: "test" }, args => ({ contents: args.path === "db" ? "export const db = {};" : args.path === "auth" ? "export const auth = { currentUser: { uid: 'admin' } };" : firestore, loader: "js" }));
   } }],
 });
 const services = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
@@ -66,7 +68,7 @@ const path = (split: string, team: string, pilot = "p") => `splits/${split}/equi
 const budget = (split: string, team: string) => state.docs.get(`splits/${split}/equipos/${team}`).presupuesto;
 const pacto = { splitId: "s1", nextSplitId: "s2", equipoOrigenId: "a", pilotoId: "p", equipoDestinoId: "b", precio: 20, tipo: "clausula", circuitoId: null };
 beforeEach(() => {
-  state.docs = new Map(); state.failCommit = false;
+  state.docs = new Map(); state.failCommit = false; state.retryBeforeCommit = null;
   for (const split of ["s1", "s2"]) {
     state.docs.set(`splits/${split}`, { nombre: split });
     for (const team of ["a", "b", "agente_libre"]) state.docs.set(`splits/${split}/equipos/${team}`, { nombre: team, presupuesto: 100 });
@@ -338,5 +340,110 @@ test("pujar rechaza presupuesto ausente y no abre ni modifica la subasta", async
   const result = await services.pujar("s1", { id: "b", nombre: "b" }, 10);
   assert.equal(result.ok, false);
   assert.match(result.message, /presupuesto válido/);
+  assert.deepEqual([...state.docs], before);
+});
+
+async function purchaseForCorrection(seller = false) {
+  state.docs.get("splits/s1").economia_config = { clausula_al_vendedor: seller };
+  state.docs.set("splits/s1/circuitos/c1", { numero_carrera: 1, economia_procesada: false });
+  const result = await services.ficharPiloto({ splitId: "s1", teamId: "b", teamName: "b", pilotoId: "p", pilotName: "p", tipo: "clausula", precio: 54 });
+  assert.equal(result.success, true, result.message);
+}
+
+test("corregir 54 → 44 reintegra solo 10, conserva el recibo y anular devuelve los saldos originales", async () => {
+  await purchaseForCorrection(true);
+  const corrected = await services.ajustarPrecioCompraPiloto({ splitId: "s1", teamId: "b", pilotId: "p", pilotName: "p", newPrice: 44, reason: "Acuerdo revisado" });
+  assert.equal(corrected.ok, true, corrected.message);
+  assert.equal(budget("s1", "b"), 56);
+  assert.equal(budget("s1", "a"), 144);
+  await services.deshacerAlta("s1", "b", "p");
+  assert.equal(budget("s1", "a"), 100);
+  assert.equal(budget("s1", "b"), 100);
+});
+
+test("corrección agrupada actualiza el recibo, también con precio negativo, y evita aplicar dos veces", async () => {
+  await purchaseForCorrection(true);
+  const input = { splitId: "s1", teamId: "b", expectedBalance: 46, reason: "Revisión oficial", priceChanges: [{ pilotId: "p", pilotName: "p", expectedPrice: 54, newPrice: -10 }] };
+  assert.equal((await services.applyTeamEconomyCorrection(input)).applied, true);
+  assert.equal(budget("s1", "b"), 110);
+  assert.equal(budget("s1", "a"), 100);
+  assert.equal((await services.applyTeamEconomyCorrection(input)).applied, false);
+  await services.deshacerAlta("s1", "b", "p");
+  assert.equal(budget("s1", "a"), 100);
+  assert.equal(budget("s1", "b"), 100);
+});
+
+test("subir el precio cobra la diferencia; precio sin cambio no genera movimiento", async () => {
+  await purchaseForCorrection(true);
+  const params = { splitId: "s1", teamId: "b", pilotId: "p", pilotName: "p", newPrice: 60, reason: "Revisión" };
+  assert.equal((await services.ajustarPrecioCompraPiloto(params)).ok, true);
+  assert.equal(budget("s1", "b"), 40);
+  assert.equal(budget("s1", "a"), 160);
+  const before = structuredClone([...state.docs]);
+  assert.equal((await services.ajustarPrecioCompraPiloto(params)).ok, true);
+  assert.deepEqual([...state.docs], before);
+});
+
+test("fondos insuficientes del comprador o vendedor rechazan todos los cambios", async () => {
+  await purchaseForCorrection(true);
+  const params = { splitId: "s1", teamId: "b", pilotId: "p", pilotName: "p", reason: "Revisión" };
+  let before = structuredClone([...state.docs]);
+  assert.equal((await services.ajustarPrecioCompraPiloto({ ...params, newPrice: 101 })).ok, false);
+  assert.deepEqual([...state.docs], before);
+  state.docs.get("splits/s1/equipos/a").presupuesto = 5;
+  before = structuredClone([...state.docs]);
+  const result = await services.ajustarPrecioCompraPiloto({ ...params, newPrice: 44 });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /vendedor.*5M/);
+  assert.deepEqual([...state.docs], before);
+});
+
+test("corregir el precio con recibo divergente exige revisar el historial sin inventar el cargo", async () => {
+  await purchaseForCorrection();
+  state.docs.get(path("s1", "b")).precio_compra = 40;
+  const before = structuredClone([...state.docs]);
+  const result = await services.ajustarPrecioCompraPiloto({ splitId: "s1", teamId: "b", pilotId: "p", pilotName: "p", newPrice: 30, reason: "Revisión" });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /no coinciden/);
+  assert.deepEqual([...state.docs], before);
+});
+
+test("un reintento por fichaje concurrente vuelve a contar la plantilla", async () => {
+  for (const id of ["p1", "p2", "p3"]) state.docs.set(path("s2", "b", id), { pilotoId: id });
+  state.retryBeforeCommit = () => {
+    state.docs.set(path("s2", "b", "p4"), { pilotoId: "p4" });
+    state.docs.get("splits/s2/equipos/b").presupuesto = 90;
+  };
+  const result = await services.ficharPiloto({ splitId: "s2", teamId: "b", teamName: "b", pilotoId: "p", pilotName: "p", tipo: "fichaje", precio: 10 });
+  assert.equal(result.success, false);
+  assert.match(result.message, /completa/);
+  assert.equal(budget("s2", "b"), 90);
+  assert.equal(state.docs.has(path("s2", "b", "p")), false);
+});
+
+test("crear un split existente rechaza sin borrar saldos, carreras ni pilotos", async () => {
+  const before = structuredClone([...state.docs]);
+  const result = await services.crearSplit({ splitId: "s1", circuitos: ["Carrera"] });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /ya existe/);
+  assert.deepEqual([...state.docs], before);
+});
+
+test("la economía de carrera exige orden; una reversión sin fondos no cambia nada", async () => {
+  state.docs.get("splits/s1").economia_config = { pole: 8, vuelta_rapida: 6, participacion: 0, sin_sancionados: 0, puntos_factor: 0 };
+  const race = { nombre: "Carrera", acta_cerrada: true, completado: true, resultados: [{ pilotoId: "p", equipoId: "a", qualyPos: 1, racePos: 1, fastestLap: true, isClean: true }] };
+  state.docs.set("splits/s1/circuitos/c1", { ...race, numero_carrera: 1 });
+  state.docs.set("splits/s1/circuitos/c2", { ...race, numero_carrera: 2 });
+  let before = structuredClone([...state.docs]);
+  const skipped = await services.procesarEconomiaCarrera("s1", "c2", "C2");
+  assert.equal(skipped.processed, 0);
+  assert.match(skipped.message, /anteriores/);
+  assert.deepEqual([...state.docs], before);
+  assert.ok((await services.procesarEconomiaCarrera("s1", "c1", "C1")).processed > 0);
+  state.docs.get("splits/s1/equipos/a").presupuesto = 1;
+  before = structuredClone([...state.docs]);
+  const reversed = await services.revertirEconomiaCarrera("s1", "c1");
+  assert.equal(reversed.ok, false);
+  assert.match(reversed.message, /insuficiente/);
   assert.deepEqual([...state.docs], before);
 });

@@ -679,7 +679,7 @@ export function AdminDashboard() {
     setConfirmModal({
       isOpen: true,
       title: "Deshacer esta carrera por completo",
-      message: "Revierte economía (si estaba procesada), borra los resultados, reabre el acta y recalcula puntos y rating del split entero desde lo que quede. Es como si esta carrera no se hubiera disputado. ¿Continuar?",
+      message: "Borra los resultados, reabre el acta y corrige puntos y rating en una sola operación. Si esta carrera o una posterior tiene economía aplicada, revierte primero esa economía. ¿Continuar?",
       onConfirm: async () => {
         setDeshaciendoCarrera(true);
         try {
