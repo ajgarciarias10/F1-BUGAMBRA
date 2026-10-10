@@ -651,15 +651,21 @@ export async function procesarEconomiaCarrera(
           })
           .filter(Boolean);
 
-        if (members.length < 2) continue;
-        [...members].sort((a: any, b: any) => a.qualyPos - b.qualyPos).forEach((member: any, index) => {
-          const prize = (group.members.length === 2 ? rules.rivalidad_duo_clasificacion : rules.rivalidad_clasificacion)[index] ?? 0;
-          if (prize > 0) add(member.teamId, prize, "rivalidad", member.nombre, `Rivalidad clasificación P${index + 1}: +${prize}M`);
-        });
-        [...members].sort((a: any, b: any) => a.racePos - b.racePos).forEach((member: any, index) => {
-          const prize = (group.members.length === 2 ? rules.rivalidad_duo_carrera : rules.rivalidad_carrera)[index] ?? 0;
-          if (prize > 0) add(member.teamId, prize, "rivalidad", member.nombre, `Rivalidad carrera P${index + 1}: +${prize}M`);
-        });
+        if (members.length === 0) continue;
+        [...members]
+          .filter((member: any) => Number.isInteger(member.qualyPos) && member.qualyPos > 0 && member.qualyPos !== 99)
+          .sort((a: any, b: any) => a.qualyPos - b.qualyPos)
+          .forEach((member: any, index) => {
+            const prize = (group.members.length === 2 ? rules.rivalidad_duo_clasificacion : rules.rivalidad_clasificacion)[index] ?? 0;
+            if (prize > 0) add(member.teamId, prize, "rivalidad", member.nombre, `Rivalidad clasificación P${index + 1}: +${prize}M`);
+          });
+        [...members]
+          .filter((member: any) => Number.isInteger(member.racePos) && member.racePos > 0 && member.racePos !== 99)
+          .sort((a: any, b: any) => a.racePos - b.racePos)
+          .forEach((member: any, index) => {
+            const prize = (group.members.length === 2 ? rules.rivalidad_duo_carrera : rules.rivalidad_carrera)[index] ?? 0;
+            if (prize > 0) add(member.teamId, prize, "rivalidad", member.nombre, `Rivalidad carrera P${index + 1}: +${prize}M`);
+          });
       }
 
       for (const teamId of participatingTeams) {

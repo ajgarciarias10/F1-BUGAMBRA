@@ -447,3 +447,20 @@ test("la economía de carrera exige orden; una reversión sin fondos no cambia n
   assert.match(reversed.message, /insuficiente/);
   assert.deepEqual([...state.docs], before);
 });
+
+test("un piloto que disputa su rivalidad por incomparecencia de su rival cobra el primer puesto", async () => {
+  state.docs.get("splits/s1").economia_config = { pole: 0, vuelta_rapida: 0, participacion: 0, sin_sancionados: 0, puntos_factor: 0, rivalidad_duo_clasificacion: [1, 0], rivalidad_duo_carrera: [2, 0] };
+  state.docs.get("splits/s1").rivalries = {
+    groups: [{
+      id: "g1", type: "pair",
+      members: [{ id: "p", equipoId: "a" }, { id: "rival_ausente", equipoId: "b" }],
+    }],
+  };
+  const race = { nombre: "Carrera", acta_cerrada: true, completado: true, numero_carrera: 1, resultados: [{ pilotoId: "p", equipoId: "a", qualyPos: 1, racePos: 2, fastestLap: true, isClean: false }] };
+  state.docs.set("splits/s1/circuitos/c1", race);
+  state.docs.get("splits/s1/equipos/a").presupuesto = 100;
+  const processed = await services.procesarEconomiaCarrera("s1", "c1", "C1");
+  assert.equal(processed.processed > 0, true, processed.message);
+  // Qualy P1 (1M) + Race P1 (2M) = +3M
+  assert.equal(budget("s1", "a"), 103);
+});
