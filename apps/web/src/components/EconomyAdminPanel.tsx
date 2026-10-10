@@ -10,7 +10,7 @@ import {
 import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
 import { resolveTransferView, type TransferView } from "../utils/transferView";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
-import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, totalEconomyAdjustments, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
+import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
 import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
 import { applyTeamEconomyCorrection } from "../services/adminMutationService";
 import { economyRules } from "../utils/economyRules";
@@ -67,7 +67,6 @@ interface TeamRow {
   ingresos: EconomyIncomeBreakdown;
   movimientos_mercado: number;
   asientos_mercado: number;
-  ajuste_economia_historica: number;
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -229,8 +228,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           ingresos: { points: 0, pole: 0, fastestLap: 0, participation: 0, cleanTeam: 0, rivalry: 0, seasonPrize: 0 },
           movimientos_mercado: 0,
           asientos_mercado: 0,
-          ajuste_economia_historica: -Number(td.economia_historica?.ajuste_rivalidades ?? 0)
-            - Number(td.economia_historica?.ajuste_premios ?? 0),
         });
         teamNameMap[teamDoc.id] = td.nombre || teamDoc.id;
       }
@@ -318,7 +315,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         team.ingresos = sumEconomyIncomeTransactions(entries);
         team.movimientos_mercado = sumEconomyMarketTransactions(entries);
         team.asientos_mercado = entries.filter(entry => ["fichaje", "clausula", "subasta", "piloto_negativo"].includes(entry.tipo)).length;
-        team.ajuste_economia_historica += totalEconomyAdjustments(entries);
       }
 
       if (requestId !== loadRequestRef.current) return;
@@ -798,7 +794,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 {ECONOMY_INCOME_SOURCES.map(source => (
                   <th key={source.key} className="py-3 px-4 text-right font-normal text-emerald-500/50">+ {source.label}</th>
                 ))}
-                <th className="py-3 px-4 text-right font-normal text-emerald-500/50">Ajuste hist.</th>
                 <th className="py-3 px-4 text-right font-normal">Total disp.</th>
                 <th className="py-3 px-4 text-right font-normal">Pts</th>
               </tr>
@@ -845,9 +840,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                         {amount > 0 ? `+${r1(amount)}M` : <span className="text-white/15">—</span>}
                       </td>;
                     })}
-                    <td className="py-3 px-4 text-right font-mono text-white/50 text-xs tabular-nums">
-                      {t.ajuste_economia_historica ? `${r1(t.ajuste_economia_historica)}M` : <span className="text-white/15">—</span>}
-                    </td>
                     <td className={`py-3 px-4 text-right font-black font-mono text-sm tabular-nums ${act < 0 ? "text-[#e10600]" : "text-white"}`}>
                       {r1(act)}M
                       <button className="block ml-auto text-[9px] text-sky-300" disabled={isSavingB} onClick={async () => {
