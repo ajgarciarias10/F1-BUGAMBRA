@@ -13,8 +13,9 @@ import { resolveTransferView, type TransferView } from "../utils/transferView";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
 import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, totalEconomyAdjustments, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
 import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
-import { applyTeamEconomyCorrection } from "../services/adminMutationService";
+import { applyPreHungaryReconciliation, applyTeamEconomyCorrection } from "../services/adminMutationService";
 import { economyRules } from "../utils/economyRules";
+import { PRE_HUNGARY_RECONCILIATION } from "../utils/preHungaryReconciliation";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -135,6 +136,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   const [editingBudget, setEditingBudget] = useState<Record<string, string>>({});
   const [savingBudget, setSavingBudget] = useState<string | null>(null);
   const [processLog, setProcessLog] = useState<string[]>([]);
+  const [applyingPreHungary, setApplyingPreHungary] = useState(false);
   const selectedEconomyRules = economyRules(splits.find((split: any) => split.id === selectedSplitId)?.economia_config);
   const [viewMode, setViewMode] = useState<"precios" | "rendimiento">("precios");
   const loadRequestRef = useRef(0);
@@ -443,6 +445,33 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     });
     if (result.applied) await loadData(selectedSplitId);
     setProcessLog([result.message]);
+  }
+
+  async function detonarConciliacionPreHungria() {
+    const plan = PRE_HUNGARY_RECONCILIATION.teams.map(target => ({
+      ...target,
+      current: teams.find(team => team.id === target.id)?.presupuesto ?? null,
+    }));
+    if (plan.some(team => team.current == null)) {
+      setProcessLog(["No se puede conciliar: falta un saldo actual de los equipos del plan."]);
+      return;
+    }
+    const expectedBalances = Object.fromEntries(plan.map(team => [team.id, team.current as number]));
+    const preview = plan.map(team => `${team.name}: ${(team.current as number).toFixed(1)}M → ${team.target.toFixed(1)}M`).join("\n");
+    if (!confirm(
+      `Aplicar la conciliación temporal pre-Hungría según ${PRE_HUNGARY_RECONCILIATION.source}?\n\n${preview}\n\n` +
+      "Se actualizarán solo los saldos actuales y su ledger/auditoría. No se cambiarán precios de pilotos, saldos iniciales ni resultados. Hungría seguirá sin liquidarse."
+    )) return;
+    setApplyingPreHungary(true);
+    try {
+      const result = await applyPreHungaryReconciliation(expectedBalances);
+      setProcessLog([result.message]);
+      if (result.applied) await loadData(selectedSplitId);
+    } catch (error: any) {
+      setProcessLog([`Error al conciliar pre-Hungría: ${error.message}`]);
+    } finally {
+      setApplyingPreHungary(false);
+    }
   }
 
   async function savePrecio(pilot: PilotRow, rawVal: string) {
@@ -772,6 +801,13 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
             className="text-[9px] font-mono uppercase tracking-[0.3em] text-emerald-400/60 hover:text-emerald-300 transition-colors disabled:opacity-30">
             + Añadir piloto
           </button>
+          {selectedSplitId === PRE_HUNGARY_RECONCILIATION.splitId && (
+            <button type="button" onClick={detonarConciliacionPreHungria}
+              disabled={loading || applyingPreHungary || teams.length === 0 || !!loadError}
+              className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-amber-300 hover:text-amber-100 transition-colors disabled:opacity-30">
+              {applyingPreHungary ? "Conciliando…" : "Detonar saldo pre-Hungría · temporal"}
+            </button>
+          )}
         </div>
       </div>
 
