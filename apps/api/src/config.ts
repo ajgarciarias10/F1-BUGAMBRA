@@ -29,5 +29,5 @@ export const config: Config = {
   firebaseProjectId: required("FIREBASE_PROJECT_ID"),
   corsOrigin: process.env.CORS_ORIGIN?.trim() || "http://localhost:3000",
   ...(process.env.GEMINI_API_KEY?.trim() ? { geminiApiKey: process.env.GEMINI_API_KEY.trim() } : {}),
-  geminiImageModel: process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-nano-banana-2.1",
+  geminiImageModel: process.env.GEMINI_IMAGE_MODEL?.trim() || "nano-banana-pro-preview",
 };

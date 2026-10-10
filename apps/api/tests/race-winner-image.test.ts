@@ -38,7 +38,7 @@ test("sends the server key to Gemini and returns image data only", async () => {
   assert.equal(result.data, "aGVsbG8=");
   assert.equal(requestHeaders?.["x-goog-api-key"], "server-only-secret");
   assert.match(requestBody, /Winner/);
-  assert.match(requestBody, /"aspectRatio":"16:9"/);
+  assert.match(requestBody, /"responseModalities":\["IMAGE"\]/);
 });
 
 test("incorporates driver profile photos as multimodal reference parts", async () => {

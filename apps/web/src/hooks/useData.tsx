@@ -106,13 +106,18 @@ function conDos(mapa: MapaDos, sid: string, eid: string, pid: string, data: any 
   return next;
 }
 
-function enriquecerFicha(pilotoId: string, equipoId: string, entry: RosterEntry, piloto: any): PilotInRoster {
+function enriquecerFicha(pilotoId: string, equipoId: string, entry: RosterEntry, piloto: any, usuarios?: Usuario[]): PilotInRoster {
+  const matchedUser = usuarios?.find(u =>
+    u.piloto_id === pilotoId ||
+    u.uid === pilotoId ||
+    (u.nombre && (entry as any).nombre && u.nombre.toLowerCase().trim() === (entry as any).nombre.toLowerCase().trim())
+  );
   return {
     ...entry,
     pilotoId,
     equipoId,
     nombre: piloto?.nombre ?? (entry as any).nombre ?? pilotoId,
-    foto_url: piloto?.foto_url ?? (entry as any).foto_url,
+    foto_url: (entry as any).foto_url || matchedUser?.foto_url || piloto?.foto_url,
     rating_piloto: Number(entry.rating_piloto) > 0
       ? Number(entry.rating_piloto)
       : Number(piloto?.rating_piloto) > 0
@@ -121,7 +126,7 @@ function enriquecerFicha(pilotoId: string, equipoId: string, entry: RosterEntry,
   };
 }
 
-function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
+function derivarSplit(sid: string, splitData: any, raw: RawState, usuarios?: Usuario[]): SplitView {
   const circuitosMap = raw.circuitos.get(sid) ?? new Map();
   const circuitos: Circuito[] = [...circuitosMap.entries()].map(([id, data]) => ({
     id,
@@ -149,7 +154,7 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
   const pilotosPorEquipoDelSplit = raw.pilotosPorEquipo.get(sid) ?? new Map();
   for (const [equipoId, pilotosDelEquipo] of pilotosPorEquipoDelSplit) {
     for (const [pilotoId, entry] of pilotosDelEquipo) {
-      const normalizedEntry = enriquecerFicha(pilotoId, equipoId, entry as RosterEntry, raw.pilotosGlobales.get(pilotoId));
+      const normalizedEntry = enriquecerFicha(pilotoId, equipoId, entry as RosterEntry, raw.pilotosGlobales.get(pilotoId), usuarios);
       const existing = rosterByPilot.get(pilotoId);
       const existingEnded = existing?.participa_hasta != null;
       const candidateEnded = normalizedEntry.participa_hasta != null;
@@ -165,7 +170,7 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
   for (const [pilotoId, entry] of rosterFlatMap) {
     if (rosterByPilot.has(pilotoId)) continue;
     const equipoId = (entry as RosterEntry).equipoId || "individual";
-    rosterByPilot.set(pilotoId, enriquecerFicha(pilotoId, equipoId, entry as RosterEntry, raw.pilotosGlobales.get(pilotoId)));
+    rosterByPilot.set(pilotoId, enriquecerFicha(pilotoId, equipoId, entry as RosterEntry, raw.pilotosGlobales.get(pilotoId), usuarios));
   }
 
   const roster = [...rosterByPilot.values()];
@@ -196,7 +201,7 @@ function derivarSplit(sid: string, splitData: any, raw: RawState): SplitView {
   };
 }
 
-function useSplitsSource() {
+function useSplitsSource(usuarios?: Usuario[]) {
   const [raw, setRaw] = useState<RawState>(rawVacio);
   const [loading, setLoading] = useState(true);
   const [failedSources, setFailedSources] = useState<string[]>([]);
@@ -331,8 +336,8 @@ function useSplitsSource() {
       if (aOrden !== bOrden) return aOrden - bOrden;
       return aid.localeCompare(bid);
     });
-    return heredarEscudos(entradas.map(([sid, data]) => derivarSplit(sid, data, raw)));
-  }, [raw]);
+    return heredarEscudos(entradas.map(([sid, data]) => derivarSplit(sid, data, raw, usuarios)));
+  }, [raw, usuarios]);
 
   return { splits, loading, error: failedSources.length > 0, fromCache: cachedSources.length > 0, slow, retry };
 }
@@ -347,8 +352,8 @@ interface DataContextValue {
 const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const { splits, loading: loadingSplits, ...splitStatus } = useSplitsSource();
   const { usuarios } = useUsuariosSource();
+  const { splits, loading: loadingSplits, ...splitStatus } = useSplitsSource(usuarios);
   return (
     <DataContext.Provider value={{ splits, loadingSplits, splitStatus, usuarios }}>
       {children}

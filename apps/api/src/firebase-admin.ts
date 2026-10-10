@@ -3,8 +3,8 @@ import { getAuth } from "firebase-admin/auth";
 import { config } from "./config.ts";
 
 const app = getApps()[0] ?? initializeApp({
-  credential: applicationDefault(),
   projectId: config.firebaseProjectId,
+  ...(process.env.GOOGLE_APPLICATION_CREDENTIALS ? { credential: applicationDefault() } : {}),
 });
 
 export const firebaseAuth = getAuth(app);

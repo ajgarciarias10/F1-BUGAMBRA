@@ -11,6 +11,7 @@ export async function requestRaceWinnerImage(input: {
   splitName: string;
   winners: RaceImageWinner[];
   creativeDirection: string;
+  cardType?: "podium" | "winner" | "pole";
 }): Promise<{ mimeType: string; data: string }> {
   const user = auth.currentUser;
   if (!user) throw new Error("Inicia sesión como administrador para generar la imagen.");

@@ -1,12 +1,13 @@
 import React, { lazy, Suspense, useState, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { UserHeader } from "./Dashboards";
-import { useUsuarios, useSplits } from "../hooks/useData";
+import { useUsuarios, useSplits, usePilotos } from "../hooks/useData";
 import { processRace, RaceResult, revertirCarreraCompleta, recalcSplitPoints } from "../services/raceProcessor";
 import { procesarEconomiaCarrera, revertirEconomiaCarrera, mantenerInicialDe, clausulaInicialDe } from "../services/economyService";
 import { db } from "../services/firebase";
 import { doc, updateDoc, getDoc, collection, addDoc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch } from "firebase/firestore";
-import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
+import { Calendar, AlertCircle, CheckCircle2, Loader2, User as UserIcon, FileText } from "lucide-react";
+import { RaceReportModal } from "./RaceReportModal";
 import { motion, AnimatePresence } from "motion/react";
 import { isSplitUnlocked } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
@@ -74,6 +75,7 @@ const canPilotParticipateInRace = (pilot: any, raceSequence: number) => {
 export function AdminDashboard() {
   const { userData } = useAuth();
   const { usuarios } = useUsuarios();
+  const { pilotos } = usePilotos();
   const { splits: rawSplits, loading: loadingSplits } = useSplits();
   const splits = rawSplits;
   const marketLifecycleError = useMarketLifecycleStatus();
@@ -168,11 +170,21 @@ export function AdminDashboard() {
       .map(([pilotId, result]) => {
         const rosterPilot = roster.find((pilot: any) => pilot.pilotoId === pilotId);
         const inPlantilla = plantilla.find((p: any) => p.id === pilotId);
-        const usuario = (usuarios || []).find((u: any) => u.uid === pilotId || u.piloto_id === pilotId);
-        const photoUrl = usuario?.foto_url || inPlantilla?.foto_url || rosterPilot?.foto_url || undefined;
+        const pilotName = (rosterPilot?.nombre || inPlantilla?.nombre || pilotId).toLowerCase().trim();
+        const globalPilot = (pilotos || []).find((p: any) => p.id === pilotId || p.nombre?.toLowerCase().trim() === pilotName);
+        const usuario = (usuarios || []).find((u: any) =>
+          u.uid === pilotId ||
+          u.piloto_id === pilotId ||
+          (u.nombre && (u.nombre.toLowerCase().trim() === pilotName || u.nombre.toLowerCase().trim().startsWith(pilotName)))
+        );
+        // Prioridad 1: foto del usuario registrado (perfil activo del piloto en este split)
+        // Prioridad 2: foto en plantilla
+        // Prioridad 3: foto del roster
+        // Prioridad 4: foto global histórica del piloto
+        const photoUrl = usuario?.foto_url || inPlantilla?.foto_url || rosterPilot?.foto_url || globalPilot?.foto_url || undefined;
         return {
           pilotId,
-          name: rosterPilot?.nombre || inPlantilla?.nombre || pilotId,
+          name: rosterPilot?.nombre || inPlantilla?.nombre || globalPilot?.nombre || pilotId,
           position: Number(result.racePos),
           photoUrl: photoUrl || undefined,
         };
@@ -180,7 +192,31 @@ export function AdminDashboard() {
       .sort((a, b) => a.position - b.position)
       .slice(0, 3)
       .map(({ name, position, photoUrl }) => ({ name, position, ...(photoUrl ? { photoUrl } : {}) }));
-  }, [results, currentRawSplit, noCorrieron, plantilla, usuarios]);
+  }, [results, currentRawSplit, noCorrieron, plantilla, usuarios, pilotos]);
+
+  const poleImageWinner = useMemo(() => {
+    const roster = currentRawSplit?.roster ?? [];
+    const poleEntry = Object.entries(results).find(
+      ([pilotId, result]) => !noCorrieron.has(pilotId) && Number(result.qualyPos) === 1
+    );
+    if (!poleEntry) return null;
+    const [pilotId] = poleEntry;
+    const rosterPilot = roster.find((pilot: any) => pilot.pilotoId === pilotId);
+    const inPlantilla = plantilla.find((p: any) => p.id === pilotId);
+    const pilotName = (rosterPilot?.nombre || inPlantilla?.nombre || pilotId).toLowerCase().trim();
+    const globalPilot = (pilotos || []).find((p: any) => p.id === pilotId || p.nombre?.toLowerCase().trim() === pilotName);
+    const usuario = (usuarios || []).find((u: any) =>
+      u.uid === pilotId ||
+      u.piloto_id === pilotId ||
+      (u.nombre && (u.nombre.toLowerCase().trim() === pilotName || u.nombre.toLowerCase().trim().startsWith(pilotName)))
+    );
+    const photoUrl = usuario?.foto_url || inPlantilla?.foto_url || rosterPilot?.foto_url || globalPilot?.foto_url || undefined;
+    return {
+      name: rosterPilot?.nombre || inPlantilla?.nombre || globalPilot?.nombre || pilotId,
+      position: 1,
+      photoUrl,
+    };
+  }, [results, currentRawSplit, noCorrieron, plantilla, usuarios, pilotos]);
 
   // Schedule State
   const [fechaVal, setFechaVal] = useState("");
@@ -188,6 +224,7 @@ export function AdminDashboard() {
   const [hotlapUrl, setHotlapUrl] = useState("");
   const [numeroCarrera, setNumeroCarrera] = useState<number>(1);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [showRaceReport, setShowRaceReport] = useState(false);
 
   // Los borradores de imagen pertenecen únicamente al split seleccionado.
   useEffect(() => {
@@ -228,8 +265,21 @@ export function AdminDashboard() {
           await updateDoc(doc(db, "plantilla", pilotoId), { foto_url: trimmed });
         }
       }
+
+      // Guardar también directamente en el split seleccionado para que este split tenga su foto asociada
+      if (selectedSplitId) {
+        const rosterPilot = (currentRawSplit?.roster || []).find((p: any) => p.pilotoId === pilotoId);
+        const equipoId = rosterPilot?.equipoId;
+        if (equipoId && equipoId !== "agente_libre" && equipoId !== "individual") {
+          const teamPilotRef = doc(db, `splits/${selectedSplitId}/equipos/${equipoId}/pilotos`, pilotoId);
+          await setDoc(teamPilotRef, { foto_url: trimmed }, { merge: true });
+        }
+        const splitRosterRef = doc(db, `splits/${selectedSplitId}/roster`, pilotoId);
+        await setDoc(splitRosterRef, { foto_url: trimmed }, { merge: true });
+      }
+
       setPhotoEdits(prev => { const n = { ...prev }; delete n[pilotoId]; return n; });
-      setMsg("Foto de piloto actualizada.");
+      setMsg("Foto de piloto actualizada para este split.");
       setTimeout(() => setMsg(""), 2500);
     } catch (err: any) {
       setMsg("Error foto: " + err.message);
@@ -662,15 +712,25 @@ export function AdminDashboard() {
     if (!selectedSplitId || !selectedCircuitoId) return;
     setConfirmModal({
       isOpen: true,
-      title: "Reabrir acta de carrera",
-      message: "Vuelve a permitir editar los resultados de esta carrera. Solo tiene sentido si ya has revertido su economía. ¿Continuar?",
+      title: isEconomiaProcesada ? "Reabrir acta y revertir economía" : "Reabrir acta de carrera",
+      message: isEconomiaProcesada
+        ? "Esta carrera ya tiene la economía procesada. Para editar los resultados (como desmarcar carrera limpia a Carlos), se revertirá primero su liquidación económica para evitar descuadres. Una vez guardados los cambios, podrás volver a cerrar el acta y procesar la economía. ¿Continuar?"
+        : "Vuelve a permitir editar los resultados de esta carrera. ¿Continuar?",
       onConfirm: async () => {
         setReabriendoActa(true);
         try {
+          if (isEconomiaProcesada) {
+            const rev = await revertirEconomiaCarrera(selectedSplitId, selectedCircuitoId);
+            if (!rev.ok) {
+              setMsg("Error al revertir economía: " + rev.message);
+              return;
+            }
+            setIsEconomiaProcesada(false);
+          }
           const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
           await updateDoc(ref, { acta_cerrada: false });
           setIsActaCerrada(false);
-          setMsg("Acta reabierta: ya se pueden corregir los resultados.");
+          setMsg(isEconomiaProcesada ? "Economía revertida y acta reabierta: ya puedes modificar los resultados." : "Acta reabierta: ya se pueden corregir los resultados.");
           setTimeout(() => setMsg(""), 4000);
         } catch (err: any) {
           setMsg("Error al reabrir acta: " + err.message);
@@ -1085,7 +1145,7 @@ export function AdminDashboard() {
            <>
              {/* Navegación de Splits */}
         <div className="flex flex-wrap gap-1.5 mb-3">
-          {splits.filter(s => isSplitUnlocked(s.id, splits)).map(s => (
+          {splits.map(s => (
             <button
               key={s.id}
               onClick={() => {
@@ -1145,7 +1205,7 @@ export function AdminDashboard() {
                       }
                     }}
                   >
-                     {splits.filter(s => s.id === selectedSplitId && isSplitUnlocked(s.id, splits)).map(s => (
+                     {splits.filter(s => s.id === selectedSplitId).map(s => (
                        <React.Fragment key={s.id}>
                          {s.circuitos.some((c: any) => !c.completado) && (
                            <optgroup label={`${s.nombre} · Pendientes`}>
@@ -1167,8 +1227,8 @@ export function AdminDashboard() {
                          )}
                        </React.Fragment>
                      ))}
-                    <optgroup label="── Cambiar Split ──">
-                      {splits.filter(s => s.id !== selectedSplitId && isSplitUnlocked(s.id, splits)).map(s => (
+                     <optgroup label="── Cambiar Split ──">
+                      {splits.filter(s => s.id !== selectedSplitId).map(s => (
                         <option key={s.id} value={`${s.id}|`}>
                           {s.nombre}
                         </option>
@@ -1247,6 +1307,16 @@ export function AdminDashboard() {
                   Crear imagen con Gemini
                 </a>
               )}
+              {isEditingFinished && (
+                <button
+                  type="button"
+                  onClick={() => setShowRaceReport(true)}
+                  className="min-h-10 inline-flex items-center gap-1.5 rounded-sm border border-amber-400/40 px-3 text-[10px] font-black uppercase text-amber-300 hover:bg-amber-400/10"
+                >
+                  <FileText className="w-3.5 h-3.5 text-amber-400" />
+                  Informe Oficial GP
+                </button>
+              )}
               {((Object.values(qualyCount) as number[]).some(c => c > 1) || (Object.values(raceCount) as number[]).some(c => c > 1)) && (
                 <div className="text-[9px] text-amber-400 font-mono flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 mr-1 max-w-xs">
                   <AlertCircle className="w-3 h-3 flex-shrink-0" />
@@ -1260,6 +1330,19 @@ export function AdminDashboard() {
                   className="px-4 py-1.5 rounded-sm border border-red-500/30 text-red-500 text-[10px] font-black uppercase hover:bg-red-500/10 transition-all"
                 >
                   Cerrar Acta
+                </button>
+              )}
+
+              {isActaCerrada && (
+                <button
+                  type="button"
+                  disabled={reabriendoActa || revirtiendoEconomia}
+                  onClick={handleReabrirActa}
+                  className="px-4 py-1.5 rounded-sm border border-sky-500/40 text-sky-400 text-[10px] font-black uppercase hover:bg-sky-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                  title={isEconomiaProcesada ? "Reabrir acta (revertirá primero la economía para poder corregir resultados)" : "Reabrir acta"}
+                >
+                  {reabriendoActa ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {reabriendoActa ? "Reabriendo..." : "Reabrir Acta"}
                 </button>
               )}
 
@@ -1329,8 +1412,8 @@ export function AdminDashboard() {
                 onClick={handleRevertirEconomia}
                 className="min-h-11 rounded-lg border border-orange-500/40 px-3 text-sm font-bold text-orange-300 disabled:opacity-40"
               >{revirtiendoEconomia ? "Revirtiendo…" : "Revertir economía"}</button>}
-              {isActaCerrada && !isEconomiaProcesada && <button
-                disabled={reabriendoActa} onClick={handleReabrirActa}
+              {isActaCerrada && <button
+                disabled={reabriendoActa || revirtiendoEconomia} onClick={handleReabrirActa}
                 className="min-h-11 rounded-lg border border-sky-500/40 px-3 text-sm font-bold text-sky-300 disabled:opacity-40"
               >{reabriendoActa ? "Reabriendo…" : "Reabrir acta"}</button>}
               {isEditingFinished && (!isEconomiaProcesada || esUltimaCarreraProcesada) && <button
@@ -1421,6 +1504,7 @@ export function AdminDashboard() {
               raceName={getCircuitName()}
               splitName={currentRawSplit?.nombre || selectedSplitId}
               winners={raceImageWinners}
+              poleWinner={poleImageWinner || undefined}
             />
           )}
 
@@ -1609,6 +1693,24 @@ export function AdminDashboard() {
               </div>
             </div>
           </div>
+        )}
+
+        {showRaceReport && (
+          <RaceReportModal
+            isOpen={showRaceReport}
+            onClose={() => setShowRaceReport(false)}
+            circuito={splits.find(s => s.id === selectedSplitId)?.circuitos.find((c: any) => c.id === selectedCircuitoId) || {
+              id: selectedCircuitoId,
+              nombre: getCircuitName(),
+              completado: true,
+              acta_cerrada: isActaCerrada,
+              economia_procesada: isEconomiaProcesada,
+              resultados: Object.values(results) as any,
+            }}
+            splitName={currentRawSplit?.nombre || selectedSplitId}
+            splitId={selectedSplitId}
+            currentSplit={currentRawSplit}
+          />
         )}
 
       </div>

@@ -7,7 +7,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { votarPilotoDelDia, abrirVotacionPilotoDelDia, cerrarVotacionPilotoDelDia } from "../services/raceProcessor";
 import type { Circuito } from "../types";
 import { buildRaceShareUrl } from "../utils/raceShareUrl";
-import { Trophy, Crown, Loader2, Users } from "lucide-react";
+import { Trophy, Crown, Loader2, Users, FileText } from "lucide-react";
+import { RaceReportModal } from "./RaceReportModal";
 
 interface RaceResultsViewProps {
   validSplits: any[];
@@ -172,6 +173,7 @@ function RaceDetailModal({
   const [ganadorElegido, setGanadorElegido] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const [showReport, setShowReport] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -265,7 +267,17 @@ function RaceDetailModal({
       <div className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl border-white/[0.08] bg-[#0d0d0d] p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} aria-label="Cerrar" className="sticky top-[max(0.5rem,env(safe-area-inset-top))] z-10 -mr-1 ml-auto grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-[#0d0d0d] text-white/60 hover:text-white md:absolute md:top-4 md:right-4 md:ml-0">✕</button>
         <p className="text-[11px] font-bold text-[#e10600] md:font-mono md:text-[9px] md:uppercase md:tracking-[0.35em]">Resultados · {currentSplit?.nombre}</p>
-        <h2 id="race-detail-title" className="mt-1 text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] text-white">{circuito.nombre}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-1 mb-2">
+          <h2 id="race-detail-title" className="text-2xl md:text-3xl font-black uppercase tracking-[-0.04em] text-white">{circuito.nombre}</h2>
+          <button
+            type="button"
+            onClick={() => setShowReport(true)}
+            className="inline-flex items-center gap-2 rounded bg-amber-500/15 border border-amber-500/40 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/25 transition-colors"
+          >
+            <FileText className="h-3.5 w-3.5 text-amber-400" />
+            Boletín Oficial GP (Puntos & Economía)
+          </button>
+        </div>
 
         {/* ── Podio ── */}
         {/* Podio de verdad: el segundo a la izquierda, el ganador en el centro y
@@ -429,6 +441,17 @@ function RaceDetailModal({
               {nombreDe(currentSplit, anteriorGanador)} corre con +2 OVR · piloto del día en {anteriorNombre}
             </div>
           </div>
+        )}
+
+        {showReport && (
+          <RaceReportModal
+            isOpen={showReport}
+            onClose={() => setShowReport(false)}
+            circuito={circuito}
+            splitName={currentSplit?.nombre || splitId}
+            splitId={splitId}
+            currentSplit={currentSplit}
+          />
         )}
       </div>
     </dialog>, document.body

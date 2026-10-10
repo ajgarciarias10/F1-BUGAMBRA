@@ -76,6 +76,13 @@ app.post("/api/media/race-winner-image", requireAuthentication, requireRole("adm
     response.json(image);
   } catch (error) {
     console.error("Gemini race image generation failed:", error);
+    const errStr = error instanceof Error ? error.message : String(error);
+    if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errStr.includes("spending cap")) {
+      response.status(429).json({
+        error: "Límite de gasto mensual alcanzado en Google AI Studio (Error 429: Monthly spending cap exceeded). Puedes ampliar tu límite de gasto en https://ai.studio/spend o cambiar la API Key en apps/api/.env.",
+      });
+      return;
+    }
     response.status(502).json({ error: "Gemini no pudo generar la imagen. No se ha guardado ni publicado ningún contenido." });
   }
 });
