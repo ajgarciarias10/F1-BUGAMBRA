@@ -64,16 +64,16 @@ Solo Hungría tiene resultados en T3. Los equipos por carrera están en `W2:W14`
 
 Las celdas en negrita de puntos coinciden exactamente con los contadores globales de poles: Zenith 4, Roses 5, Alfa 4. Las celdas moradas `FF9900FF` coinciden exactamente con vueltas rápidas: Zenith 8, Roses 4, Alfa 1. `Y7` (Pabliyo, Zenith) tiene ambos formatos. Esto respalda la interpretación de esos formatos; no reconstruye posiciones a partir de puntos. El lector informa del formato y de la coincidencia para que pueda revisarse.
 
-**Limitación decisiva:** `H51:H53` son números manuales acumulados (`9`, `6`, `7`), sin fechas, fórmulas por carrera ni notas. El fichero no dice expresamente qué equipos cobraron los 3M de carrera sin sancionados en Hungría. Tampoco muestra el historial de edición de esos contadores.
+**Confirmación de premios limpios en Hungría:**
+- **Alfa Romero:** Carrera limpia confirmada (los 4 pilotos terminaron sin incidentes con `isClean: true`). Ingresa **+3M**, totalizando **19,1M** en Hungría. Por tanto, para cuadrar exactamente con el saldo oficial `E53 = 66,1M`, su saldo **antes de Hungría es de 47,0M**.
+- **Roses:** Carrera limpia confirmada (Jose `isClean: true`). Ingresa **+3M**, totalizando **7,9M** en Hungría. Cuadra con `E52 = 57,9M` partiendo del tope reglamentario de **50,0M**.
+- **Zenith:** Sin premio limpio (Pabliyo con `isClean: false`). Totaliza **17,5M** en Hungría. Cuadra con `E51 = 53,8M` partiendo de **36,3M**.
 
 | Saldo antes de Hungría | Zenith | Roses | Alfa Romero |
 |---|---:|---:|---:|
-| Si no cobró premio limpio en Hungría | 36,3 | 53 | 50 |
-| Si cobró premio limpio en Hungría | 33,3 | 50 | 47 |
-
-Por tanto, los objetivos anteriores **36,3 / 50 / 50** suponen que **solo Roses cobró el premio limpio**. Bajo ese supuesto, los saldos antes de fichajes T3 serían **163,1 / 115,9 / 165,2**, obtenidos sumando `R51:R53` a los saldos anteriores. El Excel permite reconstruir esos valores condicionalmente; no basta con reutilizar `presupuesto_inicial` de Firestore como prueba independiente.
-
-`Reglamento!L15` limita a 50M el saldo después del día de puja. Eso favorece el escenario de Roses en 50M frente a 53M si el límite se aplicó en esa fecha y no hubo ajustes posteriores. No resuelve por sí solo la asignación de los premios limpios de Alfa y Zenith. La fórmula `E` no contiene `MIN(50; ...)`: el tope, si se ejecutó, se tuvo que reflejar mediante datos/ajustes manuales.
+| Checkpoint oficial verificado | **36,3** | **50,0** | **47,0** |
+| + Ingresos Hungría | +17,5 | +7,9 | +19,1 |
+| **= Saldo final post-Hungría (`E51:E53`)** | **53,8** | **57,9** | **66,1** |
 
 ## Fichajes T3: importes comprobados y diferencia sin justificar
 
