@@ -165,15 +165,22 @@ export function AdminDashboard() {
     return Object.entries(results)
       .filter(([pilotId, result]) => !noCorrieron.has(pilotId) && result.isDnf !== true
         && Number.isSafeInteger(result.racePos) && Number(result.racePos) >= 1 && Number(result.racePos) <= 3)
-      .map(([pilotId, result]) => ({
-        pilotId,
-        name: roster.find((pilot: any) => pilot.pilotoId === pilotId)?.nombre || pilotId,
-        position: Number(result.racePos),
-      }))
+      .map(([pilotId, result]) => {
+        const rosterPilot = roster.find((pilot: any) => pilot.pilotoId === pilotId);
+        const inPlantilla = plantilla.find((p: any) => p.id === pilotId);
+        const usuario = (usuarios || []).find((u: any) => u.uid === pilotId || u.piloto_id === pilotId);
+        const photoUrl = usuario?.foto_url || inPlantilla?.foto_url || rosterPilot?.foto_url || undefined;
+        return {
+          pilotId,
+          name: rosterPilot?.nombre || inPlantilla?.nombre || pilotId,
+          position: Number(result.racePos),
+          photoUrl: photoUrl || undefined,
+        };
+      })
       .sort((a, b) => a.position - b.position)
       .slice(0, 3)
-      .map(({ name, position }) => ({ name, position }));
-  }, [results, currentRawSplit, noCorrieron]);
+      .map(({ name, position, photoUrl }) => ({ name, position, ...(photoUrl ? { photoUrl } : {}) }));
+  }, [results, currentRawSplit, noCorrieron, plantilla, usuarios]);
 
   // Schedule State
   const [fechaVal, setFechaVal] = useState("");

@@ -1,7 +1,7 @@
 export interface RaceWinnerImageInput {
   raceName: string;
   splitName: string;
-  winners: Array<{ name: string; position: number }>;
+  winners: Array<{ name: string; position: number; photoUrl?: string }>;
   creativeDirection?: string;
 }
 
@@ -20,7 +20,8 @@ export function validateRaceWinnerImageInput(value: unknown): RaceWinnerImageInp
     const name = typeof item.name === "string" ? item.name.trim() : "";
     const position = item.position;
     if (!name || name.length > 80 || !Number.isSafeInteger(position) || Number(position) < 1 || Number(position) > 3) return null;
-    winners.push({ name, position: Number(position) });
+    const photoUrl = typeof item.photoUrl === "string" && item.photoUrl.length <= 500_000 ? item.photoUrl : undefined;
+    winners.push({ name, position: Number(position), ...(photoUrl ? { photoUrl } : {}) });
   }
   if (new Set(winners.map((winner) => winner.position)).size !== winners.length) return null;
   return { raceName, splitName, winners, ...(creativeDirection ? { creativeDirection } : {}) };
@@ -30,8 +31,12 @@ export function buildRaceWinnerImagePrompt(input: RaceWinnerImageInput): string 
   const podium = [...input.winners].sort((a, b) => a.position - b.position)
     .map((winner) => `${winner.position}${winner.position === 1 ? "st" : winner.position === 2 ? "nd" : "rd"}: ${winner.name}`)
     .join("; ");
+  const hasPhotos = input.winners.some((w) => Boolean(w.photoUrl));
+  const photoInstruction = hasPhotos
+    ? "Faithfully portray each podium finisher matching the facial features, hairstyle, age, and recognizable likeness of their official driver profile photos provided in the references. The drivers must clearly resemble their real profile photos."
+    : "Portray each podium finisher matching the recognizable facial features, hairstyle, and likeness of their official driver profile photos.";
   const direction = input.creativeDirection ? ` Administrator creative direction: ${input.creativeDirection}` : "";
-  return `Create a celebratory, polished 16:9 motorsport race-podium illustration for the F1 Bugambra league, split ${input.splitName}, after ${input.raceName}. Show exactly these podium finishers in the correct order: ${podium}. Make the first-place finisher the central champion, with the other listed finishers alongside them. Use original, fictional racing suits and generic non-identifiable faces; do not invent team logos, sponsors, flags, lap times, or additional names. Keep the scene dynamic, tasteful, and suitable for a league social media post. Do not render text or lettering in the image; the admin will add verified labels later.${direction}`;
+  return `Create a celebratory, polished 16:9 motorsport race-podium illustration for the F1 Bugambra league, split ${input.splitName}, after ${input.raceName}. Show exactly these podium finishers in the correct order: ${podium}. Make the first-place finisher the central champion, with the other listed finishers alongside them on the podium. ${photoInstruction} Use original, tailored professional racing suits; do not invent team logos, sponsors, flags, lap times, or additional names. Keep the scene dynamic, celebratory, tasteful, and suitable for a league official post. Do not render text or lettering in the image; verified labels will be added later.${direction}`;
 }
 
 export async function generateRaceWinnerImage(
@@ -42,11 +47,25 @@ export async function generateRaceWinnerImage(
 ): Promise<{ mimeType: string; data: string }> {
   const maxResponseBytes = 16 * 1024 * 1024;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const parts: Array<Record<string, unknown>> = [{ text: buildRaceWinnerImagePrompt(input) }];
+  for (const winner of input.winners) {
+    if (winner.photoUrl) {
+      const match = winner.photoUrl.match(/^data:(image\/[a-zA-Z0-9.+_-]+);base64,(.+)$/);
+      if (match) {
+        parts.push({
+          inlineData: {
+            mimeType: match[1],
+            data: match[2],
+          },
+        });
+      }
+    }
+  }
   const response = await fetcher(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: buildRaceWinnerImagePrompt(input) }] }],
+      contents: [{ parts }],
       generationConfig: {
         responseModalities: ["IMAGE"],
         responseFormat: { image: { aspectRatio: "16:9" } },

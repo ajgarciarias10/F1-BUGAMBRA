@@ -3,6 +3,7 @@ import { auth } from "./auth";
 export interface RaceImageWinner {
   name: string;
   position: number;
+  photoUrl?: string;
 }
 
 export async function requestRaceWinnerImage(input: {

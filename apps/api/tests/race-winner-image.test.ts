@@ -40,3 +40,25 @@ test("sends the server key to Gemini and returns image data only", async () => {
   assert.match(requestBody, /Winner/);
   assert.match(requestBody, /"aspectRatio":"16:9"/);
 });
+
+test("incorporates driver profile photos as multimodal reference parts", async () => {
+  let capturedBody = "";
+  const fetcher: typeof fetch = async (_input, init) => {
+    capturedBody = String(init?.body);
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [
+      { text: "ok" }, { inlineData: { mimeType: "image/png", data: "Y2Fw" } },
+    ] } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  const input = validateRaceWinnerImageInput({
+    splitName: "Split 3",
+    raceName: "Hungary",
+    winners: [{ name: "Alex", position: 1, photoUrl: "data:image/jpeg;base64,ZmFrZQ==" }],
+  });
+  assert.ok(input);
+  const prompt = buildRaceWinnerImagePrompt(input);
+  assert.match(prompt, /driver profile photos/);
+  await generateRaceWinnerImage("key", "model", input, fetcher);
+  assert.match(capturedBody, /ZmFrZQ==/);
+  assert.match(capturedBody, /image\/jpeg/);
+});
+
