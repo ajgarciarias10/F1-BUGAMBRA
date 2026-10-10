@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
-import { votarPilotoDelDia, cerrarVotacionPilotoDelDia } from "../services/raceProcessor";
+import { votarPilotoDelDia, abrirVotacionPilotoDelDia, cerrarVotacionPilotoDelDia } from "../services/raceProcessor";
 import type { Circuito } from "../types";
+import { buildRaceShareUrl } from "../utils/raceShareUrl";
 import { Trophy, Crown, Loader2, Users } from "lucide-react";
 
 interface RaceResultsViewProps {
@@ -23,14 +24,43 @@ function nombreDe(currentSplit: any, pilotoId: string): string {
 
 export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto, darkMode = false }: RaceResultsViewProps) {
   const { user, userData } = useAuth();
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [openId, setOpenId] = useState<string | null>(() => searchParams.get("carrera"));
   const isAdmin = userData?.rol === "admin";
+  const isRegistered = Boolean(user && userData);
 
   const circuitos: Circuito[] = ([...(currentSplit?.circuitos || [])] as Circuito[])
     .filter(c => c.completado)
     .sort((a, b) => (a.numero_carrera ?? 9999) - (b.numero_carrera ?? 9999));
 
   const abierto = circuitos.find(c => c.id === openId) || null;
+  useEffect(() => {
+    const linkedCircuitId = searchParams.get("carrera");
+    if (linkedCircuitId && circuitos.some(c => c.id === linkedCircuitId)) setOpenId(linkedCircuitId);
+    else if (linkedCircuitId && circuitos.length > 0) {
+      setOpenId(null);
+      setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete("carrera"); return next; });
+    }
+    else if (!linkedCircuitId) setOpenId(null);
+  }, [searchParams, circuitos, setSearchParams]);
+  const selectCircuit = (circuitId: string) => {
+    setOpenId(circuitId);
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.set("tab", "resultados");
+      next.set("temporada", currentSplitId);
+      next.set("carrera", circuitId);
+      return next;
+    });
+  };
+  const closeCircuit = () => {
+    setOpenId(null);
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.delete("carrera");
+      return next;
+    });
+  };
   // El bonus del circuito anterior es lo que se refleja en este: buscamos su ganador cerrado.
   const indiceAbierto = abierto ? circuitos.findIndex(c => c.id === abierto.id) : -1;
   const anterior = indiceAbierto > 0 ? circuitos[indiceAbierto - 1] : null;
@@ -74,13 +104,14 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
             return (
               <button
                 key={circuito.id}
-                onClick={() => setOpenId(circuito.id)}
+                onClick={() => selectCircuit(circuito.id)}
                 className={`m-card group relative overflow-hidden border p-4 md:p-5 text-left transition-all active:scale-[0.99] ${
                   darkMode ? "border-white/10 bg-[#111217] text-white hover:-translate-y-0.5 hover:border-[#e10600]/50" : "border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] text-black dark:text-white hover:-translate-y-0.5 hover:border-[#e10600]/50"
                 }`}
               >
                 <div className="absolute inset-x-0 top-0 h-1 bg-[#e10600] scale-x-0 origin-left transition-transform group-hover:scale-x-100" />
                 <h3 className="text-lg font-black uppercase tracking-[-0.03em]">{circuito.nombre}</h3>
+                {circuito.piloto_dia_abierta === true && !circuito.piloto_dia_cerrado && <span className="mt-1 inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-emerald-300">Votación abierta</span>}
                 <div className="mt-3 space-y-1">
                   {podio.map(r => (
                     <div key={r.pilotoId} className="flex items-center gap-2 text-[13px] md:text-[11px] md:font-mono">
@@ -111,7 +142,8 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
           getPilotPhoto={getPilotPhoto}
           uid={user?.uid}
           isAdmin={isAdmin}
-          onClose={() => setOpenId(null)}
+          isRegistered={isRegistered}
+          onClose={closeCircuit}
         />
       )}
     </div>
@@ -119,7 +151,7 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
 }
 
 function RaceDetailModal({
-  splitId, circuitoBase, anteriorGanador, anteriorNombre, currentSplit, getPilotPhoto, uid, isAdmin, onClose,
+  splitId, circuitoBase, anteriorGanador, anteriorNombre, currentSplit, getPilotPhoto, uid, isAdmin, isRegistered, onClose,
 }: {
   splitId: string;
   circuitoBase: Circuito;
@@ -129,11 +161,14 @@ function RaceDetailModal({
   getPilotPhoto: (pilotId: string) => string;
   uid?: string;
   isAdmin: boolean;
+  isRegistered: boolean;
   onClose: () => void;
 }) {
   const [circuito, setCircuito] = useState<Circuito>(circuitoBase);
   const [votando, setVotando] = useState<string | null>(null);
   const [cerrando, setCerrando] = useState(false);
+  const [abriendo, setAbriendo] = useState(false);
+  const [copiandoEnlace, setCopiandoEnlace] = useState(false);
   const [ganadorElegido, setGanadorElegido] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
@@ -175,13 +210,38 @@ function RaceDetailModal({
     setActionError(""); setActionMessage("");
     setVotando(pilotoId);
     try {
-      await votarPilotoDelDia(splitId, circuitoBase.id, uid, pilotoId);
-      setActionMessage("Tu voto se ha guardado.");
+      const result = await votarPilotoDelDia(splitId, circuitoBase.id, uid, pilotoId);
+      if (!result.ok) throw new Error(result.message);
+      setActionMessage(result.message);
     } catch {
       setActionError("No se ha podido guardar tu voto. Comprueba tu conexión y vuelve a intentarlo.");
     } finally {
       setVotando(null);
     }
+  };
+
+  const abrirVotacion = async () => {
+    if (abriendo || cerrando || votando) return;
+    setActionError(""); setActionMessage(""); setAbriendo(true);
+    try {
+      const result = await abrirVotacionPilotoDelDia(splitId, circuitoBase.id);
+      if (!result.ok) throw new Error(result.message);
+      setActionMessage(result.message);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo abrir la votación.");
+    } finally { setAbriendo(false); }
+  };
+
+  const copiarEnlace = async () => {
+    if (copiandoEnlace) return;
+    setActionError(""); setActionMessage(""); setCopiandoEnlace(true);
+    try {
+      const url = buildRaceShareUrl(window.location.origin, splitId, circuitoBase.id);
+      await navigator.clipboard.writeText(url);
+      setActionMessage("Enlace de esta carrera copiado. Cualquiera puede consultar; solo las cuentas registradas pueden votar.");
+    } catch {
+      setActionError("No se pudo copiar el enlace. Comprueba que el navegador permite acceder al portapapeles.");
+    } finally { setCopiandoEnlace(false); }
   };
 
   const cerrarVotacion = async () => {
@@ -190,10 +250,11 @@ function RaceDetailModal({
     setActionError(""); setActionMessage("");
     setCerrando(true);
     try {
-      await cerrarVotacionPilotoDelDia(splitId, circuitoBase.id, ganador);
-      setActionMessage("La votación se ha cerrado y el ganador se ha guardado.");
-    } catch {
-      setActionError("No se ha podido cerrar la votación. Comprueba la conexión y tus permisos antes de volver a intentarlo.");
+      const result = await cerrarVotacionPilotoDelDia(splitId, circuitoBase.id, ganador);
+      if (!result.ok) throw new Error(result.message);
+      setActionMessage(result.message);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se ha podido cerrar la votación. Comprueba la conexión y tus permisos antes de volver a intentarlo.");
     } finally {
       setCerrando(false);
     }
@@ -268,7 +329,7 @@ function RaceDetailModal({
             <span className="text-sm font-semibold text-white/80">Piloto del día</span>
           </div>
 
-          {circuito.piloto_dia_cerrado && circuito.piloto_dia_ganador ? (
+      {circuito.piloto_dia_cerrado && circuito.piloto_dia_ganador ? (
             <div className="m-card winner-glow flex items-center gap-3 border border-amber-400/40 bg-gradient-to-r from-amber-400/[0.14] to-amber-400/[0.03] p-4">
               {/* La foto es el ancla del "+2": la insignia sale justo de ella. */}
               <div className="relative shrink-0">
@@ -296,7 +357,17 @@ function RaceDetailModal({
             </div>
           ) : (
             <>
-              {!uid && <p className="mb-4 text-sm text-white/80"><Link to="/login" className="font-semibold text-amber-300 underline underline-offset-4">Inicia sesión para votar</Link>. Puedes consultar los votos sin entrar.</p>}
+          {circuito.piloto_dia_abierta !== true ? (
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/70">
+              <p>{isAdmin ? "Esta votación aún no se ha compartido." : "La votación de esta carrera todavía no está abierta."}</p>
+              {actionError && <p role="alert" className="mt-3 text-sm text-red-200">{actionError}</p>}
+              {actionMessage && <p role="status" className="mt-3 text-sm text-emerald-300">{actionMessage}</p>}
+              {isAdmin && <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={abrirVotacion} disabled={abriendo || cerrando || !!votando} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-amber-500 px-4 text-xs font-black uppercase tracking-wide text-black disabled:opacity-50">{abriendo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Abrir votación</button><button type="button" onClick={copiarEnlace} disabled={copiandoEnlace} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/15 px-4 text-xs font-bold text-white disabled:opacity-50">{copiandoEnlace && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Copiar enlace de carrera</button></div>}
+            </div>
+          ) : <>
+          <p className="mb-3 text-xs text-emerald-200/80">Votación abierta · solo cuentas registradas · {totalVotos} voto(s)</p>
+          {isAdmin && <button type="button" onClick={copiarEnlace} disabled={copiandoEnlace} className="mb-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/15 px-4 text-xs font-bold text-white disabled:opacity-50">{copiandoEnlace && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Copiar enlace para compartir esta votación</button>}
+          {!isRegistered && <p className="mb-4 text-sm text-white/80"><Link to="/login" className="font-semibold text-amber-300 underline underline-offset-4">Inicia sesión o regístrate para votar</Link>. Puedes consultar la carrera sin entrar.</p>}
               {actionError && <p role="alert" className="mb-4 rounded-lg border border-red-300/40 bg-red-500/10 p-3 text-sm text-red-200">{actionError}</p>}
               {actionMessage && <p role="status" className="mb-4 text-sm text-emerald-300">{actionMessage}</p>}
               <div className="grid gap-2 sm:grid-cols-2">
@@ -305,7 +376,7 @@ function RaceDetailModal({
                   return (
                     <button
                       key={r.pilotoId}
-                      disabled={!uid || !!votando || cerrando}
+                      disabled={!isRegistered || !!votando || cerrando}
                       aria-pressed={seleccionado}
                       onClick={() => votar(r.pilotoId)}
                       className={`m-row flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-default md:rounded-none ${
@@ -345,6 +416,7 @@ function RaceDetailModal({
                   </button>
                 </div>
               )}
+          </>}
             </>
           )}
         </div>

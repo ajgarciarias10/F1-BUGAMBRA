@@ -197,11 +197,22 @@ service cloud.firestore {
             incoming().piloto_dia_votantes
               .diff(existing().get('piloto_dia_votantes', {}))
               .affectedKeys().hasOnly([request.auth.uid]) &&
+            existing().get('piloto_dia_candidatos', []).hasAny([
+              incoming().piloto_dia_votantes[request.auth.uid]
+            ]) &&
             existing().get('completado', false) == true &&
+            existing().get('piloto_dia_abierta', false) == true &&
             existing().get('piloto_dia_cerrado', false) == false
           )
         );
         allow delete: if isAdmin() && isValidId(circuitoId);
+      }
+
+      // Registro append-only de aperturas y cierres de la votación; solo admin.
+      match /circuitos/{circuitoId}/votacion_audit/{auditId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin() && isValidId(circuitoId) && isValidId(auditId);
+        allow update, delete: if false;
       }
 
       // 3.2. Equipos Sub-collection

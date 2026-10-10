@@ -1,9 +1,13 @@
 import {
-  doc, collection, getDocs, getDoc, runTransaction, writeBatch, updateDoc,
+  doc, collection, getDocs, getDoc, runTransaction, writeBatch, updateDoc, serverTimestamp,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
+import { auth } from "./auth";
 import { POINTS_BY_POSITION, revertirEconomiaCarrera } from "./economyService";
 import { evolucionOVRSplit, mediaPuntosCarrera, OVR_DEBUT } from "../utils/splitResolver";
+import { raceRatingFailureMessage, RaceRatingRecalculationError } from "../utils/racePostProcessing";
+import { buildHistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
+import { getPilotDayCandidates, pilotDayCloseError, pilotDayOpenError, pilotDayVoteError } from "../utils/pilotDayVoting";
 import type { RaceResult, RosterEntry } from "../types";
 
 const POINTS_SCALE = POINTS_BY_POSITION;
@@ -18,6 +22,11 @@ export async function processRace(
   results: RaceResult[]
 ) {
   try {
+    // The correction must not leave already liquidated later races based on stale results.
+    // Read their current values in the same transaction that replaces the target result.
+    const calendarSnap = await getDocs(collection(db, `splits/${splitId}/circuitos`));
+    const calendarRefs = calendarSnap.docs.map(snapshot => snapshot.ref);
+
     // Leer equipos y sus pilotos anidados para construir índices
     const equiposSnap = await getDocs(collection(db, `splits/${splitId}/equipos`));
 
@@ -38,11 +47,30 @@ export async function processRace(
     equiposSnap.docs.forEach(d => { equipoRefMap[d.id] = d.ref; });
 
     const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    const auditRef = doc(collection(db, "admin_audit"));
 
     await runTransaction(db, async (tx) => {
       // ── Lecturas ────────────────────────────────────────────────────────────
 
-      const circuitDoc = await tx.get(circuitoRef);
+      const [circuitDoc, calendarDocs] = await Promise.all([
+        tx.get(circuitoRef),
+        Promise.all(calendarRefs.map(ref => tx.get(ref))),
+      ]);
+      const correctionPlan = buildHistoricalRaceCorrectionPlan(
+        calendarDocs.filter(snapshot => snapshot.exists()).map(snapshot => ({
+          id: snapshot.id,
+          numero_carrera: Number(snapshot.data()?.numero_carrera ?? Number.MAX_SAFE_INTEGER),
+          economia_procesada: snapshot.data()?.economia_procesada === true,
+          nombre: snapshot.data()?.nombre,
+        })),
+        circuitoId,
+      );
+      if (correctionPlan?.laterProcessedNewestFirst.length) {
+        const laterNames = correctionPlan.laterProcessedNewestFirst
+          .map(race => race.nombre || race.id)
+          .join(", ");
+        throw new Error(`No se pueden guardar estos resultados mientras haya economías posteriores procesadas (${laterNames}). Revierte esas carreras de más nueva a más antigua y vuelve a intentarlo.`);
+      }
       if (circuitDoc.data()?.acta_cerrada) {
         throw new Error("El acta de esta carrera está CERRADA y no puede modificarse.");
       }
@@ -108,9 +136,7 @@ export async function processRace(
       const oldDelta: Record<string, StatDelta> = {};
       if (isCorrection) {
         for (const res of prevResults) {
-          const pts =
-            (res.racePos >= 1 && res.racePos <= 12 ? POINTS_SCALE[res.racePos - 1] : 0) +
-            (res.qualyPos === 1 ? 2 : 0);
+          const pts = performanceScore(res);
           oldDelta[res.pilotoId] = {
             pts,
             victorias: res.racePos === 1 ? 1 : 0,
@@ -131,9 +157,7 @@ export async function processRace(
 
       for (const previous of prevResults) {
         const teamId = previous.equipoId ?? pilotEquipoMap[previous.pilotoId];
-        const pts =
-          (previous.racePos >= 1 && previous.racePos <= 12 ? POINTS_SCALE[previous.racePos - 1] : 0) +
-          (previous.qualyPos === 1 ? 2 : 0);
+        const pts = performanceScore(previous);
         if (teamId) oldTeamPoints[teamId] = (oldTeamPoints[teamId] ?? 0) + pts;
       }
 
@@ -142,9 +166,7 @@ export async function processRace(
         const roster = rosterData[pilotoId];
         if (!roster) continue;
 
-        const pts = res ?
-          (res.racePos >= 1 && res.racePos <= 12 ? POINTS_SCALE[res.racePos - 1] : 0) +
-          (res.qualyPos === 1 ? 2 : 0) : 0;
+        const pts = res ? performanceScore(res) : 0;
 
         const old = oldDelta[pilotoId] ?? { pts: 0, victorias: 0, podios: 0, poles: 0, dnfs: 0, limpias: 0, rd: 0 };
         const prev = rosterUpdates[pilotoId] ?? { ...roster };
@@ -178,8 +200,9 @@ export async function processRace(
       }
 
       // La economía se aplica por separado al cerrar el acta; aquí solo se corrigen puntos.
-      for (const teamId of new Set([...Object.keys(oldTeamPoints), ...Object.keys(newTeamPoints)])) {
-        if (!equipoRefMap[teamId]) continue;
+      const changedTeamIds = [...new Set([...Object.keys(oldTeamPoints), ...Object.keys(newTeamPoints)])]
+        .filter(teamId => equipoRefMap[teamId]);
+      for (const teamId of changedTeamIds) {
         const current = equipoData[teamId];
         tx.update(equipoRefMap[teamId], {
           puntos_constructores: Math.max(0, (current.puntos_constructores ?? 0) - (oldTeamPoints[teamId] ?? 0) + (newTeamPoints[teamId] ?? 0)),
@@ -187,13 +210,49 @@ export async function processRace(
       }
 
       tx.update(circuitoRef, { completado: true, resultados: enrichedResults });
+      const pilotStats = ["puntos_piloto", "victorias", "podios", "poles", "dnfs", "carreras_limpias"] as const;
+      const changedPilots = Object.entries(rosterUpdates).map(([pilotoId, after]) => ({
+        pilotoId,
+        before: Object.fromEntries(pilotStats.map(field => [field, rosterData[pilotoId][field] ?? 0])),
+        after: Object.fromEntries(pilotStats.map(field => [field, after[field] ?? 0])),
+      }));
+      const changedTeams = changedTeamIds.map(equipoId => ({
+        equipoId,
+        before: Number(equipoData[equipoId]?.puntos_constructores ?? 0),
+        after: Math.max(0,
+          Number(equipoData[equipoId]?.puntos_constructores ?? 0)
+          - (oldTeamPoints[equipoId] ?? 0)
+          + (newTeamPoints[equipoId] ?? 0)),
+      }));
+      tx.set(auditRef, {
+        action: isCorrection ? "race_results_corrected" : "race_results_saved",
+        summary: `${isCorrection ? "Corrección" : "Guardado"} de resultados: ${circuitDoc.data()?.nombre || circuitoId}`,
+        splitId,
+        circuitoId,
+        target: circuitoRef.path,
+        actorUid: auth.currentUser?.uid ?? null,
+        createdAt: serverTimestamp(),
+        before: {
+          resultados: prevResults,
+          pilotos: changedPilots.map(({ pilotoId, before }) => ({ pilotoId, stats: before })),
+          constructores: changedTeams.map(({ equipoId, before }) => ({ equipoId, puntos: before })),
+        },
+        after: {
+          resultados: enrichedResults,
+          pilotos: changedPilots.map(({ pilotoId, after }) => ({ pilotoId, stats: after })),
+          constructores: changedTeams.map(({ equipoId, after }) => ({ equipoId, puntos: after })),
+        },
+      });
     });
 
     // El OVR se replega desde rating_base con el bloque entero, así que tiene que
     // esperar a que la carrera esté escrita. Si falla, los puntos ya están salvados:
     // el rating se puede rehacer luego desde el panel.
-    await recalcSplitRatings(splitId);
+    const ratingResult = await recalcSplitRatings(splitId);
+    const ratingFailure = raceRatingFailureMessage(splitId, ratingResult.message);
+    if (ratingFailure) throw new RaceRatingRecalculationError(ratingFailure);
   } catch (error) {
+    if (error instanceof RaceRatingRecalculationError) throw error;
     handleFirestoreError(error, OperationType.UPDATE, `splits/${splitId}/circuitos/${circuitoId}`);
   }
 }
@@ -210,17 +269,56 @@ export async function votarPilotoDelDia(
   pilotoId: string,
 ): Promise<{ ok: boolean; message: string }> {
   try {
+    const registeredUid = auth.currentUser?.uid;
+    if (!registeredUid || registeredUid !== uid) return { ok: false, message: "Debes votar con tu cuenta registrada." };
     const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
     const snap = await getDoc(circuitoRef);
     if (!snap.exists()) return { ok: false, message: "Circuito no encontrado." };
     const data = snap.data() as any;
-    if (data.piloto_dia_cerrado) return { ok: false, message: "La votación ya está cerrada." };
-    if (!data.completado) return { ok: false, message: "Todavía no hay resultados de esta carrera." };
+    const validationError = pilotDayVoteError({ registeredUid, requestedUid: uid, completed: data.completado, open: data.piloto_dia_abierta, closed: data.piloto_dia_cerrado, candidates: data.piloto_dia_candidatos || getPilotDayCandidates(data.resultados), pilotId: pilotoId });
+    if (validationError) return { ok: false, message: validationError };
 
     await updateDoc(circuitoRef, { [`piloto_dia_votantes.${uid}`]: pilotoId });
     return { ok: true, message: "Voto registrado." };
   } catch (error: any) {
     return { ok: false, message: `Error al votar: ${error.message}` };
+  }
+}
+
+/** Abre una votación histórica y deja una auditoría inmutable de quién y cuándo la abrió. */
+export async function abrirVotacionPilotoDelDia(
+  splitId: string,
+  circuitoId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const actorUid = auth.currentUser?.uid;
+    if (!actorUid) return { ok: false, message: "Inicia sesión como administrador." };
+    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
+    const auditRef = doc(collection(circuitoRef, "votacion_audit"));
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(circuitoRef);
+      if (!snap.exists()) throw new Error("Circuito no encontrado.");
+      const data = snap.data();
+      const candidatos = getPilotDayCandidates(data.resultados);
+      const validationError = pilotDayOpenError({ completed: data.completado, closed: data.piloto_dia_cerrado, open: data.piloto_dia_abierta, candidates: candidatos });
+      if (validationError) throw new Error(validationError);
+      transaction.update(circuitoRef, {
+        piloto_dia_abierta: true,
+        piloto_dia_abierta_por: actorUid,
+        piloto_dia_abierta_en: serverTimestamp(),
+        piloto_dia_candidatos: candidatos,
+      });
+      transaction.set(auditRef, {
+        accion: "abierta",
+        actorUid,
+        estadoAnterior: data.piloto_dia_abierta === true,
+        estadoNuevo: true,
+        fecha: serverTimestamp(),
+      });
+    });
+    return { ok: true, message: "Votación abierta para las cuentas registradas." };
+  } catch (error: any) {
+    return { ok: false, message: error.message || "No se pudo abrir la votación." };
   }
 }
 
@@ -232,10 +330,30 @@ export async function cerrarVotacionPilotoDelDia(
   pilotoIdGanador: string,
 ): Promise<{ ok: boolean; message: string }> {
   try {
+    const actorUid = auth.currentUser?.uid;
+    if (!actorUid) return { ok: false, message: "Inicia sesión como administrador." };
     const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
-    await updateDoc(circuitoRef, {
-      piloto_dia_cerrado: true,
-      piloto_dia_ganador: pilotoIdGanador,
+    const auditRef = doc(collection(circuitoRef, "votacion_audit"));
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(circuitoRef);
+      if (!snap.exists()) throw new Error("Circuito no encontrado.");
+      const data = snap.data();
+      const validationError = pilotDayCloseError({ open: data.piloto_dia_abierta, closed: data.piloto_dia_cerrado, candidates: data.piloto_dia_candidatos || getPilotDayCandidates(data.resultados), winnerId: pilotoIdGanador });
+      if (validationError) throw new Error(validationError);
+      transaction.update(circuitoRef, {
+        piloto_dia_abierta: false,
+        piloto_dia_cerrado: true,
+        piloto_dia_ganador: pilotoIdGanador,
+        piloto_dia_cerrada_por: actorUid,
+        piloto_dia_cerrada_en: serverTimestamp(),
+      });
+      transaction.set(auditRef, {
+        accion: "cerrada",
+        actorUid,
+        estadoAnterior: { abierta: true, cerrada: false },
+        estadoNuevo: { abierta: false, cerrada: true, ganadorPilotoId: pilotoIdGanador },
+        fecha: serverTimestamp(),
+      });
     });
     return { ok: true, message: "Piloto del día fijado. El bonus se aplicará en la siguiente carrera." };
   } catch (error: any) {

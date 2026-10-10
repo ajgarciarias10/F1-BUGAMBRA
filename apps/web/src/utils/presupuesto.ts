@@ -36,3 +36,43 @@ export function previsualizarAjustePrecio(presupuesto: number, antes: number, de
     faltante: r1(Math.max(0, -presupuestoNuevo)),
   };
 }
+
+export type CambioPrecioEconomico = {
+  pilotId: string;
+  pilotName?: string;
+  antes: number;
+  despues: number;
+};
+
+/** Shared calculation for preview and atomic admin price/balance reconciliation. */
+export function previsualizarCorreccionEconomica(
+  presupuesto: number,
+  cambiosPrecio: CambioPrecioEconomico[],
+  ajusteManual = 0,
+) {
+  if (!Number.isFinite(presupuesto) || !Number.isFinite(ajusteManual)) {
+    throw new Error("El presupuesto y el ajuste manual deben ser números válidos.");
+  }
+  const cambios = cambiosPrecio.map(cambio => {
+    if (!cambio.pilotId || !Number.isFinite(cambio.antes) || !Number.isFinite(cambio.despues)) {
+      throw new Error("Cada cambio debe incluir piloto y precios válidos.");
+    }
+    return {
+      ...cambio,
+      delta: r1(cargoPorPrecio(cambio.despues) - cargoPorPrecio(cambio.antes)),
+    };
+  });
+  const ajustePrecios = r1(cambios.reduce((total, cambio) => total + cambio.delta, 0));
+  const ajusteManualRedondeado = r1(ajusteManual);
+  const delta = r1(ajustePrecios + ajusteManualRedondeado);
+  const presupuestoNuevo = r1(presupuesto + delta);
+  return {
+    cambios,
+    ajustePrecios,
+    ajusteManual: ajusteManualRedondeado,
+    delta,
+    presupuestoNuevo,
+    insuficiente: presupuestoNuevo < 0,
+    faltante: r1(Math.max(0, -presupuestoNuevo)),
+  };
+}

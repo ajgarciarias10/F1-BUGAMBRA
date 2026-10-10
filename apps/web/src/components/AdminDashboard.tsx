@@ -23,13 +23,14 @@ import { SplitIntroPanel } from "./SplitIntroPanel";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
 import { PaddockAdminPanel } from "./PaddockAdminPanel";
 import { RaceWinnersImagePanel } from "./RaceWinnersImagePanel";
+import { buildHistoricalRaceCorrectionPlan, HistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
 
 const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
 
 type AdminTab = "results" | "economy" | "rivalries" | "roster" | "paddock" | "production" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; description: string }> = [
-  { id: "results", label: "Carreras", description: "Programa la carrera, introduce los resultados y cierra el acta para liquidar su economía." },
+  { id: "results", label: "Carreras", description: "Programa la carrera, introduce los resultados y cierra el acta para liquidar su economía. Tras cerrarla, aquí puedes generar y descargar con Gemini un borrador de imagen del podio." },
   { id: "economy", label: "Economía y fichajes", description: "Gestiona los traspasos, contratos y presupuestos de cada split." },
   { id: "rivalries", label: "Rivalidades", description: "Define los grupos de pilotos que compiten por los premios de rivalidad." },
   { id: "roster", label: "Equipos y usuarios", description: "Gestiona las escuderías, las cuentas y sus roles." },
@@ -125,6 +126,9 @@ export function AdminDashboard() {
   const [reabriendoActa, setReabriendoActa] = useState(false);
   const [deshaciendoCarrera, setDeshaciendoCarrera] = useState(false);
   const [recalculandoPuntos, setRecalculandoPuntos] = useState(false);
+  const [historicalCorrectionPlan, setHistoricalCorrectionPlan] = useState<
+    (HistoricalRaceCorrectionPlan & { splitId: string }) | null
+  >(null);
 
   // Form State
   const [results, setResults] = useState<Record<string, Partial<RaceResult>>>({});
@@ -612,6 +616,17 @@ export function AdminDashboard() {
     if (idx < 0) return false;
     return !circuitos.slice(idx + 1).some((c: any) => c.economia_procesada);
   }, [splits, selectedSplitId, selectedCircuitoId]);
+
+  const planForSelectedRace = useMemo(
+    () => buildHistoricalRaceCorrectionPlan(currentRawSplit?.circuitos ?? [], selectedCircuitoId),
+    [currentRawSplit, selectedCircuitoId],
+  );
+
+  useEffect(() => {
+    if (historicalCorrectionPlan && historicalCorrectionPlan.splitId !== selectedSplitId) {
+      setHistoricalCorrectionPlan(null);
+    }
+  }, [historicalCorrectionPlan, selectedSplitId]);
 
   const handleRevertirEconomia = () => {
     if (!selectedSplitId || !selectedCircuitoId) return;
@@ -1218,6 +1233,11 @@ export function AdminDashboard() {
             </div>
 
             <div className="flex items-center gap-2">
+              {isActaCerrada && raceImageWinners.length > 0 && (
+                <a href="#race-winners-image" className="min-h-10 inline-flex items-center rounded-sm border border-violet-400/40 px-3 text-[10px] font-black uppercase text-violet-200 hover:bg-violet-400/10">
+                  Crear imagen con Gemini
+                </a>
+              )}
               {((Object.values(qualyCount) as number[]).some(c => c > 1) || (Object.values(raceCount) as number[]).some(c => c > 1)) && (
                 <div className="text-[9px] text-amber-400 font-mono flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 mr-1 max-w-xs">
                   <AlertCircle className="w-3 h-3 flex-shrink-0" />
@@ -1282,6 +1302,17 @@ export function AdminDashboard() {
           <details className="mt-3 rounded-xl border border-white/10 p-3">
             <summary className="min-h-8 cursor-pointer text-sm font-bold text-white/70">Corregir una carrera o recalcular el split</summary>
             <p className="mt-2 text-sm text-white/60">Para editar un acta cerrada, revierte primero su economía y después reabre el acta.</p>
+            {isEditingFinished && (planForSelectedRace?.laterProcessedNewestFirst.length ?? 0) > 0 && (
+              <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
+                <p className="text-sm font-bold text-amber-200">Esta carrera es histórica y hay liquidaciones posteriores.</p>
+                <p className="mt-1 text-xs text-white/60">Prepara una guía para revertir las carreras posteriores en orden seguro antes de editar este acta.</p>
+                <button
+                  type="button"
+                  onClick={() => planForSelectedRace && setHistoricalCorrectionPlan({ ...planForSelectedRace, splitId: selectedSplitId })}
+                  className="mt-2 min-h-10 rounded-lg border border-amber-300/40 px-3 text-xs font-bold text-amber-200 hover:bg-amber-300/10"
+                >Preparar plan de corrección histórica</button>
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {isEconomiaProcesada && <button
                 disabled={revirtiendoEconomia || !esUltimaCarreraProcesada}
@@ -1320,6 +1351,54 @@ export function AdminDashboard() {
             </button>
             </div>
           </details>
+
+          {historicalCorrectionPlan?.splitId === selectedSplitId && (
+            <section className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4" aria-live="polite">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-black text-amber-100">Plan manual: corregir {historicalCorrectionPlan.target.nombre || "carrera histórica"}</h3>
+                  <p className="mt-1 text-xs text-white/60">El plan solo guía la navegación. Cada reversión y liquidación sigue siendo una acción individual.</p>
+                </div>
+                <button type="button" onClick={() => setHistoricalCorrectionPlan(null)} className="min-h-10 rounded-lg border border-white/15 px-3 text-xs text-white/70">Cerrar plan</button>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-white/10 p-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-orange-200">1. Revertir posteriores, de más nueva a más antigua</h4>
+                  {historicalCorrectionPlan.laterProcessedNewestFirst.length ? (
+                    <ol className="mt-2 space-y-2">
+                      {historicalCorrectionPlan.laterProcessedNewestFirst.map((race, index) => (
+                        <li key={race.id} className="flex items-center justify-between gap-2 text-xs text-white/75">
+                          <span>{index + 1}. {race.nombre || `Carrera ${race.numero_carrera ?? ""}`}</span>
+                          <button type="button" onClick={() => setSelectedCircuitoId(race.id)} className="min-h-9 rounded border border-orange-300/30 px-2 text-orange-200">Ir</button>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : <p className="mt-2 text-xs text-emerald-200">No quedan economías posteriores por revertir.</p>}
+                </div>
+
+                <div className="rounded-lg border border-white/10 p-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-sky-200">2. Corregir la carrera objetivo</h4>
+                  <p className="mt-2 text-xs leading-relaxed text-white/70">Vuelve al objetivo, revierte su economía, reabre el acta, guarda las posiciones, sanciones y DNFs correctos, y cierra el acta otra vez.</p>
+                  <button type="button" onClick={() => setSelectedCircuitoId(historicalCorrectionPlan.target.id)} className="mt-2 min-h-9 rounded border border-sky-300/30 px-2 text-xs text-sky-200">Ir al objetivo: {historicalCorrectionPlan.target.nombre || `Carrera ${historicalCorrectionPlan.target.numero_carrera ?? ""}`}</button>
+                </div>
+
+                <div className="rounded-lg border border-white/10 p-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-emerald-200">3. Reprocesar en orden cronológico</h4>
+                  <ol className="mt-2 space-y-2">
+                    {historicalCorrectionPlan.replayChronological.map((race, index) => (
+                      <li key={race.id} className="flex items-center justify-between gap-2 text-xs text-white/75">
+                        <span>{index + 1}. {race.nombre || `Carrera ${race.numero_carrera ?? ""}`}</span>
+                        <button type="button" onClick={() => setSelectedCircuitoId(race.id)} className="min-h-9 rounded border border-emerald-300/30 px-2 text-emerald-200">Ir</button>
+                      </li>
+                    ))}
+                    {!historicalCorrectionPlan.replayChronological.length && <li className="text-xs text-white/50">La carrera objetivo no tenía economía procesada al preparar el plan; procésala después de cerrarla y luego continúa con las posteriores.</li>}
+                  </ol>
+                </div>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-amber-100/80">Límite actual: las ganancias y los cambios de precio se revierten y aplican una carrera cada vez. Este plan solo vive en esta pantalla; no es una operación duradera, no se reanuda automáticamente y una interrupción puede dejar el split a medio corregir. Comprueba cada mensaje de éxito antes de seguir.</p>
+            </section>
+          )}
 
           {economiaMsg && (
             <div className="mt-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-sm text-xs text-amber-400 font-mono">

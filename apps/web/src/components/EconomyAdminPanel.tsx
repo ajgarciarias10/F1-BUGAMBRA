@@ -7,17 +7,14 @@ import {
   procesarEconomiaCarrera, revertirEconomiaCarrera, ficharPiloto, recalcularCurvaPreciosSplit,
   ajustarPrecioCompraPiloto,
   mantenerInicialDe, clausulaInicialDe,
-  calcularPuntosPosicion,
-  calcularMillonesRivalidadClasificacion, calcularMillonesRivalidadCarrera,
-  M_PUNTOS_FACTOR, M_POLE, M_VUELTA_RAPIDA, M_SIN_SANCIONADOS, M_PARTICIPACION,
-  M_SOLO_POR_CARRERA,
 } from "../services/economyService";
 import { aplicarAperturas, derivarAperturas, type AperturaDerivada } from "../services/splitBuilder";
 import { Loader2, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
 import { resolveTransferView, type TransferView } from "../utils/transferView";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
-import { economyRules } from "../utils/economyRules";
+import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, totalEconomyAdjustments, totalEconomyIncome, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
 import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
+import { applyTeamEconomyCorrection } from "../services/adminMutationService";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -68,8 +65,8 @@ interface TeamRow {
   poles: number;
   vueltas_rapidas: number;
   sin_sanc: number;
-  ingresos_rivalidades: number;
-  ingresos_premios: number;
+  ingresos: EconomyIncomeBreakdown;
+  ajuste_economia_historica: number;
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -232,8 +229,9 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
           presupuesto_inicial: td.presupuesto_inicial ?? null,
           puntos_constructores: td.puntos_constructores ?? 0,
           poles: 0, vueltas_rapidas: 0, sin_sanc: 0,
-           ingresos_rivalidades: -(td.economia_historica?.ajuste_rivalidades ?? 0),
-           ingresos_premios: -(td.economia_historica?.ajuste_premios ?? 0),
+          ingresos: { points: 0, pole: 0, fastestLap: 0, participation: 0, cleanTeam: 0, rivalry: 0, seasonPrize: 0 },
+          ajuste_economia_historica: -Number(td.economia_historica?.ajuste_rivalidades ?? 0)
+            - Number(td.economia_historica?.ajuste_premios ?? 0),
         });
         teamNameMap[teamDoc.id] = td.nombre || teamDoc.id;
       }
@@ -308,87 +306,19 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
         }
       }
 
-      // Compute income breakdown directly from processed race results (no transacciones dependency)
-      const splitDoc = await getDoc(doc(db, "splits", splitId));
-      const rivalries = splitDoc.data()?.rivalries;
-      const soloPilotIds = new Set<string>((rivalries?.soloPilots || []).map((p: any) => p.id));
-      const rivalryGroups: any[] = rivalries?.groups || [];
-
-      for (const c of rawCircs) {
-        if (!c.completado || !c.economia_procesada || !Array.isArray(c.resultados)) continue;
-        const resultados: any[] = c.resultados;
-        const rules = economyRules(c.economia_reglas_aplicadas ?? splitDoc.data()?.economia_config);
-        const { pole: M_POLE, vuelta_rapida: M_VUELTA_RAPIDA, sin_sancionados: M_SIN_SANCIONADOS,
-          participacion: M_PARTICIPACION, puntos_factor: M_PUNTOS_FACTOR, solo: M_SOLO_POR_CARRERA } = rules;
-
-        const participatingTeams = new Set<string>();
-        const dirtyTeams = new Set<string>();
-        for (const r of resultados) {
-           const tid = r.equipoId ?? pilotTeam[r.pilotoId];
-          if (!tid) continue;
-          participatingTeams.add(tid);
-          if (!r.isClean) dirtyTeams.add(tid);
-        }
-
-        for (const r of resultados) {
-           const tid = r.equipoId ?? pilotTeam[r.pilotoId];
-          const team = newTeams.find(t => t.id === tid);
-          if (!team) continue;
-
-           const ptsPos  = calcularPuntosPosicion(r.racePos);
-          const ptsPole = r.qualyPos === 1 ? 2 : 0;
-          const totalPts = ptsPos + ptsPole;
-          if (totalPts > 0) team.ingresos_premios += parseFloat((totalPts * M_PUNTOS_FACTOR).toFixed(2));
-
-          if (r.qualyPos === 1) team.ingresos_premios += M_POLE;
-          if (r.fastestLap)    team.ingresos_premios += M_VUELTA_RAPIDA;
-          if (soloPilotIds.has(r.pilotoId)) team.ingresos_rivalidades += M_SOLO_POR_CARRERA;
-        }
-
-         for (const tid of participatingTeams) {
-           const participatingTeam = newTeams.find(t => t.id === tid);
-           if (participatingTeam) participatingTeam.ingresos_premios += M_PARTICIPACION;
-           if (!dirtyTeams.has(tid)) {
-            const team = newTeams.find(t => t.id === tid);
-            if (team) team.ingresos_premios += M_SIN_SANCIONADOS;
-          }
-        }
-
-        for (const group of rivalryGroups) {
-          if (group.type === "solo") continue;
-          const members = group.members
-            .map((m: any) => {
-              const r = resultados.find((res: any) => res.pilotoId === m.id);
-               const tid = r?.equipoId ?? pilotTeam[m.id];
-              if (!r || !tid) return null;
-              return { qualyPos: r.qualyPos, racePos: r.racePos, teamId: tid };
-            })
-            .filter(Boolean);
-          if (members.length < 2) continue;
-
-          [...members].sort((a: any, b: any) => a.qualyPos - b.qualyPos).forEach((member: any, index) => {
-            const team = newTeams.find(t => t.id === member.teamId);
-            if (team) team.ingresos_rivalidades += (group.members.length === 2 ? rules.rivalidad_duo_clasificacion : rules.rivalidad_clasificacion)[index] ?? 0;
-          });
-          [...members].sort((a: any, b: any) => a.racePos - b.racePos).forEach((member: any, index) => {
-            const team = newTeams.find(t => t.id === member.teamId);
-            if (team) team.ingresos_rivalidades += (group.members.length === 2 ? rules.rivalidad_duo_carrera : rules.rivalidad_carrera)[index] ?? 0;
-          });
-        }
-      }
-
-      const seasonAwards = await getDocs(query(
+      // Usa los asientos realmente guardados, con el mismo tipo de fuente que
+      // registró el cálculo. Así el panel no vuelve a simular reglas por su cuenta.
+      const incomeLedger = await getDocs(query(
         collection(db, "transacciones"),
         where("splitId", "==", splitId),
       ));
-      seasonAwards.docs.forEach(award => {
-        const data = award.data();
-        if (data.tipo !== "premio_temporada") return;
-        const team = newTeams.find(entry => entry.id === data.equipoId);
-        if (!team) return;
-        if (String(data.descripcion || "").toLowerCase().includes("rivalidad")) team.ingresos_rivalidades += Number(data.cantidad || 0);
-        else team.ingresos_premios += Number(data.cantidad || 0);
-      });
+      for (const team of newTeams) {
+        const entries = incomeLedger.docs
+          .map(entry => entry.data())
+          .filter(data => data.equipoId === team.id) as Array<{ tipo: any; cantidad?: number; esIngreso?: boolean }>;
+        team.ingresos = sumEconomyIncomeTransactions(entries);
+        team.ajuste_economia_historica += totalEconomyAdjustments(entries);
+      }
 
       if (requestId !== loadRequestRef.current) return;
       setGlobalPilots(
@@ -486,6 +416,18 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     finally { setSavingBudget(null); }
   }
 
+  async function applyBudgetAdjustment(team: TeamRow, delta: number, reason: string) {
+    const result = await applyTeamEconomyCorrection({
+      splitId: selectedSplitId,
+      teamId: team.id,
+      expectedBalance: team.presupuesto,
+      reason,
+      manualBudgetAdjustment: delta,
+    });
+    if (result.applied) await loadData(selectedSplitId);
+    setProcessLog([result.message]);
+  }
+
   async function recalcularPrecios() {
     if (!confirm(
       `Recalcula mantener y cláusula de cada carrera de ${selectedSplitId} desde el precio de compra.\n\n` +
@@ -528,11 +470,16 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     if (!reason?.trim()) return;
     setSavingId(pilot.id);
     try {
-    const result = await ajustarPrecioCompraPiloto({
-      splitId: pilot.splitId, teamId: pilot.equipoId, pilotId: pilot.id,
-      pilotName: pilot.nombre, newPrice: newPrecio, reason,
+    const team = teams.find(row => row.id === pilot.equipoId);
+    if (!team) throw new Error("No se encontró el saldo actual de la escudería. Recarga la tabla.");
+    const result = await applyTeamEconomyCorrection({
+      splitId: pilot.splitId,
+      teamId: pilot.equipoId,
+      expectedBalance: team.presupuesto,
+      reason,
+      priceChanges: [{ pilotId: pilot.id, pilotName: pilot.nombre, expectedPrice: pilot.precio_compra, newPrice: newPrecio }],
     });
-    if (!result.ok) throw new Error(result.message);
+    if (!result.applied) throw new Error(result.message);
     setEditing(prev => { const n = { ...prev }; delete n[pilot.id]; return n; });
     setProcessLog([result.message]);
     await loadData(pilot.splitId);
@@ -995,8 +942,10 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                 <th className="py-3 px-4 text-left font-normal">Escudería</th>
                 <th className="py-3 px-4 text-right font-normal">Inicial</th>
                 <th className="py-3 px-4 text-right font-normal">Fichajes / ajustes</th>
-                <th className="py-3 px-4 text-right font-normal text-emerald-500/50">+ Rival.</th>
-                <th className="py-3 px-4 text-right font-normal text-emerald-500/50">+ Premios</th>
+                {ECONOMY_INCOME_SOURCES.map(source => (
+                  <th key={source.key} className="py-3 px-4 text-right font-normal text-emerald-500/50">+ {source.label}</th>
+                ))}
+                <th className="py-3 px-4 text-right font-normal text-emerald-500/50">Ajuste hist.</th>
                 <th className="py-3 px-4 text-right font-normal">Total disp.</th>
                 <th className="py-3 px-4 text-right font-normal">Pts</th>
               </tr>
@@ -1005,7 +954,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
               {teams.map(t => {
                 const ini = t.presupuesto_inicial;
                 const act = t.presupuesto;
-                 const fichajes = act - (ini ?? 0) - t.ingresos_rivalidades - t.ingresos_premios;
+                const fichajes = act - (ini ?? 0) - totalEconomyIncome(t.ingresos) - t.ajuste_economia_historica;
                 const editVal = editingBudget[t.id];
                 const isSavingB = savingBudget === t.id;
                 return (
@@ -1037,11 +986,14 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                     <td className={`py-3 px-4 text-right font-black font-mono text-sm tabular-nums ${fichajes < 0 ? "text-[#e10600]" : "text-white/70"}`}>
                       {r1(fichajes)}M
                     </td>
-                    <td className="py-3 px-4 text-right font-mono text-emerald-400/70 text-xs tabular-nums">
-                      {t.ingresos_rivalidades > 0 ? `+${r1(t.ingresos_rivalidades)}M` : <span className="text-white/15">—</span>}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono text-emerald-400/70 text-xs tabular-nums">
-                      {t.ingresos_premios > 0 ? `+${r1(t.ingresos_premios)}M` : <span className="text-white/15">—</span>}
+                    {ECONOMY_INCOME_SOURCES.map(source => {
+                      const amount = t.ingresos[source.key];
+                      return <td key={source.key} className="py-3 px-4 text-right font-mono text-emerald-400/70 text-xs tabular-nums">
+                        {amount > 0 ? `+${r1(amount)}M` : <span className="text-white/15">—</span>}
+                      </td>;
+                    })}
+                    <td className="py-3 px-4 text-right font-mono text-white/50 text-xs tabular-nums">
+                      {t.ajuste_economia_historica ? `${r1(t.ajuste_economia_historica)}M` : <span className="text-white/15">—</span>}
                     </td>
                     <td className={`py-3 px-4 text-right font-black font-mono text-sm tabular-nums ${act < 0 ? "text-[#e10600]" : "text-white"}`}>
                       {r1(act)}M
@@ -1054,21 +1006,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                         if (!motivo?.trim()) return;
                         setSavingBudget(t.id);
                         try {
-                          await runTransaction(db, async tx => {
-                            const ref = doc(db, `splits/${selectedSplitId}/equipos`, t.id);
-                            const snap = await tx.get(ref);
-                            if (!snap.exists()) throw new Error("La escudería ya no existe.");
-                            const saldoActual = Number(snap.data().presupuesto ?? 0);
-                            if (r1(saldoActual) !== r1(t.presupuesto)) {
-                              throw new Error("El saldo cambió desde que cargaste la tabla. Recárgala y vuelve a revisar el ajuste; no se aplicó nada.");
-                            }
-                            tx.update(ref, { presupuesto: increment(delta) });
-                            tx.set(doc(collection(db, "transacciones")), { splitId: selectedSplitId, equipoId: t.id, equipo: t.nombre,
-                              tipo: "ajuste", cantidad: Math.abs(delta), esIngreso: delta > 0,
-                              saldo_anterior: saldoActual, saldo_nuevo: r1(saldoActual + delta),
-                              descripcion: motivo.trim(), fecha: serverTimestamp() });
-                          });
-                          await loadData(selectedSplitId);
+                          await applyBudgetAdjustment(t, delta, motivo.trim());
                         } catch (error: any) { setProcessLog([error.message]); }
                         finally { setSavingBudget(null); }
                       }}>Ajustar saldo</button>

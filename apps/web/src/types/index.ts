@@ -123,8 +123,15 @@ export interface Circuito {
   resultados: RaceResult[];
   /** uid del votante → pilotoId elegido. Un voto por cuenta de la liga, sin duplicados. */
   piloto_dia_votantes?: Record<string, string>;
+  /** La votación solo acepta votos mientras este estado esté abierto explícitamente. */
+  piloto_dia_abierta?: boolean;
+  piloto_dia_candidatos?: string[];
+  piloto_dia_abierta_por?: string;
+  piloto_dia_abierta_en?: unknown;
   /** true cuando el admin ha fijado el ganador y la votación ya no acepta cambios. */
   piloto_dia_cerrado?: boolean;
+  piloto_dia_cerrada_por?: string;
+  piloto_dia_cerrada_en?: unknown;
   /** pilotoId del ganador; solo tiene sentido si piloto_dia_cerrado es true. */
   piloto_dia_ganador?: string | null;
 }

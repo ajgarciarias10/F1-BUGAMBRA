@@ -33,7 +33,7 @@ export function RaceWinnersImagePanel({ raceName, splitName, winners }: Props) {
   };
 
   return (
-    <section className="mt-4 rounded-sm border border-violet-400/20 bg-violet-400/[0.04] p-3">
+    <section id="race-winners-image" className="mt-4 scroll-mt-6 rounded-sm border border-violet-400/20 bg-violet-400/[0.04] p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-xs font-black uppercase tracking-wider text-violet-200">Imagen del podio con Gemini</h3>
