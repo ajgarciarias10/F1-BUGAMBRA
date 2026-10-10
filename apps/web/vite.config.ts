@@ -38,6 +38,7 @@ export default defineConfig(() => {
       chunkSizeWarningLimit: 700,
     },
     server: {
+      allowedHosts: true,
       proxy: {
         '/api': process.env.VITE_API_URL || 'http://localhost:4000',
       },
