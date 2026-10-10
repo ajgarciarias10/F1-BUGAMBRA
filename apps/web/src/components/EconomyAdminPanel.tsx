@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, increment, runTransaction, serverTimestamp, deleteField, query, where } from "firebase/firestore";
 import { EconomyRulesPanel } from "./EconomyRulesPanel";
-import { SplitRestorePanel } from "./SplitRestorePanel";
 import { db } from "../services/firebase";
 import {
   procesarEconomiaCarrera, revertirEconomiaCarrera, ficharPiloto,
@@ -763,7 +762,6 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
   return (
     <div className="space-y-10">
       {selectedSplitId && <EconomyRulesPanel key={selectedSplitId} splitId={selectedSplitId} />}
-      {selectedSplitId && <SplitRestorePanel key={`restore-${selectedSplitId}`} splitId={selectedSplitId} splits={splits} onRestored={() => loadData(selectedSplitId)} />}
 
       {/* ── CONTROLES ── */}
       <div className="flex items-center justify-between flex-wrap gap-4 border-b border-white/[0.06] pb-6">
