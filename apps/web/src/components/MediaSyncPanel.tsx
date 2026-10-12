@@ -4,6 +4,7 @@ import { getApp } from "firebase/app";
 import { collection, doc, getDocs, getFirestore, writeBatch } from "firebase/firestore";
 import { db } from "../services/firebase";
 
+import { useSingleFlight } from "../hooks/useSingleFlight";
 // Las fotos de piloto y los escudos de escudería viven en otra base de datos del mismo
 // proyecto de Firebase (la de antes de la migración). Esta herramienta las trae a la base
 // actual: la foto baja al catálogo global de pilotos y el escudo se replica a todos los
@@ -20,6 +21,7 @@ const esImagen = (valor: unknown): valor is string =>
 type Hallazgo = { fotos: Map<string, string>; escudos: Map<string, string>; detalle: string[] };
 
 export function MediaSyncPanel({ splits }: { splits: any[] }) {
+  const { run: runOnce, pending: pendingOnce } = useSingleFlight();
   const [origen, setOrigen] = useState(BASES_CONOCIDAS[0]);
   const [running, setRunning] = useState(false);
   const [hallazgo, setHallazgo] = useState<Hallazgo | null>(null);
@@ -96,6 +98,7 @@ export function MediaSyncPanel({ splits }: { splits: any[] }) {
   // ── Escritura en la base actual ───────────────────────────────────────────
 
   const traer = async () => {
+    return runOnce(async () => {
     if (!hallazgo) return;
     setRunning(true);
     try {
@@ -163,15 +166,16 @@ export function MediaSyncPanel({ splits }: { splits: any[] }) {
     } finally {
       setRunning(false);
     }
-  };
+  });
+};
 
   return (
-    <section className="border border-white/10 bg-white/[0.03] p-5 space-y-4">
+    <section className="border border-line bg-surface-2 p-5 space-y-4">
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-sky-500/10 text-sky-300"><ImageIcon className="w-5 h-5" /></div>
+        <div className="p-2 bg-info-soft text-info"><ImageIcon className="w-5 h-5" /></div>
         <div>
-          <h2 className="font-black uppercase tracking-tight text-lg">Fotos y escudos</h2>
-          <p className="text-xs text-white/45 mt-1 max-w-2xl">
+          <h2 className="font-bold uppercase tracking-tight text-lg">Fotos y escudos</h2>
+          <p className="text-xs text-ink-muted mt-1 max-w-2xl">
             Trae las fotos de piloto y los escudos de escudería desde la otra base de datos del
             proyecto. Primero mira qué hay, y solo escribe cuando le das a Traer. No borra nada:
             rellena lo que falta y respeta lo que ya esté puesto.
@@ -180,10 +184,10 @@ export function MediaSyncPanel({ splits }: { splits: any[] }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">Base de origen</span>
+        <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-ink-muted">Base de origen</span>
         <input value={origen} onChange={event => setOrigen(event.target.value)} spellCheck={false}
           list="bases-firestore"
-          className="flex-1 min-w-[18rem] bg-black/40 border border-white/10 px-3 py-2 text-[11px] font-mono text-white outline-none focus:border-sky-400" />
+          className="flex-1 min-w-[18rem] bg-surface-2 border border-line px-3 py-2 text-[11px] font-mono text-ink outline-none focus:border-info/40" />
         <datalist id="bases-firestore">
           {BASES_CONOCIDAS.map(base => <option key={base} value={base} />)}
         </datalist>
@@ -191,25 +195,25 @@ export function MediaSyncPanel({ splits }: { splits: any[] }) {
 
       <div className="flex flex-wrap gap-2">
         <button onClick={buscar} disabled={running || !origen.trim()}
-          className="inline-flex items-center gap-2 border border-white/20 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white/70 disabled:opacity-40">
+          className="inline-flex items-center gap-2 border border-line px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-ink-2 disabled:opacity-40">
           {running && !hallazgo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
           Ver qué hay
         </button>
-        <button onClick={traer} disabled={running || !hallazgo}
-          className="inline-flex items-center gap-2 border border-sky-500/40 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-40">
+        <button aria-busy={pendingOnce || undefined} onClick={traer} disabled={(running || !hallazgo) || pendingOnce}
+          className="inline-flex items-center gap-2 border border-info/40 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-info disabled:opacity-40">
           {running && hallazgo ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
           Traer fotos y escudos
         </button>
       </div>
 
       {log.length > 0 && (
-        <div className="border border-white/[0.06] bg-black/30 px-4 py-3 space-y-0.5 max-h-72 overflow-y-auto">
+        <div className="border border-line bg-surface-2 px-4 py-3 space-y-0.5 max-h-72 overflow-y-auto">
           {log.map((line, index) => (
             <p key={index} className={`text-[10px] font-mono ${
-              line.startsWith("Error") ? "text-[#e10600]"
-              : line.startsWith("⚠") ? "text-amber-300"
-              : line.startsWith("✓") ? "text-emerald-400/80"
-              : "text-white/45"
+              line.startsWith("Error") ? "text-brand"
+              : line.startsWith("⚠") ? "text-warn"
+              : line.startsWith("✓") ? "text-ok"
+              : "text-ink-muted"
             }`}>{line}</p>
           ))}
         </div>

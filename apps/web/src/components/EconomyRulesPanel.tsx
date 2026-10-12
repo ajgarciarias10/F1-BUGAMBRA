@@ -4,6 +4,7 @@ import { db } from "../services/firebase";
 import { runAuditedAdminMutation } from "../services/adminMutationService";
 import { DEFAULT_ECONOMY_RULES, economyRules } from "../utils/economyRules";
 
+import { useSingleFlight } from "../hooks/useSingleFlight";
 const labels: Record<string, string> = {
   puntos_por_posicion: "Puntos por posición (1.º en adelante)", puntos_pole: "Puntos deportivos por pole",
   mantener_factor_positivo: "Mantener: multiplicador de precio positivo",
@@ -20,6 +21,7 @@ const labels: Record<string, string> = {
   tope_presupuesto_subasta: "Tope de presupuesto al cerrar la subasta",
 };
 export function EconomyRulesPanel({ splitId }: { splitId: string }) {
+  const { run: runOnce, pending: pendingOnce } = useSingleFlight();
   const [values, setValues] = useState<Record<string, string>>({});
   const [seller, setSeller] = useState(false);
   const [message, setMessage] = useState("");
@@ -36,14 +38,14 @@ export function EconomyRulesPanel({ splitId }: { splitId: string }) {
     }).catch(error => { if (active) setMessage(error.message); });
     return () => { active = false; };
   }, [splitId]);
-  return <details className="border border-white/10 p-4 my-4">
+  return <details className="border border-line p-4 my-4">
     <summary className="cursor-pointer font-bold">Reglas económicas del split</summary>
-    <p className="text-xs text-white/60 my-3">Las reglas de precios y puntos se aplican a las próximas operaciones o recálculos. Los datos de precio ya guardados en el historial se conservan. Para corregir una carrera ya liquidada, revierte su economía y vuelve a procesarla. Separa las listas por posición con punto y coma.</p>
+    <p className="text-xs text-ink-2 my-3">Las reglas de precios y puntos se aplican a las próximas operaciones o recálculos. Los datos de precio ya guardados en el historial se conservan. Para corregir una carrera ya liquidada, revierte su economía y vuelve a procesarla. Separa las listas por posición con punto y coma.</p>
     <div className="grid sm:grid-cols-2 gap-3">{Object.entries(values).map(([key, value]) => <label key={key} className="text-xs">{labels[key] || key}
-      <input className="block bg-black border border-white/20 p-2 w-full" value={value} onChange={e => setValues(v => ({ ...v, [key]: e.target.value }))} />
+      <input className="block bg-surface border border-line p-2 w-full" value={value} onChange={e => setValues(v => ({ ...v, [key]: e.target.value }))} />
     </label>)}</div>
     <label className="block text-xs my-3"><input type="checkbox" checked={seller} onChange={e => setSeller(e.target.checked)} /> La escudería vendedora cobra la cláusula</label>
-    <button disabled={!ready} className="border border-white/20 px-3 py-2 text-xs" onClick={async () => {
+    <button disabled={!ready || pendingOnce} aria-busy={pendingOnce || undefined} className="border border-line px-3 py-2 text-xs" onClick={() => runOnce(async () => {
       setReady(false);
       try {
         const parsed = Object.fromEntries(Object.entries(values).map(([k, v]) => {
@@ -58,7 +60,7 @@ export function EconomyRulesPanel({ splitId }: { splitId: string }) {
         setMessage("Reglas guardadas.");
       } catch (error: any) { setMessage(`Error: ${error.message}`); }
       finally { setReady(true); }
-    }}>Guardar reglas</button>
-    <p role="status" className={`text-xs mt-2 ${message.startsWith("Error") || message.includes("no existe") ? "text-red-300" : "text-emerald-300"}`}>{message}</p>
+    })}>Guardar reglas</button>
+    <p role="status" className={`text-xs mt-2 ${message.startsWith("Error") || message.includes("no existe") ? "text-danger" : "text-ok"}`}>{message}</p>
   </details>;
 }
