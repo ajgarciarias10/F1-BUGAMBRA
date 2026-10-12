@@ -5,6 +5,7 @@ import { DataProvider } from "./hooks/useData";
 import { PublicHome } from "./components/PublicHome";
 import { InstallApp, InstallBanner } from "./components/InstallApp";
 import { MarketLifecycleProvider } from "./components/MarketLifecycleProvider";
+import "./hooks/useTheme";
 
 const LoginRegister = lazy(() => import("./components/LoginRegister").then(module => ({ default: module.LoginRegister })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then(module => ({ default: module.AdminDashboard })));
@@ -12,11 +13,11 @@ const JequeDashboard = lazy(() => import("./components/Dashboards").then(module 
 const PilotoDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.PilotoDashboard })));
 const UsuarioDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.UsuarioDashboard })));
 
-const routeFallback = <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-white/40 text-xs tracking-[0.3em] uppercase font-mono">Cargando</div>;
+const routeFallback = <div role="status" className="min-h-screen bg-bg flex items-center justify-center text-ink-muted text-xs tracking-[0.3em] uppercase font-mono">Cargando</div>;
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, userData, loading } = useAuth();
-  if (loading) return <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-white/40 text-xs tracking-[0.3em] uppercase font-mono">Cargando</div>;
+  if (loading) return routeFallback;
   if (!user || !userData) return <Navigate to="/login" replace />;
   const adminByEmail = ["ajgarciarias@gmail.com", "admin@f1bugambra.com"].includes((user.email || "").toLowerCase());
   if (allowedRoles && !allowedRoles.includes(userData.rol || "") && !(allowedRoles.includes("admin") && adminByEmail)) return <Navigate to="/" replace />;

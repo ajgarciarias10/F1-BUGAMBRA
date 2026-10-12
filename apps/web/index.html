@@ -16,7 +16,7 @@
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#f1f4f7" />
     <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="F1 Bugambra" />
 
@@ -30,6 +30,19 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <!-- Tema antes del primer pintado: evita el destello claro/oscuro. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("bugambra-theme") || localStorage.getItem("f1-theme");
+          var d = document.documentElement;
+          if (t === "dark") { d.classList.add("dark"); d.style.colorScheme = "dark"; }
+          d.dataset.theme = t === "dark" ? "dark" : "light";
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m && t === "dark") m.setAttribute("content", "#0b1120");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
