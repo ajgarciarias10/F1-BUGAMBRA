@@ -42,6 +42,59 @@ export async function runAuditedAdminMutation({ ref, action, summary, apply }: A
   });
 }
 
+type AuditedBatchMutation<T> = {
+  refs: DocumentReference[];
+  action: string;
+  summary: string;
+  /**
+   * Receives the documents read inside the transaction, keyed by path. Return the
+   * full "after" document per path (null deletes), or writes=null for a no-op.
+   */
+  apply: (currents: Record<string, Record<string, any> | null>) => {
+    writes: Record<string, Record<string, any> | null> | null;
+    result?: T;
+  };
+};
+
+/**
+ * Multi-document variant: all documents of one edit and ONE audit entry (with the
+ * before/after of every touched document) are committed in a single transaction.
+ */
+export async function runAuditedAdminBatch<T = undefined>({ refs, action, summary, apply }: AuditedBatchMutation<T>) {
+  const unique = new Map(refs.map(ref => [ref.path, ref]));
+  const auditRef = doc(collection(db, "admin_audit"));
+  return runTransaction(db, async transaction => {
+    const currents: Record<string, Record<string, any> | null> = {};
+    for (const [path, ref] of unique) {
+      const snapshot = await transaction.get(ref);
+      currents[path] = snapshot.exists() ? snapshot.data() : null;
+    }
+    const { writes, result } = apply(currents);
+    if (!writes || !Object.keys(writes).length) return { changed: false as const, result };
+    const before: Record<string, any> = {};
+    const after: Record<string, any> = {};
+    for (const [path, data] of Object.entries(writes)) {
+      const ref = unique.get(path);
+      if (!ref) throw new Error(`El documento ${path} no estaba en la operación.`);
+      before[path] = currents[path];
+      after[path] = data;
+      if (data === null) {
+        if (currents[path]) transaction.delete(ref);
+      } else transaction.set(ref, data);
+    }
+    transaction.set(auditRef, {
+      action,
+      target: Object.keys(writes).join(", "),
+      summary,
+      before,
+      after,
+      actorUid: auth.currentUser?.uid ?? null,
+      createdAt: serverTimestamp(),
+    });
+    return { changed: true as const, result };
+  });
+}
+
 export type TeamPriceCorrection = {
   pilotId: string;
   pilotName: string;
