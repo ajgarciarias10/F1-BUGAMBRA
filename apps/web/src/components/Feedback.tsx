@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { buttonClass } from "./ui";
 
 /**
  * Confirmaciones y avisos dentro de la app.
@@ -65,26 +66,24 @@ function ConfirmDialog({
       aria-labelledby="confirm-title"
       onCancel={event => { event.preventDefault(); onResponder(false); }}
       onClick={event => { if (event.target === event.currentTarget) onResponder(false); }}
-      className="fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none place-items-center border-0 bg-transparent p-4 text-left backdrop:bg-black/70 open:grid"
+      className="fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none place-items-center border-0 bg-transparent p-4 text-left backdrop:bg-ink/70 open:grid"
     >
-      <div className="w-full max-w-sm border border-white/10 bg-[#0d0d0d] shadow-2xl" onClick={event => event.stopPropagation()}>
-        <div className="border-b border-white/[0.06] px-5 py-4">
-          <h2 id="confirm-title" className="text-xs font-black uppercase tracking-widest text-white">{title}</h2>
-          {body && <p className="mt-2 text-[11px] leading-relaxed text-white/50">{body}</p>}
+      <div className="w-full max-w-sm rounded-card border border-line bg-surface shadow-card" onClick={event => event.stopPropagation()}>
+        <div className="border-b border-line px-5 py-4">
+          <h2 id="confirm-title" className="text-base font-bold text-ink">{title}</h2>
+          {body && <p className="mt-2 text-sm leading-relaxed text-ink-muted">{body}</p>}
         </div>
         <div className="flex gap-2 px-5 py-4">
           <button
             onClick={() => onResponder(false)}
-            className="min-h-11 flex-1 border border-white/10 bg-white/5 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            className={buttonClass({ variant: "secondary", block: true })}
           >
             {cancelLabel}
           </button>
           <button
             ref={confirmRef}
             onClick={() => onResponder(true)}
-            className={`min-h-11 flex-1 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-colors ${
-              peligro ? "bg-[#e10600] hover:bg-[#ff241c]" : "bg-white/15 hover:bg-white/25"
-            }`}
+            className={buttonClass({ variant: peligro ? "danger" : "primary", block: true })}
           >
             {confirmLabel}
           </button>
@@ -101,16 +100,16 @@ export function StatusBanner({
 }: { message: string; tone?: "info" | "exito" | "error"; onDismiss?: () => void }) {
   if (!message) return null;
   const estilo = tone === "error"
-    ? "border-[#e10600]/40 bg-[#e10600]/10 text-[#ff8a85]"
+    ? "border-danger/40 bg-danger-soft text-danger"
     : tone === "exito"
-      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-      : "border-white/10 bg-white/5 text-white/70";
+      ? "border-ok/40 bg-ok-soft text-ok"
+      : "border-line bg-surface-2 text-ink-2";
 
   return (
-    <div role={tone === "error" ? "alert" : "status"} className={`flex items-start gap-3 border px-4 py-3 text-[11px] leading-relaxed ${estilo}`}>
+    <div role={tone === "error" ? "alert" : "status"} className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm leading-relaxed ${estilo}`}>
       <span className="flex-1">{message}</span>
       {onDismiss && (
-        <button onClick={onDismiss} aria-label="Descartar aviso" className="shrink-0 text-current/60 transition-opacity hover:opacity-100">✕</button>
+        <button onClick={onDismiss} aria-label="Descartar aviso" className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-current hover:bg-surface-3">✕</button>
       )}
     </div>
   );

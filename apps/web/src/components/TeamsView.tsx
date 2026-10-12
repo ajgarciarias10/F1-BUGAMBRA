@@ -42,10 +42,10 @@ function useColumnCount(ref: RefObject<HTMLElement | null>) {
 }
 
 function ratingAccent(rating: number): string {
-  if (rating >= 90) return "border-red-400/70 bg-red-500/15 text-red-100";
-  if (rating >= 80) return "border-amber-300/60 bg-amber-400/15 text-amber-100";
-  if (rating >= 70) return "border-slate-300/40 bg-slate-300/10 text-slate-100";
-  return "border-slate-600 bg-slate-800 text-slate-200";
+  if (rating >= 90) return "border-danger/70 bg-danger/15 text-danger";
+  if (rating >= 80) return "border-warn/60 bg-warn/15 text-warn";
+  if (rating >= 70) return "border-line bg-surface-3 text-ink-muted";
+  return "border-line bg-surface-3 text-ink-muted";
 }
 
 export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto, darkMode = false, showEconomy = false }: TeamsViewProps) {
@@ -134,20 +134,20 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
 
   return (
     <div className="space-y-7">
-      <div className={`flex flex-col gap-4 border-b border-black/10 dark:border-white/[0.08] pb-5 ${darkMode ? "border-white/[0.08]" : ""}`}>
+      <div className={`flex flex-col gap-4 border-b border-line pb-5 ${darkMode ? "border-line" : ""}`}>
         <div>
-          <p className={`text-[11px] md:text-[9px] md:font-mono md:uppercase md:tracking-[0.35em] ${darkMode ? "text-white/50" : "text-black/45 dark:text-white/45"}`}>Archivo de competición</p>
-          <h2 className={`mt-1 text-xl md:text-3xl font-black uppercase tracking-[-0.03em] md:tracking-[-0.04em] ${darkMode ? "text-white" : "text-black dark:text-white"}`}>Equipos por temporada</h2>
+          <p className={`text-[11px] md:text-[11px] md:font-mono md:uppercase md:tracking-[0.08em] ${darkMode ? "text-ink-muted" : "text-ink-muted"}`}>Archivo de competición</p>
+          <h2 className={`mt-1 text-xl md:text-3xl font-black uppercase tracking-[-0.03em] md:tracking-[-0.04em] ${darkMode ? "text-ink" : "text-ink"}`}>Equipos por temporada</h2>
         </div>
-        <div className="m-rail hide-scrollbar gap-2 md:gap-0 md:border md:border-black/10 md:dark:border-white/10 md:self-start md:max-w-full">
+        <div className="m-rail hide-scrollbar gap-2 md:gap-0 md:border md:border-line md:self-start md:max-w-full">
           {validSplits.map(split => (
             <button
               key={split.id}
               onClick={() => onSelectSplit(split.id)}
-              className={`min-h-11 shrink-0 rounded-full md:rounded-none px-4 text-[12px] font-bold md:py-3 md:text-[10px] md:font-black md:uppercase md:tracking-[0.18em] transition-colors ${
+              className={`min-h-11 shrink-0 rounded-full md:rounded-none px-4 text-[12px] font-bold md:py-3 md:text-xs md:font-black md:uppercase md:tracking-[0.08em] transition-colors ${
                 currentSplitId === split.id
-                  ? "bg-[#e10600] text-white"
-                   : darkMode ? "bg-white/[0.08] text-white/75 hover:bg-white/[0.14] hover:text-white" : "bg-black/[0.05] dark:bg-white/[0.06] text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white"
+                  ? "bg-brand text-brand-ink"
+                   : darkMode ? "bg-surface-2 text-ink-2 hover:bg-surface-2 hover:text-ink" : "bg-surface-2 text-ink-2 hover:text-ink"
               }`}
             >
               {split.nombre}
@@ -158,16 +158,16 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
 
       {isIndividual ? (
         <div className="space-y-4">
-          <div className="grid lg:grid-cols-[0.75fr_1.25fr] border border-black/10 dark:border-white/10 bg-[#101116] text-white overflow-hidden">
-            <div className="p-6 md:p-8 flex flex-col justify-between min-h-56 bg-[radial-gradient(circle_at_0%_0%,rgba(225,6,0,0.2),transparent_55%)]">
+          <div className="grid lg:grid-cols-[0.75fr_1.25fr] border border-line bg-surface text-ink overflow-hidden">
+            <div className="p-6 md:p-8 flex flex-col justify-between min-h-56 bg-brand-soft">
               <div>
-                <span className="inline-flex border border-white/15 bg-white/5 px-3 py-1 text-[9px] font-mono uppercase tracking-[0.25em] text-white/55">Temporada individual</span>
+                <span className="inline-flex border border-line-strong bg-surface-2 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">Temporada individual</span>
                 <h3 className="mt-5 text-4xl font-black uppercase tracking-[-0.05em]">{currentSplit?.nombre}</h3>
-                <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/50">
+                <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-muted">
                   En esta etapa no existían escuderías permanentes. La clasificación complementaria se disputaba mediante parejas de pilotos.
                 </p>
               </div>
-              <span className="mt-8 text-[10px] font-mono uppercase tracking-[0.25em] text-[#e10600]">Formato histórico por dúos</span>
+              <span className="mt-8 text-xs font-mono uppercase tracking-[0.08em] text-brand">Formato histórico por dúos</span>
             </div>
           </div>
           {(currentSplit?.duos || []).length > 0 && (
@@ -175,10 +175,10 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
               {[...(currentSplit.duos || [])]
                 .sort((a: any, b: any) => Number(b.puntos || 0) - Number(a.puntos || 0))
                 .map((duo: any, index: number) => (
-                  <div key={duo.id} className="m-card border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] p-4 text-black dark:text-white">
-                    <span className="text-[8px] font-mono uppercase tracking-[0.25em] opacity-30">Dúo {String(index + 1).padStart(2, "0")}</span>
+                  <div key={duo.id} className="m-card border border-line bg-surface-3 p-4 text-ink">
+                    <span className="text-[11px] font-mono uppercase tracking-[0.08em] opacity-30">Dúo {String(index + 1).padStart(2, "0")}</span>
                     <p className="mt-2 font-black uppercase text-sm leading-tight">{duo.nombre}</p>
-                    <p className="mt-4 text-2xl font-black tabular-nums">{duo.puntos} <small className="text-[8px] opacity-35">PTS</small></p>
+                    <p className="mt-4 text-2xl font-black tabular-nums">{duo.puntos} <small className="text-[11px] opacity-35">PTS</small></p>
                   </div>
                 ))}
             </div>
@@ -201,22 +201,22 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                   aria-expanded={selected}
                   className={`m-card group relative min-h-32 md:min-h-40 overflow-hidden border p-4 md:p-5 text-left transition-all active:scale-[0.99] ${
                     selected
-                      ? "border-[#e10600] bg-[#15161b] text-white shadow-[0_18px_50px_rgba(225,6,0,0.16)]"
-                       : darkMode ? "border-white/10 bg-[#111217] text-white hover:-translate-y-0.5 hover:border-[#e10600]/50" : "border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111217] text-black dark:text-white hover:-translate-y-0.5 hover:border-[#e10600]/50"
+                      ? "border-brand bg-surface text-ink shadow-card"
+                       : darkMode ? "border-line bg-surface text-ink hover:-translate-y-0.5 hover:border-brand/50" : "border-line bg-surface-3 text-ink hover:-translate-y-0.5 hover:border-brand/50"
                   }`}
                 >
-                  <div className="absolute inset-x-0 top-0 h-1 bg-[#e10600] scale-x-0 origin-left transition-transform group-hover:scale-x-100" />
+                  <div className="absolute inset-x-0 top-0 h-1 bg-brand scale-x-0 origin-left transition-transform group-hover:scale-x-100" />
                   {team.logo_url && <img src={team.logo_url} alt="" className="absolute -right-6 -bottom-8 w-36 h-36 object-contain opacity-[0.06]" />}
                   <div className="relative flex items-start justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-12 h-12 shrink-0 border border-current/10 bg-black/5 dark:bg-white/5 p-1.5 flex items-center justify-center">
+                      <div className="w-12 h-12 shrink-0 border border-current/10 bg-surface-2 p-1.5 flex items-center justify-center">
                         {team.logo_url
                           ? <img src={team.logo_url} alt={team.nombre} className="w-full h-full object-contain" />
                           : <Shield className="w-6 h-6 opacity-25" />}
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-lg font-black uppercase tracking-[-0.03em] truncate">{team.nombre}</h3>
-                        <span className="text-[12px] opacity-50 md:font-mono md:text-[9px] md:uppercase md:tracking-[0.2em]">{pilots.length} pilotos</span>
+                        <span className="text-[12px] opacity-50 md:font-mono md:text-[11px] md:uppercase md:tracking-[0.08em]">{pilots.length} pilotos</span>
                         {jeques.length > 0 && (
                           <span className="mt-1.5 flex flex-col gap-0.5 min-w-0">
                             {jeques.map((jeque, i) => (
@@ -224,73 +224,73 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                                 {jeque.foto_url
                                   ? <img src={jeque.foto_url} alt="" className="w-4 h-4 shrink-0 object-cover" />
                                   : <Crown className="w-3 h-3 shrink-0 opacity-40" />}
-                                <span className="truncate text-[12px] opacity-60 md:font-mono md:text-[9px] md:uppercase md:tracking-[0.16em]">{jeque.nombre}</span>
+                                <span className="truncate text-[12px] opacity-60 md:font-mono md:text-[11px] md:uppercase md:tracking-[0.08em]">{jeque.nombre}</span>
                               </span>
                             ))}
                           </span>
                         )}
                         {(directoresPorEquipo[team.id] || []).map(director => (
                           <span key={director.uid} className="mt-1 flex items-center gap-1.5 min-w-0">
-                            {director.foto_url ? <img src={director.foto_url} alt="" className="h-4 w-4 shrink-0 rounded-full object-cover" /> : <Crown className="h-3 w-3 shrink-0 text-sky-300/60" />}
-                            <span className="truncate text-[12px] opacity-60 md:font-mono md:text-[9px] md:uppercase md:tracking-[0.16em]">Director deportivo · {director.nombre}</span>
+                            {director.foto_url ? <img src={director.foto_url} alt="" className="h-4 w-4 shrink-0 rounded-full object-cover" /> : <Crown className="h-3 w-3 shrink-0 text-info/60" />}
+                            <span className="truncate text-[12px] opacity-60 md:font-mono md:text-[11px] md:uppercase md:tracking-[0.08em]">Director deportivo · {director.nombre}</span>
                           </span>
                         ))}
                       </div>
                     </div>
-                    <ChevronRight className={`w-5 h-5 shrink-0 transition-transform ${selected ? "rotate-90 text-[#e10600]" : "opacity-25"}`} />
+                    <ChevronRight className={`w-5 h-5 shrink-0 transition-transform ${selected ? "rotate-90 text-brand" : "opacity-25"}`} />
                   </div>
                   <div className="relative mt-5 flex items-end justify-between border-t border-current/10 pt-3">
                     <div>
-                      <span className="block text-[11px] opacity-45 md:font-mono md:text-[8px] md:uppercase md:tracking-[0.22em]">Constructores</span>
-                      <strong className="text-xl tabular-nums">{team.puntos_constructores || 0} <small className="text-[9px] opacity-40">PTS</small></strong>
+                      <span className="block text-[11px] opacity-45 md:font-mono md:text-[11px] md:uppercase md:tracking-[0.08em]">Constructores</span>
+                      <strong className="text-xl tabular-nums">{team.puntos_constructores || 0} <small className="text-[11px] opacity-40">PTS</small></strong>
                     </div>
                     <div className="text-right">
-                      <span className="block text-[11px] opacity-45 md:font-mono md:text-[8px] md:uppercase md:tracking-[0.22em]">Media equipo</span>
-                      <strong className="text-xl tabular-nums">{average || "--"} <small className="text-[9px] opacity-40">OVR</small></strong>
+                      <span className="block text-[11px] opacity-45 md:font-mono md:text-[11px] md:uppercase md:tracking-[0.08em]">Media equipo</span>
+                      <strong className="text-xl tabular-nums">{average || "--"} <small className="text-[11px] opacity-40">OVR</small></strong>
                     </div>
                   </div>
                 </button>
 
                 {selectedTeam && index === finDeFila && (
                   <div className="col-span-full">
-                    <div className="m-card m-expand border border-[#e10600]/35 bg-[#0d0e12] text-white shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border-b border-white/[0.08]">
+                    <div className="m-card m-expand border border-brand/35 bg-surface text-ink shadow-card">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border-b border-line">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 border border-white/10 bg-white/5 p-1.5 flex items-center justify-center">
+                          <div className="w-12 h-12 border border-line bg-surface-2 p-1.5 flex items-center justify-center">
                             {selectedTeam.logo_url
                               ? <img src={selectedTeam.logo_url} alt={selectedTeam.nombre} className="w-full h-full object-contain" />
-                              : <Shield className="w-6 h-6 text-white/20" />}
+                              : <Shield className="w-6 h-6 text-ink-muted" />}
                           </div>
                           <div>
-                            <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-[#e10600]">Alineación · {currentSplit.nombre}</span>
+                            <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-brand">Alineación · {currentSplit.nombre}</span>
                             <h3 className="text-xl font-black uppercase tracking-[-0.03em]">{selectedTeam.nombre}</h3>
                           </div>
                         </div>
                         <div className="flex gap-6">
-                          <div><span className="block text-[8px] uppercase tracking-[0.2em] text-white/30">Pilotos</span><strong className="text-2xl">{selectedPilots.length}</strong></div>
-                          <div><span className="block text-[8px] uppercase tracking-[0.2em] text-white/30">Media</span><strong className="text-2xl">{selectedAverage || "--"}</strong></div>
+                          <div><span className="block text-[11px] uppercase tracking-[0.08em] text-ink-muted">Pilotos</span><strong className="text-2xl">{selectedPilots.length}</strong></div>
+                          <div><span className="block text-[11px] uppercase tracking-[0.08em] text-ink-muted">Media</span><strong className="text-2xl">{selectedAverage || "--"}</strong></div>
                         </div>
                       </div>
                       {selectedJeques.length > 0 && (
-                        <div className="border-b border-white/[0.08] bg-[#0b0c10] p-4 md:p-5">
+                        <div className="border-b border-line bg-bg p-4 md:p-5">
                           <div className="mb-3 flex items-center gap-2">
-                            <Crown className="h-4 w-4 text-amber-300" />
-                            <span className="text-[9px] font-black uppercase tracking-[0.25em] text-amber-200/70">Dirección de la escudería</span>
+                            <Crown className="h-4 w-4 text-warn" />
+                            <span className="text-[11px] font-black uppercase tracking-[0.08em] text-warn/70">Dirección de la escudería</span>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             {selectedJeques.map(jeque => {
                               const photo = jeque.foto_url || (jeque.pilotoId ? getPilotPhoto(jeque.pilotoId) : "");
                               return (
-                                <div key={jeque.uid} className="flex items-center gap-3 border border-amber-300/15 bg-amber-300/[0.04] p-3">
-                                  <div className="h-14 w-14 shrink-0 overflow-hidden border border-amber-300/20 bg-amber-300/10">
+                                <div key={jeque.uid} className="flex items-center gap-3 border border-warn/15 bg-warn/4 p-3">
+                                  <div className="h-14 w-14 shrink-0 overflow-hidden border border-warn/20 bg-warn/10">
                                     {photo
                                       ? <img src={photo} alt={jeque.nombre} className="h-full w-full object-cover" />
-                                      : <Crown className="m-auto h-6 w-6 text-amber-200/45" />}
+                                      : <Crown className="m-auto h-6 w-6 text-warn/45" />}
                                   </div>
                                   <div className="min-w-0">
-                                    <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-amber-200/45">Jeque</span>
-                                    <p className="truncate text-sm font-black uppercase text-white">{jeque.nombre}</p>
-                                    {!jeque.foto_url && jeque.pilotoId && <span className="text-[8px] text-white/35">Foto del perfil asociado</span>}
+                                    <span className="block text-[11px] font-mono uppercase tracking-[0.08em] text-warn/45">Jeque</span>
+                                    <p className="truncate text-sm font-black uppercase text-ink">{jeque.nombre}</p>
+                                    {!jeque.foto_url && jeque.pilotoId && <span className="text-[11px] text-ink-muted">Foto del perfil asociado</span>}
                                   </div>
                                 </div>
                               );
@@ -299,27 +299,27 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                         </div>
                       )}
                       {selectedDirectores.length > 0 && (
-                        <div className="border-b border-white/[0.08] bg-[#0b0c10] p-4 md:p-5">
+                        <div className="border-b border-line bg-bg p-4 md:p-5">
                           <div className="mb-3 flex items-center gap-2">
-                            <Crown className="h-4 w-4 text-sky-300" />
-                            <span className="text-[9px] font-black uppercase tracking-[0.25em] text-sky-200/70">Dirección deportiva</span>
+                            <Crown className="h-4 w-4 text-info" />
+                            <span className="text-[11px] font-black uppercase tracking-[0.08em] text-info/70">Dirección deportiva</span>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             {selectedDirectores.map(director => (
-                              <div key={director.uid} className="flex items-center gap-3 border border-sky-300/15 bg-sky-300/[0.04] p-3">
-                                <div className="h-14 w-14 shrink-0 overflow-hidden border border-sky-300/20 bg-sky-300/10">
-                                  {director.foto_url ? <img src={director.foto_url} alt={director.nombre} className="h-full w-full object-cover" /> : <Crown className="m-auto h-6 w-6 text-sky-200/45" />}
+                              <div key={director.uid} className="flex items-center gap-3 border border-info/15 bg-info/4 p-3">
+                                <div className="h-14 w-14 shrink-0 overflow-hidden border border-info/20 bg-info/10">
+                                  {director.foto_url ? <img src={director.foto_url} alt={director.nombre} className="h-full w-full object-cover" /> : <Crown className="m-auto h-6 w-6 text-info/45" />}
                                 </div>
                                 <div className="min-w-0">
-                                  <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-sky-200/45">Director deportivo</span>
-                                  <p className="truncate text-sm font-black uppercase text-white">{director.nombre}</p>
+                                  <span className="block text-[11px] font-mono uppercase tracking-[0.08em] text-info/45">Director deportivo</span>
+                                  <p className="truncate text-sm font-black uppercase text-ink">{director.nombre}</p>
                                 </div>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
-                      <div className="grid gap-px bg-white/[0.06] sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="grid gap-px bg-surface-2 sm:grid-cols-2 xl:grid-cols-4">
                         {selectedPilots
                           .slice()
                           .sort((a, b) => Number(b.rating_piloto || 0) - Number(a.rating_piloto || 0))
@@ -333,27 +333,27 @@ export function TeamsView({ validSplits, currentSplitId, onSelectSplit, currentS
                                 onClick={() => abrirPiloto(pilot.pilotoId)}
                                 aria-haspopup="dialog"
                                 aria-label={`Ver la ficha de ${pilot.nombre}`}
-                                className="m-row group flex min-w-0 items-center gap-3 bg-[#101116] p-3 text-left transition-colors hover:bg-[#15161b] active:scale-[0.99] md:p-4"
+                                className="m-row group flex min-w-0 items-center gap-3 bg-surface p-3 text-left transition-colors hover:bg-surface active:scale-[0.99] md:p-4"
                               >
-                                <div className="w-14 h-14 shrink-0 overflow-hidden bg-white/5 border border-white/10">
+                                <div className="w-14 h-14 shrink-0 overflow-hidden bg-surface-2 border border-line">
                                   {photo
                                     ? <img src={photo} alt="" className="w-full h-full object-cover" />
-                                    : <div className="w-full h-full grid place-items-center text-sm font-black text-white/20">{pilot.nombre?.slice(0, 2).toUpperCase()}</div>}
+                                    : <div className="w-full h-full grid place-items-center text-sm font-black text-ink-muted">{pilot.nombre?.slice(0, 2).toUpperCase()}</div>}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  {pilot.rookie && <span className="text-[7px] font-black uppercase tracking-[0.2em] text-sky-300">Rookie</span>}
+                                  {pilot.rookie && <span className="text-[11px] font-black uppercase tracking-[0.08em] text-info">Rookie</span>}
                                   <p className="font-black uppercase truncate text-sm">{pilot.nombre}</p>
-                                  <span className="text-[8px] font-mono text-white/30">{pilot.puntos_piloto || 0} PTS · Ver ficha</span>
+                                  <span className="text-[11px] font-mono text-ink-muted">{pilot.puntos_piloto || 0} PTS · Ver ficha</span>
                                 </div>
                                 <div className={`w-14 h-14 shrink-0 border grid place-items-center ${ratingAccent(rating)}`}>
-                                  <div className="text-center"><strong className="block text-xl leading-none tabular-nums">{rating}</strong><span className="text-[7px] font-black tracking-[0.18em]">OVR</span></div>
+                                  <div className="text-center"><strong className="block text-xl leading-none tabular-nums">{rating}</strong><span className="text-[11px] font-black tracking-[0.08em]">OVR</span></div>
                                 </div>
-                                <ChevronRight className="w-4 h-4 shrink-0 text-white/25 transition-colors group-hover:text-[#e10600]" />
+                                <ChevronRight className="w-4 h-4 shrink-0 text-ink-muted transition-colors group-hover:text-brand" />
                               </button>
                             );
                           })}
                         {selectedPilots.length === 0 && (
-                          <div className="sm:col-span-2 xl:col-span-4 bg-[#101116] py-10 text-center text-white/25 text-[10px] font-mono uppercase tracking-[0.25em]">
+                          <div className="sm:col-span-2 xl:col-span-4 bg-surface py-10 text-center text-ink-muted text-xs font-mono uppercase tracking-[0.08em]">
                             <Users className="w-5 h-5 mx-auto mb-2" /> Sin pilotos asignados
                           </div>
                         )}

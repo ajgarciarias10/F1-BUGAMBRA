@@ -16,6 +16,7 @@ import { Navigate, Link } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { authFeedback } from "../utils/authFeedback";
+import { useSingleFlight } from "../hooks/useSingleFlight";
 
 interface PendingGoogleLink {
   credential: AuthCredential;
@@ -71,6 +72,7 @@ export function LoginRegister() {
   const [operation, setOperation] = useState<"email" | "google" | "reset" | null>(null);
   const emailInput = useRef<HTMLInputElement>(null);
 
+  const { run: runOnce } = useSingleFlight();
   const changeMode = (login: boolean) => {
     if (loading) return;
     setIsLogin(login);
@@ -86,6 +88,7 @@ export function LoginRegister() {
   }
 
   const handleAuth = async (e: React.FormEvent) => {
+    return runOnce(async () => {
     e.preventDefault();
     if (loading) return;
     setOperation("email");
@@ -132,9 +135,11 @@ export function LoginRegister() {
       setLoading(false);
       setOperation(null);
     }
+    });
   };
 
   const handleGoogleAuth = async () => {
+    return runOnce(async () => {
     if (loading) return;
     setOperation("google");
     setLoading(true);
@@ -188,9 +193,11 @@ export function LoginRegister() {
       setLoading(false);
       setOperation(null);
     }
+    });
   };
 
   const handleForgotPassword = async () => {
+    return runOnce(async () => {
     if (loading) return;
     setError(""); setSuccess("");
     if (!email.trim() || !emailInput.current?.checkValidity()) {
@@ -209,31 +216,32 @@ export function LoginRegister() {
       setLoading(false);
       setOperation(null);
     }
+    });
   };
 
   return (
-    <div className="auth-screen dark min-h-[100dvh] bg-[#0a0a0a] flex font-sans">
+    <div className="min-h-[100dvh] bg-bg flex font-sans text-ink">
       {/* Left — Editorial */}
-      <div className="hidden lg:flex w-1/2 flex-col justify-between p-16 border-r border-white/[0.06]">
+      <div className="hidden lg:flex w-1/2 flex-col justify-between p-16 border-r border-line">
         <Link to="/" className="flex items-center gap-3 group">
-          <span className="w-0.5 h-7 bg-[#e10600]" />
-          <span className="text-white font-black tracking-[0.15em] uppercase text-lg">F1 Bugambra</span>
+          <span className="w-0.5 h-7 bg-brand" />
+          <span className="text-ink font-extrabold tracking-tight text-lg">F1 Bugambra</span>
         </Link>
 
         <div>
-          <p className="text-[11px] font-mono tracking-[0.35em] text-white/30 uppercase mb-6">Liga Virtual · Temporada Activa</p>
-          <h1 className="text-6xl font-black text-white leading-none tracking-tight uppercase">
+          <p className="text-xs font-bold tracking-[0.14em] text-ink-muted uppercase mb-6">Liga Virtual · Temporada Activa</p>
+          <h1 className="text-6xl font-extrabold text-ink leading-none tracking-tight">
             El Paddock<br />
-            <span className="text-[#e10600]">te espera.</span>
+            <span className="text-brand">te espera.</span>
           </h1>
-          <p className="mt-8 text-sm text-white/40 leading-relaxed max-w-sm font-light">
+          <p className="mt-8 text-base text-ink-muted leading-relaxed max-w-sm">
             Gestiona tu escudería, ficha a los mejores pilotos y compite en el campeonato más exigente de la liga virtual.
           </p>
         </div>
 
-        <div className="flex items-center gap-6 text-[10px] font-mono tracking-[0.25em] text-white/20 uppercase">
-          <span>© 2025 F1 Bugambra</span>
-          <span className="w-px h-3 bg-white/20" />
+        <div className="flex items-center gap-6 text-xs text-ink-muted">
+          <span>F1 Bugambra</span>
+          <span className="w-px h-3 bg-surface-3" />
           <span>Liga Privada</span>
         </div>
       </div>
@@ -242,18 +250,18 @@ export function LoginRegister() {
       <div className="safe-top safe-bottom flex flex-1 flex-col items-center justify-center px-5 py-8 lg:p-16">
         {/* Mobile logo */}
         <div className="mb-8 flex items-center gap-2 lg:mb-12 lg:hidden">
-          <span className="w-0.5 h-6 bg-[#e10600]" />
-          <span className="text-white font-black tracking-[0.15em] uppercase">F1 Bugambra</span>
+          <span className="w-0.5 h-6 bg-brand" />
+          <span className="text-ink font-extrabold tracking-tight">F1 Bugambra</span>
         </div>
 
         <div className="w-full max-w-sm">
           {/* Tab toggle */}
-          <div className="mb-8 grid grid-cols-2 border-b border-white/10 lg:mb-10 lg:flex">
+          <div className="mb-8 grid grid-cols-2 border-b border-line lg:mb-10 lg:flex">
             <button
               onClick={() => changeMode(true)}
               disabled={loading}
               aria-pressed={isLogin}
-              className={`-mb-px min-h-12 border-b-2 text-sm font-bold uppercase tracking-[0.12em] transition-all lg:mr-8 lg:min-h-0 lg:pb-3 lg:text-xs lg:tracking-[0.25em] ${isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
+              className={`-mb-px min-h-12 border-b-2 px-2 text-sm font-bold transition-colors lg:mr-6 ${isLogin ? "border-brand text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
             >
               Acceder
             </button>
@@ -261,19 +269,19 @@ export function LoginRegister() {
               onClick={() => changeMode(false)}
               disabled={loading}
               aria-pressed={!isLogin}
-              className={`-mb-px min-h-12 border-b-2 text-sm font-bold uppercase tracking-[0.12em] transition-all lg:min-h-0 lg:pb-3 lg:text-xs lg:tracking-[0.25em] ${!isLogin ? "border-[#e10600] text-white" : "border-transparent text-white/30 hover:text-white/60"}`}
+              className={`-mb-px min-h-12 border-b-2 px-2 text-sm font-bold transition-colors ${!isLogin ? "border-brand text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
             >
               Registrarse
             </button>
           </div>
 
           {success && (
-            <div role="status" className="mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300">
+            <div role="status" className="mb-6 rounded-lg border border-ok/40 bg-ok-soft p-4 text-sm text-ok">
               {success}
             </div>
           )}
           {error && (
-            <div role="alert" className="mb-6 rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-200">
+            <div role="alert" className="mb-6 rounded-lg border border-danger/40 bg-danger-soft p-4 text-sm text-danger">
               {error}
             </div>
           )}
@@ -282,25 +290,25 @@ export function LoginRegister() {
             type="button"
             onClick={handleGoogleAuth}
             disabled={loading}
-            className="flex min-h-14 w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-white/[0.04] text-sm font-bold uppercase tracking-[0.1em] text-white transition-colors hover:border-white/30 hover:bg-white/[0.08] disabled:opacity-40 lg:min-h-0 lg:rounded-none lg:py-3.5 lg:text-xs lg:tracking-[0.18em]"
+            className="flex min-h-12 w-full items-center justify-center gap-3 rounded-lg border border-line-strong bg-surface text-sm font-semibold text-ink transition-colors hover:bg-surface-3 disabled:opacity-40"
           >
             {operation === "google" ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[12px] font-black normal-case text-[#4285f4]">G</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[12px] font-black normal-case text-info">G</span>
             )}
             {operation === "google" ? "Conectando con Google…" : "Continuar con Google"}
           </button>
 
           <div className="my-7 flex items-center gap-3">
-            <span className="h-px flex-1 bg-white/[0.08]" />
-            <span className="text-[12px] text-white/35 lg:font-mono lg:text-[9px] lg:uppercase lg:tracking-[0.25em] lg:text-white/20">o con correo</span>
-            <span className="h-px flex-1 bg-white/[0.08]" />
+            <span className="h-px flex-1 bg-line" />
+            <span className="text-sm text-ink-muted">o con correo</span>
+            <span className="h-px flex-1 bg-line" />
           </div>
 
           <form onSubmit={handleAuth} aria-busy={loading} className="space-y-6">
             <div>
-              <label htmlFor="auth-email" className="auth-label mb-2 block">Correo</label>
+              <label htmlFor="auth-email" className="mb-2 block text-sm font-semibold text-ink-2">Correo</label>
               <input
                 ref={emailInput}
                 id="auth-email"
@@ -310,7 +318,7 @@ export function LoginRegister() {
                 readOnly={loading}
                 required
                 type="email"
-                className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
+                className="min-h-12 w-full rounded-lg border border-line-strong bg-surface px-3 text-ink transition-colors placeholder:text-ink-muted focus:border-brand focus:outline-none"
                 placeholder="correo@ejemplo.com"
                 value={email}
                 onChange={e => {
@@ -321,7 +329,7 @@ export function LoginRegister() {
             </div>
 
             <div>
-              <label htmlFor="auth-password" className="auth-label mb-2 block">Contraseña</label>
+              <label htmlFor="auth-password" className="mb-2 block text-sm font-semibold text-ink-2">Contraseña</label>
               <input
                 id="auth-password"
                 name="password"
@@ -331,13 +339,13 @@ export function LoginRegister() {
                 aria-describedby={!isLogin ? "password-help" : undefined}
                 readOnly={loading}
                 type={showPassword ? "text" : "password"}
-                className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
+                className="min-h-12 w-full rounded-lg border border-line-strong bg-surface px-3 text-ink transition-colors placeholder:text-ink-muted focus:border-brand focus:outline-none"
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
               />
-              {!isLogin && <p id="password-help" className="mt-2 text-sm text-white/75">Usa al menos 6 caracteres. Una contraseña larga protege mejor tu cuenta.</p>}
-              <button type="button" onClick={() => setShowPassword(value => !value)} aria-pressed={showPassword} className="mt-2 min-h-11 text-sm text-white/80 underline underline-offset-4">
+              {!isLogin && <p id="password-help" className="mt-2 text-sm text-ink-2">Usa al menos 6 caracteres. Una contraseña larga protege mejor tu cuenta.</p>}
+              <button type="button" onClick={() => setShowPassword(value => !value)} aria-pressed={showPassword} className="mt-2 min-h-11 text-sm text-ink-2 underline underline-offset-4">
                 {showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
               </button>
               {isLogin && (
@@ -345,7 +353,7 @@ export function LoginRegister() {
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={loading}
-                  className="mt-2 min-h-11 text-[13px] text-white/45 transition-colors hover:text-[#e10600] lg:min-h-0 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.2em]"
+                  className="mt-2 min-h-11 text-sm text-ink-muted transition-colors hover:text-brand"
                 >
                   {operation === "reset" ? "Enviando recuperación…" : "¿Olvidaste tu contraseña?"}
                 </button>
@@ -354,7 +362,7 @@ export function LoginRegister() {
 
             {!isLogin && (
               <div>
-                <label htmlFor="auth-confirm" className="auth-label mb-2 block">Confirmar contraseña</label>
+                <label htmlFor="auth-confirm" className="mb-2 block text-sm font-semibold text-ink-2">Confirmar contraseña</label>
                 <input
                   id="auth-confirm"
                   name="confirmPassword"
@@ -363,7 +371,7 @@ export function LoginRegister() {
                   readOnly={loading}
                   required
                   type={showPassword ? "text" : "password"}
-                  className="min-h-13 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-white transition-colors placeholder:text-white/25 focus:border-[#e10600] focus:outline-none lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-2.5 lg:text-sm"
+                  className="min-h-12 w-full rounded-lg border border-line-strong bg-surface px-3 text-ink transition-colors placeholder:text-ink-muted focus:border-brand focus:outline-none"
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
@@ -374,16 +382,16 @@ export function LoginRegister() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#e10600] text-sm font-bold uppercase tracking-[0.15em] text-white transition-colors hover:bg-red-700 disabled:opacity-40 lg:min-h-0 lg:rounded-none lg:py-4 lg:text-xs lg:tracking-[0.3em]"
+              className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-brand text-sm font-bold text-brand-ink transition-colors hover:bg-brand-hover disabled:opacity-50"
             >
               {operation === "email" ? <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> {isLogin ? "Accediendo…" : "Creando cuenta…"}</> : pendingGoogleLink && isLogin ? "Entrar y vincular Google" : (isLogin ? "Entrar" : "Crear cuenta")}
             </button>
           </form>
 
-          <div className="mt-8 pt-8 border-t border-white/[0.06]">
+          <div className="mt-8 pt-8 border-t border-line">
             <Link
               to="/"
-              className="flex min-h-12 items-center justify-center text-center text-[13px] text-white/40 transition-colors hover:text-white/70 lg:min-h-0 lg:font-mono lg:text-[10px] lg:uppercase lg:tracking-[0.3em] lg:text-white/25"
+              className="flex min-h-12 items-center justify-center text-center text-sm text-ink-muted transition-colors hover:text-ink"
             >
               ← Ver clasificación pública
             </Link>

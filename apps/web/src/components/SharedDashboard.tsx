@@ -11,6 +11,7 @@ import { PilotRivalryPanel } from "./RivalryPanels";
 import { NextRaceWidget } from "./NextRaceWidget";
 import { PilotCardF1 } from "./PilotCardF1";
 import { TotalStandings } from "./TotalStandings";
+import { useSingleFlight } from "../hooks/useSingleFlight";
 
 export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { canViewBudget: boolean, escuderiaId?: string, onOpenTv?: () => void }) {
   const { userData } = useAuth();
@@ -58,7 +59,9 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
     return "";
   };
 
+  const { run: runOnce } = useSingleFlight();
   const handleUpdateTeamLogo = async (file: File) => {
+    return runOnce(async () => {
     if (!activeSplitId || !escuderiaId || !miEscuderia) return;
     setLogoError("");
     setUpdatingLogo(true);
@@ -73,6 +76,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
     } finally {
       setUpdatingLogo(false);
     }
+    });
   };
 
   const handleLogoDrag = (e: React.DragEvent) => {
@@ -388,14 +392,14 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
   if (loadingSplits && splits.length === 0) {
     return (
       <div className="space-y-6" aria-label="Cargando campeonato">
-        <div className="flex flex-wrap gap-2 border border-white/5 p-2">
-          {[1, 2, 3, 4].map(item => <div key={item} className="h-9 w-24 bg-white/[0.06] animate-pulse" />)}
+        <div className="flex flex-wrap gap-2 border border-line p-2">
+          {[1, 2, 3, 4].map(item => <div key={item} className="h-9 w-24 bg-surface-2 animate-pulse" />)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {[1, 2].map(item => (
-            <div key={item} className="border border-white/10 bg-white/[0.03] p-5 space-y-4">
-              <div className="h-5 w-48 bg-white/[0.08] animate-pulse" />
-              {[1, 2, 3, 4, 5].map(row => <div key={row} className="h-12 bg-white/[0.05] animate-pulse" />)}
+            <div key={item} className="border border-line bg-surface-2 p-5 space-y-4">
+              <div className="h-5 w-48 bg-surface-2 animate-pulse" />
+              {[1, 2, 3, 4, 5].map(row => <div key={row} className="h-12 bg-surface-2 animate-pulse" />)}
             </div>
           ))}
         </div>
@@ -408,12 +412,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
       {/* Barra de temporada y accesos rápidos. En móvil las temporadas son un
           carrusel y las dos acciones ocupan una fila propia a ancho completo:
           apiladas y en mayúsculas de 10px eran casi imposibles de pulsar. */}
-      <div className="space-y-3 md:flex md:flex-wrap md:items-center md:justify-between md:gap-y-3 md:space-y-0 w-full md:p-1.5 md:rounded-sm md:border md:border-white/5">
+      <div className="space-y-3 md:flex md:flex-wrap md:items-center md:justify-between md:gap-y-3 md:space-y-0 w-full md:p-1.5 md:rounded-sm md:border md:border-line">
         <div className="m-rail hide-scrollbar gap-2">
           <button
             onClick={() => setActiveSplitId("global")}
-            className={`min-h-11 rounded-full md:rounded-sm px-4 text-[12px] font-bold md:text-[10px] md:font-black md:uppercase md:tracking-widest transition-all ${
-              activeSplitId === "global" ? "bg-[#e10600] text-white" : "bg-white/[0.06] text-white/60 border border-white/10 hover:border-white/20"
+            className={`min-h-11 rounded-full md:rounded-sm px-4 text-[12px] font-bold md:text-xs md:font-black md:uppercase md:tracking-widest transition-all ${
+              activeSplitId === "global" ? "bg-brand text-brand-ink" : "bg-surface-2 text-ink-muted border border-line hover:border-line-strong"
             }`}
           >
             Mundial Global
@@ -422,8 +426,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
             <button
               key={s.id}
               onClick={() => setActiveSplitId(s.id)}
-              className={`min-h-11 rounded-full md:rounded-sm px-4 text-[12px] font-bold md:text-[10px] md:font-black md:uppercase md:tracking-widest transition-all ${
-                activeSplitId === s.id ? "bg-[#e10600] text-white" : "bg-white/[0.06] text-white/60 border border-white/10 hover:border-white/20"
+              className={`min-h-11 rounded-full md:rounded-sm px-4 text-[12px] font-bold md:text-xs md:font-black md:uppercase md:tracking-widest transition-all ${
+                activeSplitId === s.id ? "bg-brand text-brand-ink" : "bg-surface-2 text-ink-muted border border-line hover:border-line-strong"
               }`}
             >
               {s.nombre}
@@ -445,7 +449,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 else setComparePilotIdB(allPaddockPilots[0].id);
               }
             }}
-            className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-amber-500/45 px-3 text-[12px] font-bold text-amber-300 transition-all hover:border-amber-400 hover:text-white active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-wider"
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-warn/45 px-3 text-[12px] font-bold text-warn transition-all hover:border-warn hover:text-ink active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-xs md:font-black md:uppercase md:tracking-wider"
           >
             <TrendingUp className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
             <span className="truncate">Comparador</span>
@@ -453,7 +457,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
           {onOpenTv && (
             <button
               onClick={onOpenTv}
-              className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-[#e10600]/50 px-3 text-[12px] font-bold text-red-100 transition-all hover:border-[#e10600] hover:text-white active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-wider"
+              className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-brand/50 px-3 text-[12px] font-bold text-danger transition-all hover:border-brand hover:text-ink active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-xs md:font-black md:uppercase md:tracking-wider"
             >
               <MonitorPlay className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
               <span className="truncate">F1 Bugambra TV</span>
@@ -466,12 +470,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
         <div className="mb-8"><NextRaceWidget currentSplit={currentSplit} /></div>
       )}
 
-      <div className="m-card bg-white/[0.02] border border-white/10 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="m-card bg-surface-2 border border-line p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Award className="w-8 h-8 text-amber-400 shrink-0" />
+          <Award className="w-8 h-8 text-warn shrink-0" />
           <div className="min-w-0">
-            <span className="block text-[13px] font-black text-[#e10600] md:text-[9px] md:uppercase md:tracking-[0.25em]">Paddock Club · Hall of Fame</span>
-            <span className="text-[12px] text-white/45 md:text-xs md:uppercase md:font-mono">Campeones oficiales de F1 Bugambra</span>
+            <span className="block text-[13px] font-black text-brand md:text-[11px] md:uppercase md:tracking-[0.08em]">Paddock Club · Hall of Fame</span>
+            <span className="text-[12px] text-ink-muted md:text-xs md:uppercase md:font-mono">Campeones oficiales de F1 Bugambra</span>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto flex-wrap">
@@ -479,13 +483,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
             <div key={t.splitId} className="flex flex-col sm:flex-row gap-2.5">
               {/* Cada palmarés es etiqueta arriba / campeón abajo en móvil: en una
                   sola línea el nombre se comprimía hasta ser ilegible. */}
-              <div className="rounded-xl md:rounded-sm border border-white/10 bg-white/5 px-4 py-2.5 sm:flex sm:items-center sm:justify-start sm:gap-4">
-                <span className="block text-[11px] text-amber-400/90 md:font-mono md:uppercase md:tracking-widest md:text-[9px]">🏆 {t.splitName} · Pilotos</span>
-                <span className="mt-0.5 block text-[13px] font-extrabold uppercase tracking-tight text-white sm:mt-0 md:text-xs">{t.winnerPilot} [{t.winnerPilotTeam}]</span>
+              <div className="rounded-xl md:rounded-sm border border-line bg-surface-2 px-4 py-2.5 sm:flex sm:items-center sm:justify-start sm:gap-4">
+                <span className="block text-[11px] text-warn/90 md:font-mono md:uppercase md:tracking-widest md:text-[11px]">🏆 {t.splitName} · Pilotos</span>
+                <span className="mt-0.5 block text-[13px] font-extrabold uppercase tracking-tight text-ink sm:mt-0 md:text-xs">{t.winnerPilot} [{t.winnerPilotTeam}]</span>
               </div>
-              <div className="rounded-xl md:rounded-sm border border-white/10 bg-white/5 px-4 py-2.5 sm:flex sm:items-center sm:justify-start sm:gap-4">
-                <span className="block text-[11px] text-[#e10600]/90 md:font-mono md:uppercase md:tracking-widest md:text-[9px]">🏎️ {t.splitName} · Escuderías</span>
-                <span className="mt-0.5 block text-[13px] font-extrabold uppercase tracking-tight text-white sm:mt-0 md:text-xs">{t.winnerTeam}</span>
+              <div className="rounded-xl md:rounded-sm border border-line bg-surface-2 px-4 py-2.5 sm:flex sm:items-center sm:justify-start sm:gap-4">
+                <span className="block text-[11px] text-brand/90 md:font-mono md:uppercase md:tracking-widest md:text-[11px]">🏎️ {t.splitName} · Escuderías</span>
+                <span className="mt-0.5 block text-[13px] font-extrabold uppercase tracking-tight text-ink sm:mt-0 md:text-xs">{t.winnerTeam}</span>
               </div>
             </div>
           ))}
@@ -497,57 +501,57 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
       )}
 
       {activeSplitId !== "global" && currentSplit?.tipo !== "individual" && miEscuderia && (
-        <section className="bg-white/[0.02] border border-white/20  p-6 relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-32 h-32 bg-[#e10600]/10 rounded-full pointer-events-none"></div>
+        <section className="bg-surface-2 border border-line-strong  p-6 relative overflow-hidden">
+          <div className="absolute -right-4 -top-4 w-32 h-32 bg-brand/10 rounded-full pointer-events-none"></div>
           {miEscuderia ? (
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-5 w-full md:w-auto">
               {canViewBudget ? (
                 <div
                   onDragEnter={handleLogoDrag} onDragOver={handleLogoDrag} onDragLeave={handleLogoDrag} onDrop={handleLogoDrop} onClick={() => teamLogoInputRef.current?.click()}
-                  className={`relative w-20 h-20 rounded-sm overflow-hidden border-2 cursor-pointer transition-all shrink-0 flex items-center justify-center group ${logoDragActive ? "border-[#e10600] bg-[#e10600]/15" : "border-white/10 hover:border-[#e10600] bg-white/[0.02]"}`}
+                  className={`relative w-20 h-20 rounded-sm overflow-hidden border-2 cursor-pointer transition-all shrink-0 flex items-center justify-center group ${logoDragActive ? "border-brand bg-brand/15" : "border-line hover:border-brand bg-surface-2"}`}
                 >
                   <input type="file" ref={teamLogoInputRef} onChange={(e) => { if (e.target.files && e.target.files[0]) handleUpdateTeamLogo(e.target.files[0]); }} accept="image/*" className="hidden" />
                   {(miEscuderia as any).logo_url ? (
                     <img src={(miEscuderia as any).logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:opacity-40 transition-opacity" />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center p-2">
-                      <UploadCloud className="w-6 h-6 text-white/30 group-hover:text-white/80 transition-colors" />
-                      <span className="text-[8px] font-mono text-white/20 uppercase tracking-tighter mt-1 group-hover:text-white/60">SUBIR LOGO</span>
+                      <UploadCloud className="w-6 h-6 text-ink-muted group-hover:text-ink-2 transition-colors" />
+                      <span className="text-[11px] font-mono text-ink-muted uppercase tracking-tighter mt-1 group-hover:text-ink-muted">SUBIR LOGO</span>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[8px] font-mono uppercase tracking-widest gap-1 select-none">
-                    <Camera className="w-4 h-4 text-[#e10600]" /><span>EDITAR LOGO</span>
+                  <div className="absolute inset-0 bg-surface-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-ink text-[11px] font-mono uppercase tracking-widest gap-1 select-none">
+                    <Camera className="w-4 h-4 text-brand" /><span>EDITAR LOGO</span>
                   </div>
-                  {updatingLogo && <div className="absolute inset-0 bg-[#0a0a0a] flex items-center justify-center text-xs font-mono text-white">Cargando...</div>}
+                  {updatingLogo && <div className="absolute inset-0 bg-bg flex items-center justify-center text-xs font-mono text-ink">Cargando...</div>}
                 </div>
               ) : (
-                <div className="w-20 h-20 rounded-sm overflow-hidden border border-white/10 bg-white/[0.02] shrink-0 flex items-center justify-center">
-                  {(miEscuderia as any).logo_url ? <img src={(miEscuderia as any).logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs font-black uppercase text-white/20 font-mono">{miEscuderia.nombre ? miEscuderia.nombre.substring(0, 2).toUpperCase() : 'EQ'}</div>}
+                <div className="w-20 h-20 rounded-sm overflow-hidden border border-line bg-surface-2 shrink-0 flex items-center justify-center">
+                  {(miEscuderia as any).logo_url ? <img src={(miEscuderia as any).logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs font-black uppercase text-ink-muted font-mono">{miEscuderia.nombre ? miEscuderia.nombre.substring(0, 2).toUpperCase() : 'EQ'}</div>}
                 </div>
               )}
               <div>
-                <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-[#e10600] font-black block mb-1">{canViewBudget ? "ESCUDERÍA OFICIAL DEL JEQUE" : "TU EQUIPO PARA ESTE SPLIT"}</span>
-                <h3 className="text-2xl font-black italic text-white uppercase tracking-tight">{miEscuderia.nombre}</h3>
-                <p className="text-[10px] text-white/40 uppercase font-mono mt-0.5">Visualizando logo oficial del {currentSplit?.nombre || activeSplitId}</p>
+                <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-brand font-black block mb-1">{canViewBudget ? "ESCUDERÍA OFICIAL DEL JEQUE" : "TU EQUIPO PARA ESTE SPLIT"}</span>
+                <h3 className="text-2xl font-black italic text-ink uppercase tracking-tight">{miEscuderia.nombre}</h3>
+                <p className="text-xs text-ink-muted uppercase font-mono mt-0.5">Visualizando logo oficial del {currentSplit?.nombre || activeSplitId}</p>
                 {logoError && (
-                  <p role="alert" className="mt-1.5 max-w-xs text-[10px] leading-relaxed text-[#ff8a85]">{logoError}</p>
+                  <p role="alert" className="mt-1.5 max-w-xs text-xs leading-relaxed text-brand">{logoError}</p>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-white/5 pt-4 md:pt-0">
+            <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-line pt-4 md:pt-0">
               {canViewBudget && (
                 <div>
-                  <h4 className="text-[9px] uppercase font-bold tracking-[0.15em] text-[#e10600] mb-1">Presupuesto Disponible</h4>
+                  <h4 className="text-[11px] uppercase font-bold tracking-[0.08em] text-brand mb-1">Presupuesto Disponible</h4>
                   <div className="flex items-baseline gap-0.5">
-                    <span className="text-4xl font-extrabold italic text-white leading-none">{miEscuderia.presupuesto == null ? "—" : miEscuderia.presupuesto.toFixed(1)}</span><span className="text-xl font-bold text-white/50">M</span>
+                    <span className="text-4xl font-extrabold italic text-ink leading-none">{miEscuderia.presupuesto == null ? "—" : miEscuderia.presupuesto.toFixed(1)}</span><span className="text-xl font-bold text-ink-muted">M</span>
                   </div>
                 </div>
               )}
               <div className="text-right">
-                <p className="text-[9px] text-[#e10600] uppercase font-bold tracking-[0.15em] mb-1">Valor Total de Plantilla</p>
+                <p className="text-[11px] text-brand uppercase font-bold tracking-[0.08em] mb-1">Valor Total de Plantilla</p>
                 <div className="flex items-baseline justify-end gap-0.5">
-                  <span className="text-2xl font-black italic text-white leading-none">{miEscuderia.valor_total.toFixed(1)}</span><span className="text-sm font-bold text-white/50">M</span>
+                  <span className="text-2xl font-black italic text-ink leading-none">{miEscuderia.valor_total.toFixed(1)}</span><span className="text-sm font-bold text-ink-muted">M</span>
                 </div>
               </div>
             </div>
@@ -558,26 +562,26 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
       {activeSplitId !== "global" && currentSplit?.tipo !== "individual" && (miEscuderia || soyAgenteLibre) && (
         <section>
-          <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
-            <h2 className="text-xl font-bold italic tracking-tight lowercase flex items-center gap-2"><span className="w-1 h-5 bg-[#e10600]" />mi equipo</h2>
+          <div className="flex justify-between items-center mb-4 border-b border-line pb-2">
+            <h2 className="text-xl font-bold italic tracking-tight lowercase flex items-center gap-2"><span className="w-1 h-5 bg-brand" />mi equipo</h2>
             {currentSplit?.fichajes_abiertos && (
-              <span className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold font-mono text-[10px] uppercase px-2.5 py-1 rounded-full animate-pulse tracking-wide flex items-center gap-1.5">
+              <span className="bg-ok/20 border border-ok/30 text-ok font-bold font-mono text-xs uppercase px-2.5 py-1 rounded-full animate-pulse tracking-wide flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" /> VENTANA DE FICHAJES ABIERTA (MERCADO ACTIVO)
               </span>
             )}
           </div>
           
           {soyAgenteLibre && !miEscuderia ? (
-            <div className="bg-amber-500/5 border border-amber-500/20  p-6 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div className="absolute right-0 top-0 w-32 h-32 bg-amber-500/5 rounded-full "></div>
+            <div className="bg-warn/5 border border-warn/20  p-6 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="absolute right-0 top-0 w-32 h-32 bg-warn/5 rounded-full "></div>
               <div>
-                <div className="flex items-center gap-2 text-amber-500 font-black text-xs uppercase tracking-widest mb-2"><ShieldAlert className="w-4 h-4 animate-bounce" /> Agencia Libre / Estado Independiente</div>
-                <h3 className="text-xl font-extrabold text-white uppercase tracking-tight">Actualmente estás SIN EQUIPO en {currentSplit?.nombre || "este Split"}</h3>
-                <p className="text-sm text-white/60 mt-1 max-w-xl">Tu perfil está disponible en el mercado para este Split. Las escuderías con presupuesto te pueden incorporar mediante la sección de "Agentes Libres Bolsa", o el Administrador puede asignarte de forma manual a una escudería desde el Panel de Control.</p>
+                <div className="flex items-center gap-2 text-warn font-black text-xs uppercase tracking-widest mb-2"><ShieldAlert className="w-4 h-4 animate-bounce" /> Agencia Libre / Estado Independiente</div>
+                <h3 className="text-xl font-extrabold text-ink uppercase tracking-tight">Actualmente estás SIN EQUIPO en {currentSplit?.nombre || "este Split"}</h3>
+                <p className="text-sm text-ink-muted mt-1 max-w-xl">Tu perfil está disponible en el mercado para este Split. Las escuderías con presupuesto te pueden incorporar mediante la sección de "Agentes Libres Bolsa", o el Administrador puede asignarte de forma manual a una escudería desde el Panel de Control.</p>
               </div>
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-sm p-3 text-center w-full md:w-auto shrink-0">
-                <span className="text-[10px] block text-amber-400 font-mono tracking-wider uppercase font-extrabold mb-1">VALOR DE COMPRA</span>
-                <span className="text-2xl font-black font-mono text-white">10M</span>
+              <div className="bg-warn/10 border border-warn/20 rounded-sm p-3 text-center w-full md:w-auto shrink-0">
+                <span className="text-xs block text-warn font-mono tracking-wider uppercase font-extrabold mb-1">VALOR DE COMPRA</span>
+                <span className="text-2xl font-black font-mono text-ink">10M</span>
               </div>
             </div>
           ) : (
@@ -598,16 +602,16 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                       size="sm"
                       showPrice={canViewBudget && !p.congelado}
                       footer={canViewBudget ? (
-                        <div className="bg-white/[0.02] border border-t-0 border-white/[0.06] px-2.5 py-2 space-y-1.5">
+                        <div className="bg-surface-2 border border-t-0 border-line px-2.5 py-2 space-y-1.5">
                           {p.congelado ? (
-                            <div className="flex justify-between text-[9px] font-mono text-white/40">
+                            <div className="flex justify-between text-[11px] font-mono text-ink-muted">
                               <span>Estado</span>
-                              <span className="text-blue-400 font-bold">❄ Congelado</span>
+                              <span className="text-info font-bold">❄ Congelado</span>
                             </div>
                           ) : (
-                            <div className="flex justify-between text-[9px] font-mono text-white/40">
+                            <div className="flex justify-between text-[11px] font-mono text-ink-muted">
                               <span>Cláusula</span>
-                              <span className="text-[#e10600] font-bold">{p.clausula_actual || 0}M</span>
+                              <span className="text-brand font-bold">{p.clausula_actual || 0}M</span>
                             </div>
                           )}
                         </div>
@@ -617,7 +621,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 );
               })}
               {misPilotos.length === 0 && (
-                <div className="col-span-full text-white/20 italic text-xs uppercase tracking-widest font-mono p-4 border border-white/5">
+                <div className="col-span-full text-ink-muted italic text-xs uppercase tracking-widest font-mono p-4 border border-line">
                   Sin pilotos contratados.
                 </div>
               )}
@@ -628,14 +632,14 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <section>
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-white/10 pb-2 lowercase flex items-center gap-2">
-            <span className="w-1 h-5 bg-[#e10600]" />
+          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-line pb-2 lowercase flex items-center gap-2">
+            <span className="w-1 h-5 bg-brand" />
             {activeSplitId === "global" ? "PALMARÉS HISTÓRICO PILOTOS" : `MUNDIAL ${currentSplit?.nombre || 'PILOTOS'}`}
           </h2>
-          <div className="m-card bg-white/[0.03] border border-white/10 overflow-hidden p-2 md:p-4">
+          <div className="m-card bg-surface-2 border border-line overflow-hidden p-2 md:p-4">
             <table className="w-full text-sm text-left">
               <thead>
-                <tr className="text-[10px] text-white/30 uppercase tracking-wider border-b border-white/5">
+                <tr className="text-xs text-ink-muted uppercase tracking-wider border-b border-line">
                   <th className="pb-3 pl-2">Pos</th>
                   <th className="pb-3">Piloto</th>
                   <th className="pb-3 text-right pr-2">{activeSplitId === "global" ? "Títulos" : "Pts"}</th>
@@ -648,28 +652,28 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                     <tr 
                       key={`standings-${p.id || p.name}-${i}`} 
                        onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
-                       className={`border-b border-white/5 last:border-0 transition-all group ${canOpenPilotProfile ? "hover:bg-[#e10600]/10 cursor-pointer" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística del piloto" : undefined}
+                       className={`border-b border-line last:border-0 transition-all group ${canOpenPilotProfile ? "hover:bg-brand/10 cursor-pointer" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística del piloto" : undefined}
                     >
-                      <td className={`py-3 pl-2 font-black italic text-lg w-8 ${i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white/30"}`}>{i + 1}</td>
+                      <td className={`py-3 pl-2 font-black italic text-lg w-8 ${i === 0 ? "text-warn" : i === 1 ? "text-ink-muted" : i === 2 ? "text-warn" : "text-ink-muted"}`}>{i + 1}</td>
                       <td className="py-3.5 font-bold">
                         <div className="flex items-center gap-3">
                           {pilotPhoto ? (
-                            <img src={pilotPhoto} alt={p.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full object-cover border border-[#e10600]/40" />
+                            <img src={pilotPhoto} alt={p.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full object-cover border border-brand/40" />
                           ) : (
-                            <div className="w-8 h-8 rounded-full border border-white/5 bg-[#111] flex items-center justify-center font-bold text-[10px] text-white/30 uppercase font-mono">
+                            <div className="w-8 h-8 rounded-full border border-line bg-surface flex items-center justify-center font-bold text-xs text-ink-muted uppercase font-mono">
                               {p.name ? p.name.substring(0, 2).toUpperCase() : '??'}
                             </div>
                           )}
                           <div className="flex flex-col">
-                            <span className={i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white"}>{p.name}</span>
-                            <span className="text-[10px] text-white/20 font-mono uppercase">{p.escuderia}</span>
+                            <span className={i === 0 ? "text-warn" : i === 1 ? "text-ink-muted" : i === 2 ? "text-warn" : "text-ink"}>{p.name}</span>
+                            <span className="text-xs text-ink-muted font-mono uppercase">{p.escuderia}</span>
                           </div>
                         </div>
                       </td>
                       <td className="py-3.5 text-right pr-2 font-bold tabular-nums">
                         {activeSplitId === "global"
-                          ? <span className="text-amber-400 text-base font-black">{p.points} 🏆</span>
-                           : <span className={i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-orange-300" : "text-white"}>{p.points}</span>}
+                          ? <span className="text-warn text-base font-black">{p.points} 🏆</span>
+                           : <span className={i === 0 ? "text-warn" : i === 1 ? "text-ink-muted" : i === 2 ? "text-warn" : "text-ink"}>{p.points}</span>}
                       </td>
                   </tr>
                 );
@@ -680,14 +684,14 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
         </section>
 
         <section>
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-white/10 pb-2 lowercase flex items-center gap-2">
-            <span className="w-1 h-5 bg-[#e10600]" />
+          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-line pb-2 lowercase flex items-center gap-2">
+            <span className="w-1 h-5 bg-brand" />
             {activeSplitId === "global" ? "PALMARÉS HISTÓRICO ESCUDERÍAS" : currentSplit?.tipo === "individual" ? "MUNDIAL DÚOS" : "MUNDIAL ESCUDERÍAS"}
           </h2>
-          <div className="m-card bg-white/[0.03] border border-white/10 overflow-hidden p-2 md:p-4">
+          <div className="m-card bg-surface-2 border border-line overflow-hidden p-2 md:p-4">
             <table className="w-full text-sm text-left">
               <thead>
-                <tr className="text-[10px] text-white/30 uppercase tracking-wider border-b border-white/5">
+                <tr className="text-xs text-ink-muted uppercase tracking-wider border-b border-line">
                   <th className="pb-3 pl-2">Pos</th>
                   <th className="pb-3">Escudería</th>
                   <th className="pb-3 text-right pr-2">{activeSplitId === "global" ? "Títulos" : "Pts"}</th>
@@ -697,22 +701,22 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 {teamStandings.map((t: any, i: number) => {
                   const logo = getTeamLogo(t.id);
                   return (
-                    <tr key={t.id} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
-                      <td className="py-3 pl-2 font-black italic text-white/30 text-lg w-8">{i + 1}</td>
+                    <tr key={t.id} className="border-b border-line last:border-0 hover:bg-surface-2 transition-colors">
+                      <td className="py-3 pl-2 font-black italic text-ink-muted text-lg w-8">{i + 1}</td>
                       <td className="py-3.5 font-bold flex items-center gap-3">
                         {logo ? (
-                          <img src={logo} alt={t.nombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-sm object-cover border border-white/10" />
+                          <img src={logo} alt={t.nombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-sm object-cover border border-line" />
                         ) : (
-                          <div className="w-8 h-8 rounded-sm border border-white/5 bg-[#111] flex items-center justify-center font-bold text-[10px] text-white/40 uppercase font-mono">
+                          <div className="w-8 h-8 rounded-sm border border-line bg-surface flex items-center justify-center font-bold text-xs text-ink-muted uppercase font-mono">
                             {t.nombre ? t.nombre.substring(0, 2).toUpperCase() : '??'}
                           </div>
                         )}
                          <span className="uppercase tracking-tighter">{t.nombre}</span>
-                         {i === 0 && <Crown className="w-4 h-4 text-yellow-400 shrink-0" />}
+                         {i === 0 && <Crown className="w-4 h-4 text-warn shrink-0" />}
                       </td>
                       <td className="py-3.5 text-right pr-2 font-bold tabular-nums">
                         {activeSplitId === "global"
-                          ? <span className="text-amber-400 text-base font-black">{t.puntos} 🏆</span>
+                          ? <span className="text-warn text-base font-black">{t.puntos} 🏆</span>
                           : t.puntos}
                       </td>
                     </tr>
@@ -726,40 +730,40 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
       {activeSplitId === "global" && championshipsTimeline && championshipsTimeline.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-white/10 pb-2 lowercase flex items-center gap-2">
-            <span className="w-1.5 h-5 bg-[#e10600] block" /> Palmarés Histórico por Splits (Historial de Campeones)
+          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-line pb-2 lowercase flex items-center gap-2">
+            <span className="w-1.5 h-5 bg-brand block" /> Palmarés Histórico por Splits (Historial de Campeones)
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {championshipsTimeline.map((item, idx) => (
-              <div key={item.splitId} className={`border  p-5 relative overflow-hidden transition-all duration-300 ${item.completed ? "bg-[#0a0a0a] border-amber-500/30 hover:border-amber-500/50  shadow-amber-950/20" : "bg-white/[0.02] border-white/5 opacity-60"}`}>
+              <div key={item.splitId} className={`border  p-5 relative overflow-hidden transition-all duration-300 ${item.completed ? "bg-bg border-warn/30 hover:border-warn/50  shadow-warn/20" : "bg-surface-2 border-line opacity-60"}`}>
                 {item.completed ? (
-                  <div className="absolute top-3 right-3 bg-amber-500/10 text-amber-400 border border-amber-500/25 rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider font-mono">Oficial 🏆</div>
+                  <div className="absolute top-3 right-3 bg-warn/10 text-warn border border-warn/25 rounded-full px-2 py-0.5 text-[11px] font-black uppercase tracking-wider font-mono">Oficial 🏆</div>
                 ) : (
-                  <div className="absolute top-3 right-3 bg-white/5 text-white/40 border border-white/10 rounded-full px-2 py-0.5 text-[8px] font-mono tracking-wider uppercase">Próximo 🏁</div>
+                  <div className="absolute top-3 right-3 bg-surface-2 text-ink-muted border border-line rounded-full px-2 py-0.5 text-[11px] font-mono tracking-wider uppercase">Próximo 🏁</div>
                 )}
-                <div className="text-[10px] uppercase font-mono tracking-widest text-[#e10600] mb-4 font-black">{item.splitName}</div>
+                <div className="text-xs uppercase font-mono tracking-widest text-brand mb-4 font-black">{item.splitName}</div>
                 
                 <div className="space-y-4">
                   <div>
-                    <div className="text-[9px] text-white/30 uppercase font-mono mb-1">Campeón de Pilotos:</div>
+                    <div className="text-[11px] text-ink-muted uppercase font-mono mb-1">Campeón de Pilotos:</div>
                     {item.completed ? (
                       <div>
-                        <p className="font-extrabold text-[#e10600] text-sm tracking-tight">{item.winnerPilot}</p>
-                        <p className="text-[10px] text-white/50 font-mono mt-0.5 uppercase">{item.winnerPilotTeam} ({item.winnerPilotPoints} pts)</p>
+                        <p className="font-extrabold text-brand text-sm tracking-tight">{item.winnerPilot}</p>
+                        <p className="text-xs text-ink-muted font-mono mt-0.5 uppercase">{item.winnerPilotTeam} ({item.winnerPilotPoints} pts)</p>
                       </div>
                     ) : (
-                      <p className="text-xs text-white/20 italic font-mono uppercase">Pendiente de inicio</p>
+                      <p className="text-xs text-ink-muted italic font-mono uppercase">Pendiente de inicio</p>
                     )}
                   </div>
-                  <div className="border-t border-white/5 pt-3">
-                    <div className="text-[9px] text-white/30 uppercase font-mono mb-1">Campeón de Escuderías:</div>
+                  <div className="border-t border-line pt-3">
+                    <div className="text-[11px] text-ink-muted uppercase font-mono mb-1">Campeón de Escuderías:</div>
                     {item.completed ? (
                       <div>
-                        <p className="font-extrabold text-white text-sm tracking-tight uppercase">{item.winnerTeam}</p>
-                        <p className="text-[10px] text-white/50 font-mono mt-0.5 uppercase">({item.winnerTeamPoints} pts)</p>
+                        <p className="font-extrabold text-ink text-sm tracking-tight uppercase">{item.winnerTeam}</p>
+                        <p className="text-xs text-ink-muted font-mono mt-0.5 uppercase">({item.winnerTeamPoints} pts)</p>
                       </div>
                     ) : (
-                      <p className="text-xs text-white/20 italic font-mono uppercase">Pendiente de inicio</p>
+                      <p className="text-xs text-ink-muted italic font-mono uppercase">Pendiente de inicio</p>
                     )}
                   </div>
                 </div>
@@ -771,28 +775,28 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
       {activeSplitId !== "global" && raceResults.length > 0 && (
         <section>
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-white/10 pb-2 lowercase flex items-center gap-2">
-            <span className="w-1 h-5 bg-[#e10600]" /> puntos por carrera
+          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-line pb-2 lowercase flex items-center gap-2">
+            <span className="w-1 h-5 bg-brand" /> puntos por carrera
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {raceResults.map((gp, i) => (
-              <div key={i} className="bg-white/[0.03] border border-white/10  p-4 overflow-hidden relative group">
-                <div className="absolute right-0 top-0 text-[40px] font-black italic text-white/5 pointer-events-none group-hover:text-[#e10600]/10 transition-colors uppercase">GP</div>
-                <h3 className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#e10600] mb-4 border-b border-white/5 pb-2">{gp.circuitName}</h3>
+              <div key={i} className="bg-surface-2 border border-line  p-4 overflow-hidden relative group">
+                <div className="absolute right-0 top-0 text-[40px] font-black italic text-ink-muted pointer-events-none group-hover:text-brand/10 transition-colors uppercase">GP</div>
+                <h3 className="text-xs font-mono uppercase tracking-[0.08em] text-brand mb-4 border-b border-line pb-2">{gp.circuitName}</h3>
                 <div className="space-y-3">
                   {gp.pilots.sort((a: any, b: any) => b.pts - a.pts).map((rp: any, idx: number) => (
                     <div 
                       key={idx} 
                       onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(rp.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
-                      className={`flex justify-between items-center text-xs p-1 rounded transition-colors group/row ${canOpenPilotProfile ? "cursor-pointer hover:bg-white/5" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística detallada de este piloto" : undefined}
+                      className={`flex justify-between items-center text-xs p-1 rounded transition-colors group/row ${canOpenPilotProfile ? "cursor-pointer hover:bg-surface-2" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística detallada de este piloto" : undefined}
                     >
                       <div className="flex flex-col">
-                        <span className="font-bold flex items-center gap-2 text-white group-hover/row:text-[#e10600] transition-colors">
-                           <span className="w-1.5 h-1.5 bg-white/20 rounded-full group-hover/row:bg-[#e10600]/80" /> {rp.name}
+                        <span className="font-bold flex items-center gap-2 text-ink group-hover/row:text-brand transition-colors">
+                           <span className="w-1.5 h-1.5 bg-surface-3 rounded-full group-hover/row:bg-brand/80" /> {rp.name}
                         </span>
-                        <span className="text-[9px] text-white/20 uppercase font-mono ml-3.5">{rp.team.replace('_', ' ')}</span>
+                        <span className="text-[11px] text-ink-muted uppercase font-mono ml-3.5">{rp.team.replace('_', ' ')}</span>
                       </div>
-                      <span className="font-black text-white tabular-nums group-hover/row:text-[#e10600] transition-colors">{rp.pts} <span className="text-[9px] text-white/40 font-normal text-white/40">pts</span></span>
+                      <span className="font-black text-ink tabular-nums group-hover/row:text-brand transition-colors">{rp.pts} <span className="text-[11px] text-ink-muted font-normal">pts</span></span>
                     </div>
                   ))}
                 </div>
@@ -808,13 +812,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
 
       {confirmModal && confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
-          <div className="relative w-full max-w-sm rounded-t-2xl border border-white/10 bg-[#0a0a0a] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-left sm:rounded-none sm:p-6 sm:pb-6">
-            <h3 className="text-lg font-black text-white uppercase tracking-tight mb-2 flex items-center gap-2"><span className="w-1.5 h-4 bg-[#e10600]" /> {confirmModal.title}</h3>
-            <p className="text-[13px] text-white/60 leading-relaxed mb-6">{confirmModal.message}</p>
+        <div className="fixed inset-0 bg-surface z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+          <div className="relative w-full max-w-sm rounded-t-2xl border border-line bg-bg p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-left sm:rounded-none sm:p-6 sm:pb-6">
+            <h3 className="text-lg font-black text-ink uppercase tracking-tight mb-2 flex items-center gap-2"><span className="w-1.5 h-4 bg-brand" /> {confirmModal.title}</h3>
+            <p className="text-[13px] text-ink-muted leading-relaxed mb-6">{confirmModal.message}</p>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-              {confirmModal.showCancel !== false && (<button onClick={() => setConfirmModal(null)} className="min-h-12 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition-colors hover:bg-white/10 sm:min-h-0 sm:rounded-sm sm:py-2.5 sm:text-[10px] sm:uppercase sm:tracking-wider">Cancelar</button>)}
-              <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} className="min-h-12 rounded-xl bg-[#e10600] px-4 text-sm font-bold text-white transition-colors hover:bg-red-700 sm:min-h-0 sm:rounded-sm sm:py-2.5 sm:text-[10px] sm:uppercase sm:tracking-wider">Confirmar</button>
+              {confirmModal.showCancel !== false && (<button onClick={() => setConfirmModal(null)} className="min-h-12 rounded-xl border border-line bg-surface-2 px-4 text-sm font-bold text-ink transition-colors hover:bg-surface-2 sm:min-h-0 sm:rounded-sm sm:py-2.5 sm:text-xs sm:uppercase sm:tracking-wider">Cancelar</button>)}
+              <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} className="min-h-12 rounded-xl bg-brand px-4 text-sm font-bold text-brand-ink transition-colors hover:bg-danger sm:min-h-0 sm:rounded-sm sm:py-2.5 sm:text-xs sm:uppercase sm:tracking-wider">Confirmar</button>
             </div>
           </div>
         </div>
@@ -822,35 +826,35 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
       {isCompareViewOpen && (
         <div
-          className="fixed inset-0 bg-black/85 z-50 overflow-y-auto overscroll-contain p-0 md:p-6 text-left backdrop-blur-sm"
+          className="fixed inset-0 bg-ink/75 z-50 overflow-y-auto overscroll-contain p-0 md:p-6 text-left backdrop-blur-sm"
           onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }}
         >
-          <div className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl border-white/[0.08] bg-[#0d0d0d] p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 -mx-4 mb-5 flex items-start justify-between gap-3 border-b border-[#e10600]/20 bg-[#0d0d0d] px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:static md:mx-0 md:mb-6 md:px-0 md:pt-0 md:pb-4">
+          <div className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl border-line bg-surface p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 -mx-4 mb-5 flex items-start justify-between gap-3 border-b border-brand/20 bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:static md:mx-0 md:mb-6 md:px-0 md:pt-0 md:pb-4">
               <div className="min-w-0">
-                <span className="block text-[11px] font-black text-[#e10600] md:font-mono md:text-[10px] md:uppercase md:tracking-[0.2em]">Central de telemetría GP</span>
-                <h2 className="mt-0.5 flex items-center gap-2 text-lg font-black uppercase italic tracking-tight text-white md:text-2xl"><TrendingUp className="w-5 h-5 shrink-0 text-amber-500 md:w-6 md:h-6" /> <span className="truncate">Rivalidad & rendimiento</span></h2>
+                <span className="block text-[11px] font-black text-brand md:font-mono md:text-xs md:uppercase md:tracking-[0.08em]">Central de telemetría GP</span>
+                <h2 className="mt-0.5 flex items-center gap-2 text-lg font-black uppercase italic tracking-tight text-ink md:text-2xl"><TrendingUp className="w-5 h-5 shrink-0 text-warn md:w-6 md:h-6" /> <span className="truncate">Rivalidad & rendimiento</span></h2>
               </div>
-              <button aria-label="Cerrar" onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 text-white/60 transition-all hover:bg-white/5 hover:text-white md:rounded-sm"><X className="w-5 h-5" /></button>
+              <button aria-label="Cerrar" onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line text-ink-muted transition-all hover:bg-surface-2 hover:text-ink md:rounded-sm"><X className="w-5 h-5" /></button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 border-b border-white/5 mb-5 md:flex md:mb-6">
-              <button onClick={() => { setActiveProfileTab("profile"); if (!selectedPilotForProfileId && allPaddockPilots.length > 0) setSelectedPilotForProfileId(allPaddockPilots[0].id); }} className={`min-h-12 px-3 md:px-6 md:py-3 font-black text-[12px] md:text-xs md:uppercase tracking-tight md:tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "profile" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}><span className="md:hidden">👤 Ficha</span><span className="hidden md:inline">👤 Ficha Individual de Piloto</span></button>
-              <button onClick={() => { setActiveProfileTab("compare"); if (!comparePilotIdA && allPaddockPilots.length > 0) setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id); if (!comparePilotIdB && allPaddockPilots.length > 0) { const firstId = selectedPilotForProfileId || allPaddockPilots[0].id; const other = allPaddockPilots.filter(p => p.id !== firstId)[0]; setComparePilotIdB(other?.id || firstId); } }} className={`min-h-12 px-3 md:px-6 md:py-3 font-black text-[12px] md:text-xs md:uppercase tracking-tight md:tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "compare" ? "border-[#e10600] text-white bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white hover:bg-white/[0.01]"}`}><span className="md:hidden">⚔️ Comparar</span><span className="hidden md:inline">⚔️ Comparador Cara a Cara</span></button>
+            <div className="grid grid-cols-2 gap-2 border-b border-line mb-5 md:flex md:mb-6">
+              <button onClick={() => { setActiveProfileTab("profile"); if (!selectedPilotForProfileId && allPaddockPilots.length > 0) setSelectedPilotForProfileId(allPaddockPilots[0].id); }} className={`min-h-12 px-3 md:px-6 md:py-3 font-black text-[12px] md:text-xs md:uppercase tracking-tight md:tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "profile" ? "border-brand text-ink bg-surface-2" : "border-transparent text-ink-muted hover:text-ink hover:bg-surface-2"}`}><span className="md:hidden">👤 Ficha</span><span className="hidden md:inline">👤 Ficha Individual de Piloto</span></button>
+              <button onClick={() => { setActiveProfileTab("compare"); if (!comparePilotIdA && allPaddockPilots.length > 0) setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id); if (!comparePilotIdB && allPaddockPilots.length > 0) { const firstId = selectedPilotForProfileId || allPaddockPilots[0].id; const other = allPaddockPilots.filter(p => p.id !== firstId)[0]; setComparePilotIdB(other?.id || firstId); } }} className={`min-h-12 px-3 md:px-6 md:py-3 font-black text-[12px] md:text-xs md:uppercase tracking-tight md:tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "compare" ? "border-brand text-ink bg-surface-2" : "border-transparent text-ink-muted hover:text-ink hover:bg-surface-2"}`}><span className="md:hidden">⚔️ Comparar</span><span className="hidden md:inline">⚔️ Comparador Cara a Cara</span></button>
             </div>
 
             {activeProfileTab === "profile" && currentSplit?.id !== "origins" && (
               <div className="space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/[0.02] border border-white/5 p-4 rounded-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface-2 border border-line p-4 rounded-sm">
                   <div>
-                    <label className="text-[10px] text-white/40 uppercase font-mono tracking-wider mb-1.5 block">Explorar Ficha de Piloto</label>
-                    <select value={selectedPilotForProfileId || ""} onChange={(e) => setSelectedPilotForProfileId(e.target.value)} className="bg-[#111] border border-white/10 rounded-sm text-xs px-3 py-2 text-white font-bold w-full md:w-64 focus:border-red-500 hover:border-white/20 transition-all cursor-pointer">
+                    <label className="text-xs text-ink-muted uppercase font-mono tracking-wider mb-1.5 block">Explorar Ficha de Piloto</label>
+                    <select value={selectedPilotForProfileId || ""} onChange={(e) => setSelectedPilotForProfileId(e.target.value)} className="bg-surface border border-line rounded-sm text-xs px-3 py-2 text-ink font-bold w-full md:w-64 focus:border-danger hover:border-line-strong transition-all cursor-pointer">
                       <option value="" disabled>-- Selecciona un piloto --</option>
                       {allPaddockPilots.map((p) => (<option key={p.id} value={p.id}>{p.name} ({p.team})</option>))}
                     </select>
                   </div>
                   {selectedPilotForProfileId && (
-                    <button onClick={() => { setComparePilotIdA(selectedPilotForProfileId); const other = allPaddockPilots.filter(p => p.id !== selectedPilotForProfileId)[0]; if (other) setComparePilotIdB(other.id); setActiveProfileTab("compare"); }} className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-extrabold uppercase text-[10px] tracking-wider px-4 py-2.5 rounded-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95">
+                    <button onClick={() => { setComparePilotIdA(selectedPilotForProfileId); const other = allPaddockPilots.filter(p => p.id !== selectedPilotForProfileId)[0]; if (other) setComparePilotIdB(other.id); setActiveProfileTab("compare"); }} className="bg-warn/10 hover:bg-warn/20 text-warn border border-warn/30 font-extrabold uppercase text-xs tracking-wider px-4 py-2.5 rounded-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95">
                       <TrendingUp className="w-4 h-4" /> Comparar este piloto ⚔️
                     </button>
                   )}
@@ -860,45 +864,45 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                   <div className="space-y-6">
                     <div className="flex flex-col lg:flex-row gap-6">
                       {activeSplitId !== "global" && currentSplit?.id === "origins" ? (
-                        <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 min-h-[360px] bg-white/[0.02] border border-white/10 overflow-hidden flex flex-col justify-end p-6">
-                          <div className="absolute inset-x-0 top-0 h-1.5 bg-[#e10600]" />
+                        <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 min-h-[360px] bg-surface-2 border border-line overflow-hidden flex flex-col justify-end p-6">
+                          <div className="absolute inset-x-0 top-0 h-1.5 bg-brand" />
                           <div className="absolute inset-0 flex items-center justify-center opacity-90">
                             {pilotProfileStats.fotoUrl ? (
                               <img src={pilotProfileStats.fotoUrl} alt={pilotProfileStats.name} className="max-w-[80%] max-h-[70%] object-contain" />
                             ) : (
-                              <span className="text-7xl font-black text-white/10">{pilotProfileStats.name?.substring(0, 2).toUpperCase()}</span>
+                              <span className="text-7xl font-black text-ink-muted">{pilotProfileStats.name?.substring(0, 2).toUpperCase()}</span>
                             )}
                           </div>
-                          <div className="relative z-10 bg-gradient-to-t from-black via-black/90 to-transparent -mx-6 -mb-6 px-6 pb-6 pt-20">
-                            <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-[#e10600]">Origins</span>
-                            <h3 className="mt-1 text-2xl font-black italic uppercase text-white">{pilotProfileStats.name}</h3>
-                            <p className="mt-3 text-sm font-mono text-white/60">{pilotProfileStats.totalPoints} puntos · {pilotProfileStats.participaciones} carreras</p>
+                          <div className="relative z-10 bg-gradient-to-t from-surface via-surface/90 to-transparent -mx-6 -mb-6 px-6 pb-6 pt-20">
+                            <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-brand">Origins</span>
+                            <h3 className="mt-1 text-2xl font-black italic uppercase text-ink">{pilotProfileStats.name}</h3>
+                            <p className="mt-3 text-sm font-mono text-ink-muted">{pilotProfileStats.totalPoints} puntos · {pilotProfileStats.participaciones} carreras</p>
                           </div>
                         </div>
                       ) : (
-                      <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 h-[440px] bg-white/[0.02] border border-white/10 shadow-[0_15px_40px_rgba(225,6,0,0.15)] overflow-hidden group">
-                        <div className="absolute top-0 left-0 w-full h-1.5 bg-[#e10600]"></div>
-                        <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#e10600]/20 rounded-full pointer-events-none group-hover:bg-[#e10600]/30 transition-all duration-500"></div>
+                      <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 h-[440px] bg-surface-2 border border-line shadow-card overflow-hidden group">
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-brand"></div>
+                        <div className="absolute -top-20 -right-20 w-48 h-48 bg-brand/20 rounded-full pointer-events-none group-hover:bg-brand/30 transition-all duration-500"></div>
                         <div className="absolute top-5 left-5 flex flex-col items-center z-20 drop-shadow-md">
-                          <span className="text-[42px] font-black italic text-white leading-none tracking-tighter">{pilotProfileStats.rating}</span>
-                          <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest mt-1">OVR</span>
-                          <div className="w-8 h-[2px] bg-white/20 my-2.5"></div>
-                          <div className="text-[11px] font-black text-white/50 uppercase tracking-widest" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{pilotProfileStats.escuderiaName ? pilotProfileStats.escuderiaName.substring(0, 16) : 'EQ'}</div>
+                          <span className="text-[42px] font-black italic text-ink leading-none tracking-tighter">{pilotProfileStats.rating}</span>
+                          <span className="text-xs font-bold text-ink-2 uppercase tracking-widest mt-1">OVR</span>
+                          <div className="w-8 h-[2px] bg-surface-3 my-2.5"></div>
+                          <div className="text-[11px] font-black text-ink-muted uppercase tracking-widest" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{pilotProfileStats.escuderiaName ? pilotProfileStats.escuderiaName.substring(0, 16) : 'EQ'}</div>
                         </div>
                         <div className="absolute bottom-28 left-1/2 -translate-x-1/2 w-[220px] h-[220px] z-10 flex items-end justify-center transition-transform duration-500 group-hover:scale-105">
                           {pilotProfileStats.fotoUrl ? (
-                            <img src={pilotProfileStats.fotoUrl} alt={pilotProfileStats.name} className="max-w-full max-h-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]" />
+                            <img src={pilotProfileStats.fotoUrl} alt={pilotProfileStats.name} className="max-w-full max-h-full object-contain drop-shadow-card" />
                           ) : (
-                            <div className="w-32 h-32 rounded-full bg-[#1a1a1a] border border-white/5 flex items-center justify-center font-black text-5xl text-white/10 mb-6 drop-">{pilotProfileStats.name ? pilotProfileStats.name.substring(0, 2).toUpperCase() : '??'}</div>
+                            <div className="w-32 h-32 rounded-full bg-surface border border-line flex items-center justify-center font-black text-5xl text-ink-muted mb-6 drop-">{pilotProfileStats.name ? pilotProfileStats.name.substring(0, 2).toUpperCase() : '??'}</div>
                           )}
                         </div>
-                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black to-transparent pt-16 pb-6 px-6 z-20">
-                          <h3 className="text-2xl font-black italic text-white uppercase tracking-tighter text-center whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-md">{pilotProfileStats.name}</h3>
-                          <div className="w-full h-[1px] bg-white/10 my-3.5"></div>
+                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-surface to-transparent pt-16 pb-6 px-6 z-20">
+                          <h3 className="text-2xl font-black italic text-ink uppercase tracking-tighter text-center whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-md">{pilotProfileStats.name}</h3>
+                          <div className="w-full h-[1px] bg-surface-2 my-3.5"></div>
                            <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-1">
-                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">PTS</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.totalPoints}</span></div>
-                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">POLE</span><span className="text-base leading-none font-black text-white">{pilotProfileStats.poles}</span></div>
-                             <div className="flex flex-col items-center"><span className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-0.5">DOTD</span><span className="text-base leading-none font-black text-amber-300">{pilotProfileStats.dotds}</span></div>
+                             <div className="flex flex-col items-center"><span className="text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-0.5">PTS</span><span className="text-base leading-none font-black text-ink">{pilotProfileStats.totalPoints}</span></div>
+                             <div className="flex flex-col items-center"><span className="text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-0.5">POLE</span><span className="text-base leading-none font-black text-ink">{pilotProfileStats.poles}</span></div>
+                             <div className="flex flex-col items-center"><span className="text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-0.5">DOTD</span><span className="text-base leading-none font-black text-warn">{pilotProfileStats.dotds}</span></div>
                           </div>
                         </div>
                       </div>
@@ -907,46 +911,46 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                       <div className="flex-1 flex flex-col gap-4">
                         {activeSplitId !== "global" && currentSplit?.id === "origins" ? (
                           <div className="grid grid-cols-2 gap-3 flex-1">
-                            <div className="bg-white/5 border border-white/5 p-6 flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Media de puntos</span><span className="text-4xl font-black text-white font-mono mt-4 tabular-nums">{pilotProfileStats.avgPoints}</span></div>
-                            <div className="bg-white/5 border border-white/5 p-6 flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Carreras disputadas</span><span className="text-4xl font-black text-white font-mono mt-4 tabular-nums">{pilotProfileStats.participaciones}</span></div>
-                            <div className="col-span-2 border border-white/5 bg-white/[0.02] p-6 text-sm leading-relaxed text-white/45">
+                            <div className="bg-surface-2 border border-line p-6 flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Media de puntos</span><span className="text-4xl font-black text-ink font-mono mt-4 tabular-nums">{pilotProfileStats.avgPoints}</span></div>
+                            <div className="bg-surface-2 border border-line p-6 flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Carreras disputadas</span><span className="text-4xl font-black text-ink font-mono mt-4 tabular-nums">{pilotProfileStats.participaciones}</span></div>
+                            <div className="col-span-2 border border-line bg-surface-2 p-6 text-sm leading-relaxed text-ink-muted">
                               Origins conserva únicamente los puntos históricos por carrera y por dúo. No se muestran posiciones, rating ni datos de mercado que no figuran en el archivo original.
                             </div>
                           </div>
                         ) : (
                         <>
-                        <div className="bg-white/[0.02] border border-white/5 p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+                        <div className="bg-surface-2 border border-line p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
                           <div className="w-full sm:flex-1">
                             <div className="flex justify-between items-end mb-2">
-                              <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider">Desarrollo de Rating</span>
-                              <span className="text-xs font-black text-white font-mono">{pilotProfileStats.rating.toFixed(0)} / 99</span>
+                              <span className="text-xs text-ink-muted font-mono uppercase tracking-wider">Desarrollo de Rating</span>
+                              <span className="text-xs font-black text-ink font-mono">{pilotProfileStats.rating.toFixed(0)} / 99</span>
                             </div>
-                            <div className="w-full bg-white/5 h-2 overflow-hidden bg-white/[0.04]">
-                              <div className="bg-[#e10600] h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(99, pilotProfileStats.rating)}%` }}></div>
+                            <div className="w-full bg-surface-2 h-2 overflow-hidden">
+                              <div className="bg-brand h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(99, pilotProfileStats.rating)}%` }}></div>
                             </div>
                           </div>
                           {!pilotProfileStats.congelado && (
-                            <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-white/5 pt-4 sm:pt-0 sm:pl-6 shrink-0">
-                              <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider block mb-1">Cláusula de Mercado</span>
+                            <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-line pt-4 sm:pt-0 sm:pl-6 shrink-0">
+                              <span className="text-xs text-ink-muted font-mono uppercase tracking-wider block mb-1">Cláusula de Mercado</span>
                               <div className="flex items-baseline gap-1 sm:justify-end">
-                                <span className="text-3xl font-black font-mono text-emerald-400">{pilotProfileStats.clause.toFixed(1)}</span>
-                                <span className="text-sm font-bold text-emerald-500 font-mono">M</span>
+                                <span className="text-3xl font-black font-mono text-ok">{pilotProfileStats.clause.toFixed(1)}</span>
+                                <span className="text-sm font-bold text-ok font-mono">M</span>
                               </div>
                             </div>
                           )}
                           {pilotProfileStats.congelado && (
-                            <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-white/5 pt-4 sm:pt-0 sm:pl-6 shrink-0">
-                              <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider block mb-1">Estado</span>
-                              <span className="text-xl font-black text-blue-400">❄ Congelado</span>
+                            <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-line pt-4 sm:pt-0 sm:pl-6 shrink-0">
+                              <span className="text-xs text-ink-muted font-mono uppercase tracking-wider block mb-1">Estado</span>
+                              <span className="text-xl font-black text-info">❄ Congelado</span>
                             </div>
                           )}
                         </div>
 
                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
-                           <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Puntos</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.totalPoints}</span></div>
-                           <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Mejor carrera</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.bestRace ? `P${pilotProfileStats.bestRace}` : "-"}</span></div>
-                           <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Poles</span><span className="text-2xl font-black text-white font-mono mt-1 tabular-nums">{pilotProfileStats.poles}</span></div>
-                           <div className="bg-white/5 border border-white/5 p-4 rounded-sm flex flex-col justify-between"><span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Driver of the Day</span><span className="text-2xl font-black text-amber-400 font-mono mt-1 tabular-nums">{pilotProfileStats.dotds}</span></div>
+                           <div className="bg-surface-2 border border-line p-4 rounded-sm flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Puntos</span><span className="text-2xl font-black text-ink font-mono mt-1 tabular-nums">{pilotProfileStats.totalPoints}</span></div>
+                           <div className="bg-surface-2 border border-line p-4 rounded-sm flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Mejor carrera</span><span className="text-2xl font-black text-ink font-mono mt-1 tabular-nums">{pilotProfileStats.bestRace ? `P${pilotProfileStats.bestRace}` : "-"}</span></div>
+                           <div className="bg-surface-2 border border-line p-4 rounded-sm flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Poles</span><span className="text-2xl font-black text-ink font-mono mt-1 tabular-nums">{pilotProfileStats.poles}</span></div>
+                           <div className="bg-surface-2 border border-line p-4 rounded-sm flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Driver of the Day</span><span className="text-2xl font-black text-warn font-mono mt-1 tabular-nums">{pilotProfileStats.dotds}</span></div>
                         </div>
                         </>
                         )}
@@ -954,12 +958,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                     </div>
 
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-[#e10600] font-mono mb-3 block">HISTORIAL CRONOLÓGICO DE CARRERAS</h4>
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-brand font-mono mb-3 block">HISTORIAL CRONOLÓGICO DE CARRERAS</h4>
                       {pilotProfileStats.history && pilotProfileStats.history.length > 0 ? (
-                        <div className="bg-[#111] border border-white/5 rounded-sm overflow-hidden overflow-x-auto">
-                          <table className="w-full text-xs font-mono text-left text-gray-300">
+                        <div className="bg-surface border border-line rounded-sm overflow-hidden overflow-x-auto">
+                          <table className="w-full text-xs font-mono text-left text-ink-muted">
                             <thead>
-                              <tr className="bg-white/[0.03] text-white/30 uppercase text-[9px] tracking-wider border-b border-white/5">
+                              <tr className="bg-surface-2 text-ink-muted uppercase text-[11px] tracking-wider border-b border-line">
                                  <th className="p-3">Split</th><th className="p-3">Gran Premio / Circuito</th><th className="p-3 text-center">Pole</th><th className="p-3 text-center">Pos. Carrera</th><th className="p-3 text-center">Puntos GP</th><th className="p-3 text-center">Driver of the Day</th>
                               </tr>
                             </thead>
@@ -967,18 +971,18 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                               {pilotProfileStats.history.map((h: any, idx: number) => {
                                 const esDnf = h.splitTipo !== "individual" && h.isDnf === true;
                                 return (
-                                <tr key={`gp-hist-${h.splitId}-${h.circuitId}-${idx}`} className={`border-b border-white/5 last:border-0 transition-colors ${esDnf ? "bg-red-500/[0.06] hover:bg-red-500/[0.10]" : "hover:bg-white/5"}`}>
-                                  <td className={`p-3 text-[#e10600] font-bold ${esDnf ? "border-l-2 border-red-500/70" : ""}`}>{h.splitName}</td>
-                                  <td className={`p-3 font-bold ${esDnf ? "text-white/60" : "text-white"}`}>{h.circuitName}</td>
+                                <tr key={`gp-hist-${h.splitId}-${h.circuitId}-${idx}`} className={`border-b border-line last:border-0 transition-colors ${esDnf ? "bg-danger/6 hover:bg-danger/10" : "hover:bg-surface-2"}`}>
+                                  <td className={`p-3 text-brand font-bold ${esDnf ? "border-l-2 border-danger/70" : ""}`}>{h.splitName}</td>
+                                  <td className={`p-3 font-bold ${esDnf ? "text-ink-muted" : "text-ink"}`}>{h.circuitName}</td>
                                     <td className="p-3 text-center">{h.splitTipo === "individual" ? "N/D" : h.qualyPos === 1 ? "Sí" : "-"}</td>
-                                   <td className={`p-3 text-center font-bold ${h.splitTipo === "individual" ? "text-white/30" : esDnf ? "" : h.racePos === 1 ? 'text-amber-400' : h.racePos <= 3 ? 'text-yellow-500' : 'text-white'}`}>
+                                   <td className={`p-3 text-center font-bold ${h.splitTipo === "individual" ? "text-ink-muted" : esDnf ? "" : h.racePos === 1 ? 'text-warn' : h.racePos <= 3 ? 'text-ink-2' : 'text-ink'}`}>
                                      {h.splitTipo === "individual" ? "N/D" : esDnf ? (
-                                       <span title="No terminó la carrera" className="inline-block rounded-sm border border-red-500/60 bg-red-500/20 px-2 py-0.5 text-[10px] font-black tracking-wider text-red-200">DNF</span>
+                                       <span title="No terminó la carrera" className="inline-block rounded-sm border border-danger/60 bg-danger/20 px-2 py-0.5 text-xs font-black tracking-wider text-danger">DNF</span>
                                      ) : h.racePos === 99 ? "—" : `P${h.racePos}`}
                                   </td>
-                                  <td className={`p-3 text-center font-bold text-sm bg-white/[0.02] tabular-nums ${esDnf ? "text-white/40" : "text-white"}`}>{h.points} pts</td>
+                                  <td className={`p-3 text-center font-bold text-sm bg-surface-2 tabular-nums ${esDnf ? "text-ink-muted" : "text-ink"}`}>{h.points} pts</td>
                                   <td className="p-3">
-                                     <div className="flex justify-center items-center">{h.isDotd ? <span className="bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded text-[8px] font-bold">Sí</span> : <span className="text-white/20 italic">-</span>}</div>
+                                     <div className="flex justify-center items-center">{h.isDotd ? <span className="bg-warn/15 text-warn px-1.5 py-0.5 rounded text-[11px] font-bold">Sí</span> : <span className="text-ink-muted italic">-</span>}</div>
                                   </td>
                                 </tr>
                                 );
@@ -987,14 +991,14 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                           </table>
                         </div>
                       ) : (
-                        <div className="bg-[#111] border border-white/5 rounded-sm p-8 text-center text-white/30 italic text-xs">
+                        <div className="bg-surface border border-line rounded-sm p-8 text-center text-ink-muted italic text-xs">
                           Sin registros de carreras completadas en las bases de datos de este split.
                         </div>
                       )}
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-[#111] border border-white/5  p-16 text-center text-white/30 italic">
+                  <div className="bg-surface border border-line  p-16 text-center text-ink-muted italic">
                     Selecciona un piloto para explorar su telemetría e historial de rendimiento.
                   </div>
                 )}
@@ -1003,18 +1007,18 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
             {activeProfileTab === "compare" && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-11 items-center gap-4 bg-white/[0.02] border border-white/5 p-5 ">
+                <div className="grid grid-cols-1 md:grid-cols-11 items-center gap-4 bg-surface-2 border border-line p-5 ">
                   <div className="md:col-span-5 flex flex-col">
-                    <label className="text-[10px] text-amber-300 font-mono tracking-wider mb-1 uppercase font-bold">Piloto A (Derecha / Izquierda)</label>
-                    <select value={comparePilotIdA} onChange={(e) => setComparePilotIdA(e.target.value)} className="bg-[#111] border border-white/10 rounded-sm text-xs px-3 py-2 text-white font-bold focus:border-amber-500 hover:border-white/20 transition-all cursor-pointer">
+                    <label className="text-xs text-warn font-mono tracking-wider mb-1 uppercase font-bold">Piloto A (Derecha / Izquierda)</label>
+                    <select value={comparePilotIdA} onChange={(e) => setComparePilotIdA(e.target.value)} className="bg-surface border border-line rounded-sm text-xs px-3 py-2 text-ink font-bold focus:border-warn hover:border-line-strong transition-all cursor-pointer">
                       <option value="" disabled>-- Elige el primer piloto --</option>
                       {allPaddockPilots.map((p) => (<option key={p.id} value={p.id} disabled={p.id === comparePilotIdB}>{p.name} ({p.team})</option>))}
                     </select>
                   </div>
-                  <div className="md:col-span-1 text-center font-black italic text-[#e10600] font-mono text-sm py-2">VS</div>
+                  <div className="md:col-span-1 text-center font-black italic text-brand font-mono text-sm py-2">VS</div>
                   <div className="md:col-span-5 flex flex-col">
-                    <label className="text-[10px] text-red-400 font-mono tracking-wider mb-1 uppercase font-bold">Piloto B (Contendiente)</label>
-                    <select value={comparePilotIdB} onChange={(e) => setComparePilotIdB(e.target.value)} className="bg-[#111] border border-white/10 rounded-sm text-xs px-3 py-2 text-white font-bold focus:border-red-500 hover:border-white/20 transition-all cursor-pointer">
+                    <label className="text-xs text-danger font-mono tracking-wider mb-1 uppercase font-bold">Piloto B (Contendiente)</label>
+                    <select value={comparePilotIdB} onChange={(e) => setComparePilotIdB(e.target.value)} className="bg-surface border border-line rounded-sm text-xs px-3 py-2 text-ink font-bold focus:border-danger hover:border-line-strong transition-all cursor-pointer">
                       <option value="" disabled>-- Elige el segundo piloto --</option>
                       {allPaddockPilots.map((p) => (<option key={p.id} value={p.id} disabled={p.id === comparePilotIdA}>{p.name} ({p.team})</option>))}
                     </select>
@@ -1024,28 +1028,28 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 {statsA && statsB ? (
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-white/[0.02] border border-amber-500/20 p-4 flex items-center gap-4">
+                      <div className="bg-surface-2 border border-warn/20 p-4 flex items-center gap-4">
                         {statsA.fotoUrl ? (
-                          <img src={statsA.fotoUrl} alt={statsA.name} className="w-16 h-16 rounded-sm object-cover border border-amber-500/40" />
+                          <img src={statsA.fotoUrl} alt={statsA.name} className="w-16 h-16 rounded-sm object-cover border border-warn/40" />
                         ) : (
-                          <div className="w-16 h-16 rounded-sm bg-[#111] border border-white/5 flex items-center justify-center font-bold text-lg text-white/30 uppercase">{statsA.name ? statsA.name.substring(0, 2).toUpperCase() : '??'}</div>
+                          <div className="w-16 h-16 rounded-sm bg-surface border border-line flex items-center justify-center font-bold text-lg text-ink-muted uppercase">{statsA.name ? statsA.name.substring(0, 2).toUpperCase() : '??'}</div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className="text-[9px] bg-amber-500/10 text-amber-400 font-bold px-1.5 py-0.5 rounded uppercase font-mono">{statsA.escuderiaName}</span>
-                          <h4 className="font-extrabold text-[#e10600] text-lg uppercase truncate mt-0.5">{statsA.name}</h4>
-                          <p className="text-[10px] text-white/40 font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-white">{statsA.rating.toFixed(0)}</span> | Cláusula: <span className="text-white">{statsA.clause.toFixed(1)}M</span></p>
+                          <span className="text-[11px] bg-warn/10 text-warn font-bold px-1.5 py-0.5 rounded uppercase font-mono">{statsA.escuderiaName}</span>
+                          <h4 className="font-extrabold text-brand text-lg uppercase truncate mt-0.5">{statsA.name}</h4>
+                          <p className="text-xs text-ink-muted font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-ink">{statsA.rating.toFixed(0)}</span> | Cláusula: <span className="text-ink">{statsA.clause.toFixed(1)}M</span></p>
                         </div>
                       </div>
-                      <div className="bg-white/[0.02] border border-red-500/20  p-4 flex items-center gap-4">
+                      <div className="bg-surface-2 border border-danger/20  p-4 flex items-center gap-4">
                         {statsB.fotoUrl ? (
-                          <img src={statsB.fotoUrl} alt={statsB.name} className="w-16 h-16 rounded-sm object-cover border border-red-500/40" />
+                          <img src={statsB.fotoUrl} alt={statsB.name} className="w-16 h-16 rounded-sm object-cover border border-danger/40" />
                         ) : (
-                          <div className="w-16 h-16 rounded-sm bg-[#111] border border-white/5 flex items-center justify-center font-bold text-lg text-white/30 uppercase">{statsB.name ? statsB.name.substring(0, 2).toUpperCase() : '??'}</div>
+                          <div className="w-16 h-16 rounded-sm bg-surface border border-line flex items-center justify-center font-bold text-lg text-ink-muted uppercase">{statsB.name ? statsB.name.substring(0, 2).toUpperCase() : '??'}</div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className="text-[9px] bg-red-500/10 text-red-400 font-bold px-1.5 py-0.5 rounded uppercase font-mono">{statsB.escuderiaName}</span>
-                          <h4 className="font-extrabold text-[#e10600] text-lg uppercase truncate mt-0.5">{statsB.name}</h4>
-                          <p className="text-[10px] text-white/40 font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-white">{statsB.rating.toFixed(0)}</span> | Cláusula: <span className="text-white">{statsB.clause.toFixed(1)}M</span></p>
+                          <span className="text-[11px] bg-danger/10 text-danger font-bold px-1.5 py-0.5 rounded uppercase font-mono">{statsB.escuderiaName}</span>
+                          <h4 className="font-extrabold text-brand text-lg uppercase truncate mt-0.5">{statsB.name}</h4>
+                          <p className="text-xs text-ink-muted font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-ink">{statsB.rating.toFixed(0)}</span> | Cláusula: <span className="text-ink">{statsB.clause.toFixed(1)}M</span></p>
                         </div>
                       </div>
                     </div>
@@ -1069,38 +1073,38 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
                       if (commonRaces > 0) {
                         return (
-                          <div className="bg-white/[0.03] border border-white/5  p-5 text-center">
-                            <span className="text-[9px] font-black tracking-[0.25em] text-[#e10600] uppercase font-mono block">MÉTRICAS CARA A CARA EN COEXISTENCIA</span>
-                            <h4 className="text-sm font-bold text-white uppercase italic tracking-tight mt-1 mb-4">Se han disputado la pista en <span className="text-amber-400 font-mono">{commonRaces} GPs</span> directos</h4>
+                          <div className="bg-surface-2 border border-line  p-5 text-center">
+                            <span className="text-[11px] font-black tracking-[0.08em] text-brand uppercase font-mono block">MÉTRICAS CARA A CARA EN COEXISTENCIA</span>
+                            <h4 className="text-sm font-bold text-ink uppercase italic tracking-tight mt-1 mb-4">Se han disputado la pista en <span className="text-warn font-mono">{commonRaces} GPs</span> directos</h4>
                             <div className="space-y-4 max-w-xl mx-auto">
                               <div>
                                 <div className="flex justify-between text-xs font-mono mb-1.5">
-                                  <span className="font-extrabold text-amber-400">{statsA.name}: {aheadA} veces</span><span className="text-white/40">Acabó por delante</span><span className="font-extrabold text-red-500">{aheadB} veces: {statsB.name}</span>
+                                  <span className="font-extrabold text-warn">{statsA.name}: {aheadA} veces</span><span className="text-ink-muted">Acabó por delante</span><span className="font-extrabold text-danger">{aheadB} veces: {statsB.name}</span>
                                 </div>
-                                <div className="w-full bg-white/5 rounded-full h-3 overflow-hidden flex font-mono font-bold text-[9px] text-black">
-                                  <div className="bg-amber-400 h-full flex items-center justify-center transition-all" style={{ width: `${(aheadA / commonRaces) * 100}%` }}>{aheadA > 0 && `${((aheadA / commonRaces) * 100).toFixed(0)}%`}</div>
-                                  <div className="bg-[#e10600] h-full flex items-center justify-center transition-all" style={{ width: `${(aheadB / commonRaces) * 100}%` }}>{aheadB > 0 && `${((aheadB / commonRaces) * 100).toFixed(0)}%`}</div>
+                                <div className="w-full bg-surface-2 rounded-full h-3 overflow-hidden flex font-mono font-bold text-[11px] text-ink">
+                                  <div className="bg-warn h-full flex items-center justify-center transition-all" style={{ width: `${(aheadA / commonRaces) * 100}%` }}>{aheadA > 0 && `${((aheadA / commonRaces) * 100).toFixed(0)}%`}</div>
+                                  <div className="bg-brand h-full flex items-center justify-center transition-all" style={{ width: `${(aheadB / commonRaces) * 100}%` }}>{aheadB > 0 && `${((aheadB / commonRaces) * 100).toFixed(0)}%`}</div>
                                 </div>
                               </div>
                               <div>
                                 <div className="flex justify-between text-xs font-mono mb-1.5">
-                                  <span className="font-extrabold text-amber-400">{qualyA} veces</span><span className="text-white/40 font-sans">Mejor Posición de Clasificación</span><span className="font-extrabold text-red-500">{qualyB} veces</span>
+                                  <span className="font-extrabold text-warn">{qualyA} veces</span><span className="text-ink-muted font-sans">Mejor Posición de Clasificación</span><span className="font-extrabold text-danger">{qualyB} veces</span>
                                 </div>
-                                <div className="w-full bg-white/5 rounded-full h-3 overflow-hidden flex font-mono font-bold text-[9px] text-black">
-                                  <div className="bg-amber-400 h-full flex items-center justify-center transition-all" style={{ width: `${((qualyA) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyA > 0 && `${((qualyA / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
-                                  <div className="bg-[#e10600] h-full flex items-center justify-center transition-all" style={{ width: `${((qualyB) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyB > 0 && `${((qualyB / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
+                                <div className="w-full bg-surface-2 rounded-full h-3 overflow-hidden flex font-mono font-bold text-[11px] text-ink">
+                                  <div className="bg-warn h-full flex items-center justify-center transition-all" style={{ width: `${((qualyA) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyA > 0 && `${((qualyA / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
+                                  <div className="bg-brand h-full flex items-center justify-center transition-all" style={{ width: `${((qualyB) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyB > 0 && `${((qualyB / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         );
                       } else {
-                        return <div className="bg-[#111] border border-white/5  p-4 text-center text-xs text-white/40 italic font-mono">No constan GPs cerrados disputados de forma simultánea en la temporada de este split.</div>;
+                        return <div className="bg-surface border border-line  p-4 text-center text-xs text-ink-muted italic font-mono">No constan GPs cerrados disputados de forma simultánea en la temporada de este split.</div>;
                       }
                     })()}
 
-                    <div className="bg-[#111] border border-white/5  p-4 space-y-4">
-                      <span className="text-[10px] font-black tracking-widest text-[#e10600] font-mono mb-2 block">ANÁLISIS COMPARATIVO DE TELEMETRÍA MUNDIAL</span>
+                    <div className="bg-surface border border-line  p-4 space-y-4">
+                      <span className="text-xs font-black tracking-widest text-brand font-mono mb-2 block">ANÁLISIS COMPARATIVO DE TELEMETRÍA MUNDIAL</span>
                       {[
                         { label: "VALORACIÓN GENERAL (RATING)", valA: statsA.rating, valB: statsB.rating, format: (v: number) => v.toFixed(0), higherIsBetter: true },
                         { label: "PUNTOS GLOBALES SUMADOS", valA: statsA.totalPoints, valB: statsB.totalPoints, format: (v: number) => `${v} pts`, higherIsBetter: true },
@@ -1117,18 +1121,18 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                         const isABetter = metric.higherIsBetter ? metric.valA > metric.valB : metric.valA < metric.valB && metric.valA > 0;
                         const isBBetter = metric.higherIsBetter ? metric.valB > metric.valA : metric.valB < metric.valA && metric.valB > 0;
                         return (
-                          <div key={`comp-metric-${mIdx}`} className="border-b border-white/5 last:border-0 pb-3 last:pb-0">
-                            <div className="flex justify-between items-center text-xs font-semibold uppercase font-mono tracking-tight text-white/40 mb-1">
-                              <span className={isABetter ? "text-amber-400 font-extrabold" : "text-white/60"}>{metric.format(metric.valA)}</span>
-                              <span className="text-[10px] text-center">{metric.label}</span>
-                              <span className={isBBetter ? "text-red-400 font-extrabold" : "text-white/60"}>{metric.format(metric.valB)}</span>
+                          <div key={`comp-metric-${mIdx}`} className="border-b border-line last:border-0 pb-3 last:pb-0">
+                            <div className="flex justify-between items-center text-xs font-semibold uppercase font-mono tracking-tight text-ink-muted mb-1">
+                              <span className={isABetter ? "text-warn font-extrabold" : "text-ink-muted"}>{metric.format(metric.valA)}</span>
+                              <span className="text-xs text-center">{metric.label}</span>
+                              <span className={isBBetter ? "text-danger font-extrabold" : "text-ink-muted"}>{metric.format(metric.valB)}</span>
                             </div>
-                            <div className="grid grid-cols-2 gap-1 bg-white/[0.02] p-0.5 rounded-sm">
-                              <div className="flex justify-end bg-white/[0.01] rounded-l h-2 overflow-hidden relative">
-                                <div className={`h-full rounded-l transition-all duration-500 bg-amber-400`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valA / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valA / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
+                            <div className="grid grid-cols-2 gap-1 bg-surface-2 p-0.5 rounded-sm">
+                              <div className="flex justify-end bg-surface-2 rounded-l h-2 overflow-hidden relative">
+                                <div className={`h-full rounded-l transition-all duration-500 bg-warn`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valA / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valA / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
                               </div>
-                              <div className="flex justify-start bg-white/[0.01] rounded-r h-2 overflow-hidden relative">
-                                <div className={`h-full rounded-r transition-all duration-500 bg-[#e10600]`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valB / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valB / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
+                              <div className="flex justify-start bg-surface-2 rounded-r h-2 overflow-hidden relative">
+                                <div className={`h-full rounded-r transition-all duration-500 bg-brand`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valB / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valB / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
                               </div>
                             </div>
                           </div>
@@ -1137,13 +1141,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-[#111] border border-white/5  p-16 text-center text-white/30 italic">Configura ambos pilotos rivales de la lista del paddock arriba para iniciar la simulación analítica de rivalidad.</div>
+                  <div className="bg-surface border border-line  p-16 text-center text-ink-muted italic">Configura ambos pilotos rivales de la lista del paddock arriba para iniciar la simulación analítica de rivalidad.</div>
                 )}
               </div>
             )}
 
-            <div className="border-t border-white/5 pt-4 mt-6 flex justify-end">
-              <button onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-sm text-xs uppercase tracking-wider font-extrabold border border-white/5 cursor-pointer active:scale-95 transition-all">Cerrar Telemetría</button>
+            <div className="border-t border-line pt-4 mt-6 flex justify-end">
+              <button onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="px-5 py-2.5 bg-surface-2 hover:bg-surface-2 text-ink rounded-sm text-xs uppercase tracking-wider font-extrabold border border-line cursor-pointer active:scale-95 transition-all">Cerrar Telemetría</button>
             </div>
           </div>
         </div>
