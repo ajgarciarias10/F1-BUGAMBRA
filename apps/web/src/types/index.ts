@@ -135,7 +135,46 @@ export interface Circuito {
   piloto_dia_cerrada_en?: unknown;
   /** pilotoId del ganador; solo tiene sentido si piloto_dia_cerrado es true. */
   piloto_dia_ganador?: string | null;
+  /** Decisiones FIA registradas por el admin. Nunca se calculan ni se infieren. */
+  decisiones_fia?: DecisionFia[];
 }
+
+// ─── DECISIONES FIA ───────────────────────────────────────────────────────────
+
+export interface DecisionFia {
+  /** Identificador estable; sirve para no registrar dos veces la misma decisión. */
+  id: string;
+  pilotoId?: string;
+  equipoId?: string;
+  /** Texto libre elegido por el admin (p. ej. "Time penalty"); la app no fija un catálogo. */
+  tipo: string;
+  /** Efecto deportivo tal y como lo anunció la liga; opcional. */
+  efecto_deportivo?: string;
+  motivo: string;
+  /** Id de la transacción del ledger si hay multa económica ya aprobada y registrada. */
+  transaccionId?: string;
+  registrada_por?: string;
+  registrada_en?: unknown;
+}
+
+/** Aviso oficial que el admin publica de forma explícita (colección `avisos_oficiales`). */
+export interface AvisoOficial {
+  id: string;
+  titulo: string;
+  texto: string;
+  publicado_por?: string;
+  publicado_en?: unknown;
+}
+
+// ─── ESTADOS DE LECTURA (read models) ─────────────────────────────────────────
+
+export type RaceResultStatus = "classified" | "dnf" | "did_not_race" | "unknown_position";
+
+export type LedgerSource =
+  | "points" | "pole" | "fastestLap" | "participation" | "cleanTeam" | "rivalry"
+  | "seasonPrize" | "transfer" | "priceAdjustment" | "manualAdjustment" | "other";
+
+export type VotingStatus = "open" | "closed" | "unavailable";
 
 // ─── RESULTADOS DE CARRERA ────────────────────────────────────────────────────
 
@@ -190,6 +229,13 @@ export interface Transaccion {
   carrera?: string;
   descripcion?: string;
   fecha: any; // serverTimestamp
+  splitId?: string;
+  equipoId?: string;
+  circuitoId?: string;
+  operacionId?: string | null;
+  /** Solo existen en asientos que los guardaron; nunca se reconstruyen. */
+  saldo_anterior?: number;
+  saldo_nuevo?: number;
 }
 
 // ─── RIVALIDADES ──────────────────────────────────────────────────────────────
