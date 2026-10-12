@@ -40,7 +40,7 @@ export function TotalStandings({
   }, [activeSplits]);
 
   if (activeSplits.length === 0) return (
-    <p className="py-12 text-center text-xs uppercase tracking-widest text-black/30 dark:text-white/20 md:font-mono">
+    <p className="py-12 text-center text-xs uppercase tracking-widest text-ink-muted md:font-mono">
       Sin datos de temporadas
     </p>
   );
@@ -53,27 +53,27 @@ export function TotalStandings({
     const pct = Math.round((p.total / maxPilot) * 100);
     const isFirst = i === 0;
     return (
-      <div className={`flex items-center gap-3 py-3 ${i > 0 ? "border-t border-black/[0.07] dark:border-white/[0.06]" : ""}`}>
-        <span className={`text-base font-black font-mono w-6 tabular-nums shrink-0 ${isFirst ? "text-[#e10600]" : "text-black/35 dark:text-white/35"}`}>{i + 1}</span>
+      <div className={`flex items-center gap-3 py-3 ${i > 0 ? "border-t border-line" : ""}`}>
+        <span className={`text-base font-black font-mono w-6 tabular-nums shrink-0 ${isFirst ? "text-brand" : "text-ink-muted"}`}>{i + 1}</span>
         {photo ? (
-          <img src={photo} alt={p.nombre} referrerPolicy="no-referrer" loading="lazy" className="h-9 w-9 shrink-0 rounded-full border border-black/10 object-cover dark:border-white/10" />
+          <img src={photo} alt={p.nombre} referrerPolicy="no-referrer" loading="lazy" className="h-9 w-9 shrink-0 rounded-full border border-line object-cover" />
         ) : (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black/[0.05] text-[11px] font-black text-black/40 dark:border-white/10 dark:bg-white/5 dark:text-white/40">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-[11px] font-black text-ink-muted">
             {p.nombre.slice(0, 2).toUpperCase()}
           </div>
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1.5">
-            <span className={`text-sm font-bold uppercase truncate ${isFirst ? "text-black dark:text-white" : "text-black/70 dark:text-white/70"}`}>{p.nombre}</span>
-            <span className={`text-sm font-black tabular-nums shrink-0 ${isFirst ? "text-[#e10600]" : "text-black/60 dark:text-white/60"}`}>
-              {p.total}<span className="ml-0.5 text-[11px] font-normal text-black/35 dark:text-white/35">pts</span>
+            <span className={`text-sm font-bold uppercase truncate ${isFirst ? "text-ink" : "text-ink-2"}`}>{p.nombre}</span>
+            <span className={`text-sm font-black tabular-nums shrink-0 ${isFirst ? "text-brand" : "text-ink-muted"}`}>
+              {p.total}<span className="ml-0.5 text-[11px] font-normal text-ink-muted">pts</span>
             </span>
           </div>
-          <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-black/[0.07] dark:bg-white/[0.07]">
-            <div className={`h-full rounded-full ${isFirst ? "bg-[#e10600]" : "bg-black/25 dark:bg-white/25"}`} style={{ width: `${pct}%` }} />
+          <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+            <div className={`h-full rounded-full ${isFirst ? "bg-brand" : "bg-surface-3"}`} style={{ width: `${pct}%` }} />
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {activeSplits.map(s => <span key={s.id} className="text-[11px] text-black/35 dark:text-white/35 md:font-mono md:text-[8px]">{s.nombre}: <span className="font-bold text-black/55 dark:text-white/55">{p.bySplit[s.id] || 0}</span></span>)}
+            {activeSplits.map(s => <span key={s.id} className="text-[11px] text-ink-muted md:font-mono md:text-[11px]">{s.nombre}: <span className="font-bold text-ink-muted">{p.bySplit[s.id] || 0}</span></span>)}
           </div>
         </div>
       </div>
@@ -84,27 +84,27 @@ export function TotalStandings({
     const pct = Math.round((t.total / maxTeam) * 100);
     const isFirst = i === 0;
     return (
-      <div className={`flex items-center gap-3 py-3 ${i > 0 ? "border-t border-black/[0.07] dark:border-white/[0.06]" : ""}`}>
-        <span className={`text-base font-black font-mono w-6 tabular-nums shrink-0 ${isFirst ? "text-[#e10600]" : "text-black/35 dark:text-white/35"}`}>{i + 1}</span>
+      <div className={`flex items-center gap-3 py-3 ${i > 0 ? "border-t border-line" : ""}`}>
+        <span className={`text-base font-black font-mono w-6 tabular-nums shrink-0 ${isFirst ? "text-brand" : "text-ink-muted"}`}>{i + 1}</span>
         {t.logo ? (
-          <img src={t.logo} alt={t.nombre} referrerPolicy="no-referrer" loading="lazy" className="h-9 w-9 shrink-0 rounded-lg border border-black/10 object-contain p-0.5 dark:border-white/10 md:rounded-none" />
+          <img src={t.logo} alt={t.nombre} referrerPolicy="no-referrer" loading="lazy" className="h-9 w-9 shrink-0 rounded-lg border border-line object-contain p-0.5 md:rounded-none" />
         ) : (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black/10 bg-black/[0.05] text-[11px] font-black text-black/40 dark:border-white/10 dark:bg-white/5 dark:text-white/40 md:rounded-none">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-[11px] font-black text-ink-muted md:rounded-none">
             {t.nombre.slice(0, 2).toUpperCase()}
           </div>
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1.5">
-            <span className={`text-sm font-bold uppercase truncate ${isFirst ? "text-black dark:text-white" : "text-black/70 dark:text-white/70"}`}>{t.nombre}</span>
-            <span className={`text-sm font-black tabular-nums shrink-0 ${isFirst ? "text-[#e10600]" : "text-black/60 dark:text-white/60"}`}>
-              {t.total}<span className="ml-0.5 text-[11px] font-normal text-black/35 dark:text-white/35">pts</span>
+            <span className={`text-sm font-bold uppercase truncate ${isFirst ? "text-ink" : "text-ink-2"}`}>{t.nombre}</span>
+            <span className={`text-sm font-black tabular-nums shrink-0 ${isFirst ? "text-brand" : "text-ink-muted"}`}>
+              {t.total}<span className="ml-0.5 text-[11px] font-normal text-ink-muted">pts</span>
             </span>
           </div>
-          <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-black/[0.07] dark:bg-white/[0.07]">
-            <div className={`h-full rounded-full ${isFirst ? "bg-[#e10600]" : "bg-black/25 dark:bg-white/25"}`} style={{ width: `${pct}%` }} />
+          <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+            <div className={`h-full rounded-full ${isFirst ? "bg-brand" : "bg-surface-3"}`} style={{ width: `${pct}%` }} />
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {activeSplits.map(s => <span key={s.id} className="text-[11px] text-black/35 dark:text-white/35 md:font-mono md:text-[8px]">{s.nombre}: <span className="font-bold text-black/55 dark:text-white/55">{t.bySplit[s.id] || 0}</span></span>)}
+            {activeSplits.map(s => <span key={s.id} className="text-[11px] text-ink-muted md:font-mono md:text-[11px]">{s.nombre}: <span className="font-bold text-ink-muted">{t.bySplit[s.id] || 0}</span></span>)}
           </div>
         </div>
       </div>
@@ -113,20 +113,20 @@ export function TotalStandings({
 
   return (
     <section>
-      <h2 className="mb-4 flex items-center gap-2 border-b border-black/10 pb-2 text-lg font-bold italic lowercase tracking-tight dark:border-white/10 md:text-xl">
-        <span className="w-1 h-5 bg-[#e10600]" />
+      <h2 className="mb-4 flex items-center gap-2 border-b border-line pb-2 text-lg font-bold italic lowercase tracking-tight md:text-xl">
+        <span className="w-1 h-5 bg-brand" />
         Puntos Acumulados - Todos los Splits
       </h2>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-8">
-        <div className="m-card border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03]">
-          <p className="mb-3 text-[12px] font-black text-[#e10600] md:font-mono md:text-[9px] md:uppercase md:tracking-[0.3em]">Pilotos · Suma de todos los splits</p>
+        <div className="m-card border border-line bg-surface-3 p-4">
+          <p className="mb-3 text-[12px] font-black text-brand md:font-mono md:text-[11px] md:uppercase md:tracking-[0.08em]">Pilotos · Suma de todos los splits</p>
           {pilotRanking.map((p, i) => <PilotRow key={p.id} p={p} i={i} />)}
-          {pilotRanking.length === 0 && <p className="py-6 text-center text-xs text-black/30 dark:text-white/25">Sin datos de pilotos</p>}
+          {pilotRanking.length === 0 && <p className="py-6 text-center text-xs text-ink-muted">Sin datos de pilotos</p>}
         </div>
-        <div className="m-card border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03]">
-          <p className="mb-3 text-[12px] font-black text-[#e10600] md:font-mono md:text-[9px] md:uppercase md:tracking-[0.3em]">Constructores · Suma de todos los splits</p>
+        <div className="m-card border border-line bg-surface-3 p-4">
+          <p className="mb-3 text-[12px] font-black text-brand md:font-mono md:text-[11px] md:uppercase md:tracking-[0.08em]">Constructores · Suma de todos los splits</p>
           {teamRanking.map((t, i) => <TeamRow key={t.id} t={t} i={i} />)}
-          {teamRanking.length === 0 && <p className="py-6 text-center text-xs text-black/30 dark:text-white/25">Sin datos de constructores</p>}
+          {teamRanking.length === 0 && <p className="py-6 text-center text-xs text-ink-muted">Sin datos de constructores</p>}
         </div>
       </div>
     </section>

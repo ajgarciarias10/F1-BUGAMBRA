@@ -1,33 +1,200 @@
-import { useMemo, useState } from "react";
-import { Loader2, UserPlus, UserX, Wallet, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Receipt, UserPlus, Users } from "lucide-react";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { PilotCardF1 } from "./PilotCardF1";
-import { StatusBanner, useConfirm } from "./Feedback";
 import { formatearMillones } from "../services/auctionService";
+import { fetchTeamLedger } from "../services/readModelService";
+import type { LedgerEntry, LedgerView } from "../services/readModels";
+import type { LedgerSource } from "../types";
+import { Badge, Card, EmptyState, Button, Notice, StatusPill, cn } from "./ui";
 
 interface TeamEconomyViewProps {
   splitId: string;
-  canManage: boolean;
+  /** Se mantiene por compatibilidad con quien lo monta; el jeque nunca gestiona saldos desde aquí. */
+  canManage?: boolean;
   escuderiaId?: string;
 }
 
+/** Etiquetas de cada fuente del ledger. Ninguna se fusiona con otra. */
+const SOURCE_LABEL: Record<LedgerSource, string> = {
+  points: "Puntos de carrera",
+  pole: "Pole",
+  fastestLap: "Vuelta rápida",
+  participation: "Participación",
+  cleanTeam: "Equipo sin sancionados",
+  rivalry: "Rivalidad",
+  seasonPrize: "Premio de temporada",
+  transfer: "Fichajes y cláusulas",
+  priceAdjustment: "Ajuste de precio de compra",
+  manualAdjustment: "Ajuste manual del administrador",
+  other: "Otros movimientos",
+};
+
+const SOURCE_ORDER: LedgerSource[] = [
+  "points", "pole", "fastestLap", "participation", "cleanTeam", "rivalry", "seasonPrize",
+  "transfer", "priceAdjustment", "manualAdjustment", "other",
+];
+
+function signedMillions(value: number): string {
+  const abs = formatearMillones(Math.abs(value));
+  return value > 0 ? `+${abs}` : value < 0 ? `−${abs}` : abs;
+}
+
+function formatDate(ms: number | null): string {
+  return ms == null ? "Sin fecha" : new Date(ms).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Una cifra con su etiqueta; el valor nunca se sustituye por 0 si no se conoce. */
+function Figure({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "brand" }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-muted">{label}</p>
+      <p className={cn("mt-1 text-2xl font-bold tabular-nums text-ink md:text-3xl", tone === "brand" && "text-brand")}>{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>}
+    </div>
+  );
+}
+
+type LedgerState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; view: LedgerView };
+
+function LedgerSection({ splitId, teamId, teamName, balance, circuitNames }: {
+  splitId: string; teamId: string; teamName?: string; balance: number | null; circuitNames: Map<string, string>;
+}) {
+  const [state, setState] = useState<LedgerState>({ status: "loading" });
+  const [attempt, setAttempt] = useState(0);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<LedgerSource | "all">("all");
+
+  const load = useCallback(() => {
+    let alive = true;
+    setState({ status: "loading" });
+    fetchTeamLedger(splitId, teamId, balance, teamName)
+      .then(view => { if (alive) setState({ status: "ready", view }); })
+      .catch(() => { if (alive) setState({ status: "error", message: "No se pudieron leer los movimientos. No se muestra ningún saldo inventado." }); });
+    return () => { alive = false; };
+  }, [splitId, teamId, teamName, balance]);
+
+  useEffect(() => load(), [load, attempt]);
+
+  return (
+    <Card as="section" aria-labelledby="ledger-title" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 id="ledger-title" className="flex items-center gap-2 text-lg font-bold text-ink">
+          <Receipt aria-hidden="true" className="h-5 w-5 text-brand" /> Movimientos
+        </h3>
+        {state.status === "ready" && state.view.state === "ok" && <StatusPill tone="ok">Conciliado</StatusPill>}
+        {state.status === "ready" && state.view.state === "pending_reconciliation" && <StatusPill tone="warn">Pendiente de conciliar</StatusPill>}
+      </div>
+
+      {state.status === "loading" && <p role="status" className="py-6 text-center text-sm text-ink-muted">Cargando movimientos…</p>}
+
+      {state.status === "error" && (
+        <Notice tone="danger" title="Error de carga" action={<Button size="sm" onClick={() => setAttempt(n => n + 1)}>Reintentar</Button>}>
+          {state.message}
+        </Notice>
+      )}
+
+      {state.status === "ready" && (() => {
+        const { view } = state;
+        const sources = SOURCE_ORDER.filter(s => view.netBySource[s] !== undefined);
+        const entries = filter === "all" ? view.entries : view.entries.filter(e => e.source === filter);
+        return (
+          <>
+            {view.state === "balance_unknown" && (
+              <Notice tone="warn" title="Saldo no disponible">
+                La escudería no tiene un saldo registrado. Los movimientos se muestran tal como constan; el administrador debe conciliar el saldo.
+              </Notice>
+            )}
+            {view.state === "pending_reconciliation" && (
+              <Notice tone="warn" title="Saldo pendiente de conciliar">
+                El saldo actual no coincide con el último movimiento que guardó su saldo posterior. El administrador lo revisa; la web no corrige saldos.
+              </Notice>
+            )}
+            {view.state === "empty" && (
+              <EmptyState icon={Receipt} title="Sin movimientos" description="Cuando el administrador registre ingresos, fichajes o ajustes, aparecerán aquí con su referencia." />
+            )}
+            {view.entries.length > 0 && (
+              <>
+                <div>
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-muted">Desglose por fuente (neto)</p>
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    {sources.map(source => {
+                      const net = view.netBySource[source] ?? 0;
+                      const active = filter === source;
+                      return (
+                        <li key={source}>
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => setFilter(active ? "all" : source)}
+                            className={cn(
+                              "flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border px-3 text-left text-sm transition-colors",
+                              active ? "border-brand bg-brand-soft" : "border-line bg-surface-2 hover:border-line-strong",
+                            )}
+                          >
+                            <span className="text-ink-2">{SOURCE_LABEL[source]}</span>
+                            <span className={cn("font-bold tabular-nums", net > 0 ? "text-ok" : net < 0 ? "text-danger" : "text-ink-muted")}>{signedMillions(net)}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {filter !== "all" && <Button variant="ghost" size="sm" className="mt-2" onClick={() => setFilter("all")}>Ver todos los movimientos</Button>}
+                </div>
+
+                <ul className="divide-y divide-line rounded-lg border border-line">
+                  {entries.map(entry => (
+                    <LedgerRow key={entry.id || `${entry.dateMs}-${entry.concept}`} entry={entry} circuitNames={circuitNames}
+                      open={openId === (entry.id || entry.reference)} onToggle={() => setOpenId(id => id === (entry.id || entry.reference) ? null : (entry.id || entry.reference))} />
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        );
+      })()}
+    </Card>
+  );
+}
+
+function LedgerRow({ entry, circuitNames, open, onToggle }: { entry: LedgerEntry; circuitNames: Map<string, string>; open: boolean; onToggle: () => void }) {
+  const gp = entry.circuitId ? circuitNames.get(entry.circuitId) ?? entry.circuitId : null;
+  const title = entry.concept || SOURCE_LABEL[entry.source];
+  return (
+    <li>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left hover:bg-surface-2">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-ink">{title}</span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
+            <span>{formatDate(entry.dateMs)}</span>
+            {gp && <span>· GP {gp}</span>}
+            <Badge tone="neutral">{SOURCE_LABEL[entry.source]}</Badge>
+          </span>
+        </span>
+        <span className="shrink-0 text-right">
+          <span className={cn("block text-sm font-bold tabular-nums", entry.signedAmount > 0 ? "text-ok" : entry.signedAmount < 0 ? "text-danger" : "text-ink")}>{signedMillions(entry.signedAmount)}</span>
+          <span className="block text-xs tabular-nums text-ink-muted">{entry.balanceAfter === null ? "Saldo no registrado" : `Saldo ${formatearMillones(entry.balanceAfter)}`}</span>
+        </span>
+        {open ? <ChevronUp aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-muted" /> : <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-muted" />}
+      </button>
+      {open && (
+        <dl className="grid gap-x-6 gap-y-2 border-t border-line bg-surface-2 px-3 py-3 text-sm sm:grid-cols-2">
+          <div><dt className="text-xs text-ink-muted">Concepto</dt><dd className="text-ink">{entry.concept || "Sin descripción"}</dd></div>
+          <div><dt className="text-xs text-ink-muted">Fuente</dt><dd className="text-ink">{SOURCE_LABEL[entry.source]}</dd></div>
+          {entry.pilot && <div><dt className="text-xs text-ink-muted">Piloto</dt><dd className="text-ink">{entry.pilot}</dd></div>}
+          {gp && <div><dt className="text-xs text-ink-muted">Carrera</dt><dd className="text-ink">GP {gp}</dd></div>}
+          <div><dt className="text-xs text-ink-muted">Referencia</dt><dd className="break-all font-mono text-xs text-ink">{entry.reference || "Sin referencia"}</dd></div>
+          <div><dt className="text-xs text-ink-muted">Importe</dt><dd className="text-ink">{signedMillions(entry.signedAmount)} ({entry.signedAmount >= 0 ? "ingreso" : "gasto"})</dd></div>
+        </dl>
+      )}
+    </li>
+  );
+}
+
 export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) {
-  // Los acuerdos tradicionales y los ajustes los documenta administración.
-  const canManage = false;
   const { splits } = useSplits();
   const { usuarios } = useUsuarios();
-  const [editingBudget, setEditingBudget] = useState<string | null>(null);
-  const [budgetInput, setBudgetInput] = useState("");
-  // Una sola operación a la vez: sin esto, dos toques seguidos en «Fichar» disparaban dos
-  // veces `ficharPiloto` y el presupuesto se descontaba dos veces.
-  const [busy, setBusy] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ message: string; tone: "info" | "exito" | "error" } | null>(null);
-  const { confirm, confirmDialog } = useConfirm();
   const split = useMemo(() => splits.find((s: any) => s.id === splitId), [splits, splitId]);
-  const isAuctionEnabled = split?.mercado_subasta_activado === true;
-  // La misma regla que ya aplicaba `sacarPilotoASubasta`: con la ventana cerrada no se
-  // mueve nadie. Sin esto, la cabecera decía «Mercado cerrado» y los botones seguían vivos.
-  const mercadoAbierto = split?.fichajes_abiertos === true;
 
   const getPilotPhoto = (pilotId: string) => {
     const u = (usuarios || []).find((u: any) => u.uid === pilotId || u.piloto_id === pilotId);
@@ -44,480 +211,141 @@ export function TeamEconomyView({ splitId, escuderiaId }: TeamEconomyViewProps) 
     return (split.equipos || [])
       .filter((e: any) => e.id !== "agente_libre")
       .map((e: any) => {
-        const pilotos = (split.roster || [])
-          .filter((p: any) => p.equipoId === e.id && p.participa_hasta == null);
+        const pilotos = (split.roster || []).filter((p: any) => p.equipoId === e.id && p.participa_hasta == null);
         const valorPilotos = pilotos.reduce((sum: number, p: any) => sum + (p.clausula_actual ?? 0), 0);
-        return {
-          ...e,
-          pilotos,
-          valorPilotos,
-          valorTotal: e.presupuesto == null ? null : e.presupuesto + valorPilotos,
-        };
+        const presupuesto = typeof e.presupuesto === "number" && Number.isFinite(e.presupuesto) ? e.presupuesto : null;
+        return { ...e, presupuesto, pilotos, valorPilotos, valorTotal: presupuesto === null ? null : presupuesto + valorPilotos };
       });
   }, [split]);
 
-  const miEquipo = useMemo(() => {
-    if (!escuderiaId) return null;
-    return equipos.find((e: any) => e.id === escuderiaId);
-  }, [equipos, escuderiaId]);
-
+  const miEquipo = useMemo(() => (escuderiaId ? equipos.find((e: any) => e.id === escuderiaId) : null), [equipos, escuderiaId]);
+  const otros = equipos.filter((e: any) => e.id !== escuderiaId);
   const agentesLibres = useMemo(() => {
     if (!split) return [];
     return (split.roster || [])
       .filter((p: any) => p.equipoId === "agente_libre" && p.participa_hasta == null)
-      .sort((a: any, b: any) => (Number(b.rating_piloto ?? 0) - Number(a.rating_piloto ?? 0)));
+      .sort((a: any, b: any) => Number(b.rating_piloto ?? 0) - Number(a.rating_piloto ?? 0));
   }, [split]);
-
-  const handleBudgetChange = async (teamId: string) => {
-    const newBudget = Number(budgetInput.replace(",", "."));
-    if (!Number.isFinite(newBudget) || newBudget < 0) {
-      setStatus({ tone: "error", message: "El presupuesto tiene que ser un número igual o mayor que cero." });
-      return;
-    }
-    setBusy(`budget:${teamId}`);
-    try {
-      const { doc, updateDoc } = await import("firebase/firestore");
-      const { db } = await import("../services/firebase");
-      await updateDoc(doc(db, `splits/${splitId}/equipos`, teamId), { presupuesto: newBudget });
-      setEditingBudget(null);
-      setBudgetInput("");
-      setStatus({ tone: "exito", message: `Presupuesto actualizado a ${formatearMillones(newBudget)}.` });
-    } catch (err: any) {
-      setStatus({ tone: "error", message: `No se ha podido actualizar el presupuesto: ${err.message}` });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  /**
-   * Alta de un piloto en una escudería.
-   *
-   * `teamId` es siempre el equipo que PAGA y se lleva al piloto. Antes, el botón de
-   * cláusula pasaba aquí el equipo vendedor, así que se le cobraba al dueño y el piloto se
-   * quedaba donde estaba.
-   */
-  const handleSignPilot = async (
-    teamId: string,
-    pilotId: string,
-    precio: number,
-    tipo: "fichaje" | "clausula" = "fichaje",
-  ) => {
-    if (busy) return;
-    if (!mercadoAbierto) {
-      setStatus({ tone: "error", message: "La ventana de fichajes está cerrada. El admin la abre desde el panel de control." });
-      return;
-    }
-    const team = equipos.find((e: any) => e.id === teamId);
-    const pilot = split?.roster?.find((p: any) => p.pilotoId === pilotId);
-    if (!team) {
-      setStatus({ tone: "error", message: "No se encuentra la escudería compradora." });
-      return;
-    }
-    if (typeof team.presupuesto !== "number" || !Number.isFinite(team.presupuesto)) {
-      setStatus({ tone: "error", message: `El saldo de ${team.nombre} no está registrado. Pide al administrador que lo concilie antes de fichar.` });
-      return;
-    }
-
-    if (precio > 0 && team.presupuesto < precio) {
-      setStatus({ tone: "error", message: `${team.nombre} tiene ${formatearMillones(team.presupuesto)} y la operación cuesta ${formatearMillones(precio)}.` });
-      return;
-    }
-
-    const esClausula = tipo === "clausula";
-    const ok = await confirm({
-      title: esClausula ? "Ejecutar cláusula" : "Fichar piloto",
-      body: esClausula
-        ? `${pilot?.nombre || "El piloto"} pasa a ${team.nombre} por ${formatearMillones(precio)}. El importe sale de tu presupuesto y la operación no se puede deshacer desde aquí.`
-        : `${pilot?.nombre || "El piloto"} ficha por ${team.nombre} por ${formatearMillones(precio)}. El importe sale de tu presupuesto.`,
-      confirmLabel: esClausula ? "Ejecutar cláusula" : "Fichar",
-    });
-    if (!ok) return;
-
-    setBusy(`sign:${pilotId}`);
-    try {
-      const { ficharPiloto } = await import("../services/economyService");
-      const result = await ficharPiloto({
-        splitId,
-        teamId,
-        teamName: team.nombre || teamId,
-        pilotoId: pilotId,
-        pilotName: pilot?.nombre || pilotId,
-        tipo,
-        precio,
-      });
-      setStatus({ tone: result.success ? "exito" : "error", message: result.message });
-    } catch (err: any) {
-      setStatus({ tone: "error", message: `No se ha podido completar el fichaje: ${err.message}` });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  /**
-   * Liberar deja al piloto sin escudería, no lo borra.
-   *
-   * Antes se hacía `deleteDoc` de su ficha: como el plantel del split se deriva de
-   * `equipos/{id}/pilotos`, el piloto desaparecía de la temporada entera en vez de pasar a
-   * la lista de agentes libres, que es lo que anunciaba el mensaje.
-   */
-  const handleReleasePilot = async (teamId: string, pilotId: string) => {
-    if (busy) return;
-    if (!mercadoAbierto) {
-      setStatus({ tone: "error", message: "La ventana de fichajes está cerrada: no se puede liberar a nadie hasta que el admin la abra." });
-      return;
-    }
-    const pilot = split?.roster?.find((p: any) => p.pilotoId === pilotId);
-    const ok = await confirm({
-      title: "Liberar piloto",
-      body: `${pilot?.nombre || "El piloto"} pasa a la lista de agentes libres y cualquier escudería podrá ficharlo. No se recupera el dinero invertido.`,
-      confirmLabel: "Liberar",
-      tone: "peligro",
-    });
-    if (!ok) return;
-
-    setBusy(`release:${pilotId}`);
-    try {
-      const { deleteDoc, doc, getDoc, setDoc } = await import("firebase/firestore");
-      const { db } = await import("../services/firebase");
-      const origen = doc(db, `splits/${splitId}/equipos/${teamId}/pilotos`, pilotId);
-      const ficha = await getDoc(origen);
-      if (!ficha.exists()) {
-        setStatus({ tone: "error", message: "Ese piloto ya no está en la plantilla." });
-        return;
-      }
-      await setDoc(doc(db, `splits/${splitId}/equipos/agente_libre/pilotos`, pilotId), {
-        ...ficha.data(),
-        equipoId: "agente_libre",
-      });
-      await deleteDoc(origen);
-      setStatus({ tone: "exito", message: `${pilot?.nombre || "El piloto"} ya figura como agente libre.` });
-    } catch (err: any) {
-      setStatus({ tone: "error", message: `No se ha podido liberar al piloto: ${err.message}` });
-    } finally {
-      setBusy(null);
-    }
-  };
+  const circuitNames = useMemo(() => new Map<string, string>((split?.circuitos ?? []).map((c: any) => [c.id, c.nombre])), [split]);
 
   if (!split) {
-    return (
-      <div className="border border-white/10 bg-white/[0.02] p-6 text-center text-white/30 font-mono text-[10px] uppercase tracking-[0.3em]">
-        Split no encontrado
-      </div>
-    );
+    return <EmptyState title="Split no encontrado" description="Todavía no hay una temporada disponible para consultar." />;
   }
 
   return (
-    <section className="space-y-6" aria-label="Economía y fichajes">
-      <div className="m-card border border-white/10 bg-gradient-to-r from-[#e10600]/15 via-white/[0.03] to-white/[0.02] p-4 md:p-6">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-1 h-5 bg-[#e10600]" />
-              <p className="text-[12px] font-black text-[#e10600] md:font-mono md:text-[9px] md:uppercase md:tracking-[0.35em]">Economía del Split</p>
-            </div>
-            <h2 className="text-xl md:text-3xl font-black uppercase tracking-[-0.03em] md:tracking-[-0.04em]">
-              {isAuctionEnabled ? "Subasta activada" : "Mercado directo · Gestión de plantillas"}
-            </h2>
-            <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-white/55 md:text-sm">
-              {!mercadoAbierto
-                ? "La ventana de fichajes está cerrada: aquí ves el estado económico de cada escudería, pero no se puede fichar ni liberar hasta que el admin la abra."
-                : isAuctionEnabled
-                  ? "La sala de subasta está disponible en la pestaña Mercado. Aquí ves el estado económico de cada escudería."
-                  : "Los acuerdos tradicionales y los ajustes de cláusulas los registra administración. Aquí puedes consultar los saldos y las plantillas."}
-            </p>
-          </div>
-          <div className="shrink-0 border border-white/10 bg-white/5 px-4 py-3">
-            <p className="text-[9px] font-mono uppercase tracking-[0.25em] text-white/35">Modo de mercado</p>
-            <p className={`mt-1 text-sm font-black uppercase tracking-tight ${isAuctionEnabled ? "text-sky-300" : "text-white/80"}`}>
-              {isAuctionEnabled ? "Sala de pujas" : "Fichaje directo"}
-            </p>
-            <p className="mt-1 text-[10px] leading-snug text-white/35">Lo cambia el admin en Roster → Subasta en vivo.</p>
-          </div>
-        </div>
-      </div>
+    <section className="space-y-4 md:space-y-6" aria-label="Economía y plantillas">
+      <Notice tone="info">
+        Esta pantalla es de consulta. Los fichajes, renovaciones, cláusulas y ajustes de saldo se ejecutan cuando la liga los anuncia por WhatsApp y el administrador los registra; aparecen aquí una vez registrados.
+      </Notice>
 
-      {status && (
-        <StatusBanner message={status.message} tone={status.tone} onDismiss={() => setStatus(null)} />
+      {escuderiaId && !miEquipo && (
+        <EmptyState title="No encontramos tu escudería en este split" description="Si acabas de recibirla, vuelve a entrar en unos minutos o consulta con el administrador." />
       )}
 
       {miEquipo && (
-        <div className="m-card bg-white/[0.02] border border-white/20 p-6 relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-32 h-32 bg-[#e10600]/10 rounded-full pointer-events-none"></div>
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-5 w-full md:w-auto">
-              <div className="w-20 h-20 rounded-sm overflow-hidden border-2 border-white/10 bg-white/[0.02] shrink-0 flex items-center justify-center">
-                {(miEquipo as any).logo_url ? (
-                  <img src={(miEquipo as any).logo_url} alt={miEquipo.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-center p-2">
-                    <span className="text-[8px] font-mono text-white/20 uppercase tracking-tighter">{miEquipo.nombre ? miEquipo.nombre.substring(0, 2).toUpperCase() : 'EQ'}</span>
-                  </div>
-                )}
+        <>
+          <Card as="section" accent="var(--c-brand)" aria-labelledby="mi-escuderia">
+            <div className="flex items-center gap-3">
+              <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-surface-2">
+                {miEquipo.logo_url
+                  ? <img src={miEquipo.logo_url} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                  : <span className="text-xs font-bold text-ink-muted">{String(miEquipo.nombre ?? "EQ").slice(0, 2).toUpperCase()}</span>}
               </div>
-              <div>
-                <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-[#e10600] font-black block mb-1">TU ESCUDERÍA</span>
-                <h3 className="text-2xl font-black italic text-white uppercase tracking-tight">{miEquipo.nombre}</h3>
-                <p className="text-[10px] text-white/40 uppercase font-mono mt-0.5">Presupuesto y plantilla para {split.nombre}</p>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-brand">Tu escudería · {split.nombre}</p>
+                <h2 id="mi-escuderia" className="truncate text-xl font-bold text-ink md:text-2xl">{miEquipo.nombre}</h2>
               </div>
             </div>
-            <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-white/5 pt-4 md:pt-0">
-              <div>
-                <h4 className="text-[9px] uppercase font-bold tracking-[0.15em] text-[#e10600] mb-1">Presupuesto Disponible</h4>
-                <div className="flex items-baseline gap-0.5">
-                  {editingBudget === miEquipo.id ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="sr-only" htmlFor="presupuesto-mi-equipo">Presupuesto de {miEquipo.nombre} en millones</label>
-                      <input
-                        id="presupuesto-mi-equipo"
-                        type="text"
-                        inputMode="decimal"
-                        value={budgetInput}
-                        onChange={(e) => setBudgetInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleBudgetChange(miEquipo.id);
-                          if (e.key === "Escape") { setEditingBudget(null); setBudgetInput(""); }
-                        }}
-                        autoFocus
-                        className="w-28 border border-white/20 bg-black/40 px-2 py-1 text-3xl font-extrabold italic leading-none text-white outline-none focus:border-[#e10600]"
-                      />
-                      <button
-                        onClick={() => handleBudgetChange(miEquipo.id)}
-                        disabled={busy === `budget:${miEquipo.id}`}
-                        className="min-h-9 bg-[#e10600] px-3 text-[10px] font-black uppercase tracking-[0.15em] text-white transition-colors hover:bg-[#ff241c] disabled:opacity-40"
-                      >
-                        {busy === `budget:${miEquipo.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Guardar"}
-                      </button>
-                      <button
-                        onClick={() => { setEditingBudget(null); setBudgetInput(""); }}
-                        className="min-h-9 border border-white/10 px-3 text-[10px] font-black uppercase tracking-[0.15em] text-white/50 transition-colors hover:text-white"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="text-4xl font-extrabold italic text-white leading-none">{miEquipo.presupuesto == null ? "—" : miEquipo.presupuesto.toFixed(1)}</span>
-                      <span className="text-xl font-bold text-white/50">M</span>
-                      {canManage && (
-                        <button
-                          onClick={() => { setEditingBudget(miEquipo.id); setBudgetInput(miEquipo.presupuesto == null ? "" : String(miEquipo.presupuesto)); }}
-                          className="ml-3 inline-flex min-h-9 items-center gap-1.5 border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase tracking-[0.15em] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-                        >
-                          <Wallet className="h-3.5 w-3.5" /> Editar
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-[9px] text-[#e10600] uppercase font-bold tracking-[0.15em] mb-1">Valor Total de Plantilla</p>
-                <div className="flex items-baseline justify-end gap-0.5">
-                  <span className="text-2xl font-black italic text-white leading-none">{miEquipo.valorTotal == null ? "—" : miEquipo.valorTotal.toFixed(1)}</span>
-                  <span className="text-sm font-bold text-white/50">M</span>
-                </div>
-              </div>
+            <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Figure label="Presupuesto disponible" tone="brand"
+                value={miEquipo.presupuesto === null ? "No disponible" : formatearMillones(miEquipo.presupuesto)}
+                hint={miEquipo.presupuesto === null ? "Saldo pendiente de conciliar" : undefined} />
+              <Figure label="Valor de las fichas" value={formatearMillones(miEquipo.valorPilotos)} hint="Suma de cláusulas actuales" />
+              <Figure label="Valor total" value={miEquipo.valorTotal === null ? "No disponible" : formatearMillones(miEquipo.valorTotal)} />
+              <Figure label="Puntos del equipo" value={String(miEquipo.puntos_constructores ?? 0)} />
             </div>
-          </div>
-        </div>
-      )}
+          </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {equipos.map((equipo: any) => (
-          <article key={equipo.id} className={`m-card border ${equipo.id === escuderiaId ? "border-[#e10600]/50 bg-[#e10600]/5" : "border-white/10 bg-white/[0.02]"} p-4 md:p-5`}>
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-12 h-12 rounded-sm overflow-hidden border border-white/10 bg-white/[0.02] shrink-0 flex items-center justify-center">
-                  {(equipo as any).logo_url ? (
-                    <img src={(equipo as any).logo_url} alt={equipo.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs font-black uppercase text-white/20 font-mono">
-                      {equipo.nombre ? equipo.nombre.substring(0, 2).toUpperCase() : 'EQ'}
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-lg font-black italic text-white uppercase tracking-tight truncate">{equipo.nombre}</h3>
-                  <p className="text-[10px] text-white/40 uppercase font-mono mt-0.5">
-                     {equipo.pilotos.length} pilotos · sin límite
-                    {equipo.id === escuderiaId && <span className="ml-2 text-[#e10600] font-bold">(TU EQUIPO)</span>}
-                  </p>
-                </div>
-              </div>
-              {canManage && (
-                <button
-                  onClick={() => { setEditingBudget(equipo.id); setBudgetInput(equipo.presupuesto == null ? "" : String(equipo.presupuesto)); }}
-                  className="min-h-9 shrink-0 px-3 text-[10px] font-black uppercase tracking-[0.15em] text-white/60 hover:text-white transition-colors bg-white/5 border border-white/10 rounded-xl md:rounded-none md:py-1.5"
-                  aria-label={`Editar presupuesto de ${equipo.nombre}`}
-                >
-                  <Wallet className="w-3.5 h-3.5 mr-1.5 inline" /> Editar
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-2 mb-4">
-              {editingBudget === equipo.id && equipo.id !== escuderiaId ? (
-                <div className="flex flex-wrap items-center gap-2 border border-white/10 bg-black/30 p-2">
-                  <label className="sr-only" htmlFor={`presupuesto-${equipo.id}`}>Presupuesto de {equipo.nombre} en millones</label>
-                  <input
-                    id={`presupuesto-${equipo.id}`}
-                    type="text"
-                    inputMode="decimal"
-                    value={budgetInput}
-                    onChange={(e) => setBudgetInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleBudgetChange(equipo.id);
-                      if (e.key === "Escape") { setEditingBudget(null); setBudgetInput(""); }
-                    }}
-                    autoFocus
-                    className="w-24 border border-white/20 bg-black/40 px-2 py-1 text-sm font-bold text-white outline-none focus:border-[#e10600]"
-                  />
-                  <button
-                    onClick={() => handleBudgetChange(equipo.id)}
-                    disabled={busy === `budget:${equipo.id}`}
-                    className="min-h-9 bg-[#e10600] px-3 text-[9px] font-black uppercase tracking-[0.15em] text-white transition-colors hover:bg-[#ff241c] disabled:opacity-40"
-                  >
-                    {busy === `budget:${equipo.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : "Guardar"}
-                  </button>
-                  <button
-                    onClick={() => { setEditingBudget(null); setBudgetInput(""); }}
-                    className="min-h-9 border border-white/10 px-3 text-[9px] font-black uppercase tracking-[0.15em] text-white/50 transition-colors hover:text-white"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              ) : (
-                <div className="flex justify-between text-[11px] font-mono text-white/40">
-                  <span>Presupuesto</span>
-                  <span className="text-white font-bold tabular-nums">{equipo.presupuesto == null ? "—" : formatearMillones(equipo.presupuesto)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-[11px] font-mono text-white/40">
-                <span>Valor pilotos</span>
-                <span className="text-white font-bold tabular-nums">{formatearMillones(equipo.valorPilotos)}</span>
-              </div>
-              <div className="flex justify-between text-[11px] font-mono text-white/40 border-t border-white/5 pt-2">
-                <span className="font-bold">Valor total</span>
-                <span className="text-white font-black tabular-nums text-[#e10600]">{formatearMillones(equipo.valorTotal)}</span>
-              </div>
-            </div>
-
-            <div className="border-t border-white/5 pt-3">
-              <h4 className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 mb-3 flex items-center gap-2">
-                <Users className="w-3.5 h-3.5" /> Plantilla ({equipo.pilotos.length})
-              </h4>
-              {equipo.pilotos.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {equipo.pilotos.map((p: any, i: number) => (
-                    <div
-                      key={`${equipo.id}-${p.pilotoId}-${i}`}
-                      className="m-card bg-white/[0.02] border border-white/10 p-2 relative"
-                    >
-                      <PilotCardF1
-                        pilot={p}
-                        team={equipo}
-                        getPilotPhoto={getPilotPhoto}
-                        size="sm"
-                        showPrice={true}
-                        footer={!p.congelado ? (
-                          <div className="bg-white/[0.02] border border-t-0 border-white/[0.06] px-2 py-1.5 space-y-1">
-                            <div className="flex justify-between text-[8px] font-mono text-white/40">
-                              <span>Cláusula</span>
-                              <span className="text-[#e10600] font-bold">{p.clausula_actual || 0}M</span>
-                            </div>
-                            {canManage && miEquipo && p.equipoId !== escuderiaId && (() => {
-                              const precio = p.clausula_actual || 0;
-                              const sinDinero = miEquipo.presupuesto == null || miEquipo.presupuesto < precio;
-                              const cargando = busy === `sign:${p.pilotoId}`;
-                              return (
-                                <button
-                                  onClick={() => handleSignPilot(miEquipo.id, p.pilotoId, precio, "clausula")}
-                                  disabled={!!busy || !mercadoAbierto || sinDinero}
-                                  title={!mercadoAbierto ? "La ventana de fichajes está cerrada" : sinDinero ? "Presupuesto insuficiente" : `Pagar ${formatearMillones(precio)} y llevártelo a ${miEquipo.nombre}`}
-                                  className="mt-1 flex w-full min-h-9 items-center justify-center gap-1.5 rounded border border-[#e10600]/30 bg-[#e10600]/10 px-2 text-[9px] font-black uppercase tracking-[0.1em] text-[#e10600] transition-colors hover:bg-[#e10600]/20 disabled:cursor-not-allowed disabled:opacity-30"
-                                >
-                                  {cargando && <Loader2 className="h-3 w-3 animate-spin" />}
-                                  {cargando ? "Fichando…" : "Ejecutar cláusula"}
-                                </button>
-                              );
-                            })()}
-                          </div>
-                        ) : (
-                          <div className="bg-white/[0.02] border border-t-0 border-white/[0.06] px-2 py-1.5">
-                            <div className="flex justify-between text-[8px] font-mono text-white/40">
-                              <span>Estado</span>
-                              <span className="text-blue-400 font-bold">❄ Congelado</span>
-                            </div>
-                          </div>
-                        )}
-                      />
-                      {canManage && equipo.id === escuderiaId && !p.congelado && (
-                        <button
-                          onClick={() => handleReleasePilot(equipo.id, p.pilotoId)}
-                          disabled={!!busy || !mercadoAbierto}
-                          title={mercadoAbierto ? `Liberar a ${p.nombre}` : "La ventana de fichajes está cerrada"}
-                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 flex items-center justify-center disabled:opacity-30"
-                          aria-label={`Liberar a ${p.nombre}`}
-                        >
-                          {busy === `release:${p.pilotoId}`
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <UserX className="w-3.5 h-3.5" />}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-white/20 italic text-xs uppercase tracking-widest font-mono py-4 text-center">Sin pilotos contratados</p>
-              )}
-            </div>
-          </article>
-        ))}
-
-        {agentesLibres.length > 0 && (
-          <article className="m-card border border-white/10 bg-white/[0.02] p-4 md:p-5">
-            <h3 className="text-lg font-black italic text-white uppercase tracking-tight mb-4 flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-emerald-400" /> Agentes Libres ({agentesLibres.length})
+          <Card as="section" aria-labelledby="plantilla-title">
+            <h3 id="plantilla-title" className="mb-3 flex items-center gap-2 text-lg font-bold text-ink">
+              <Users aria-hidden="true" className="h-5 w-5 text-brand" /> Plantilla ({miEquipo.pilotos.length})
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {agentesLibres.map((p: any, i: number) => (
-                <div key={`libre-${p.pilotoId}-${i}`} className="m-card bg-white/[0.02] border border-white/10 p-2">
+            {miEquipo.pilotos.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {miEquipo.pilotos.map((p: any, i: number) => (
                   <PilotCardF1
+                    key={`${miEquipo.id}-${p.pilotoId}-${i}`}
                     pilot={p}
-                    team={null}
+                    team={miEquipo}
                     getPilotPhoto={getPilotPhoto}
                     size="sm"
                     showPrice={true}
-                    footer={canManage && miEquipo ? (
-                      <div className="bg-white/[0.02] border border-t-0 border-white/[0.06] px-2 py-1.5">
-                        <div className="flex justify-between text-[8px] font-mono text-white/40">
-                          <span>Precio</span>
-                          <span className="text-emerald-400 font-bold">{p.clausula_actual || 0}M</span>
-                        </div>
-                        <button
-                          onClick={() => handleSignPilot(miEquipo.id, p.pilotoId, p.clausula_actual || 0)}
-                           disabled={!!busy || !mercadoAbierto || miEquipo.presupuesto == null || miEquipo.presupuesto < (p.clausula_actual || 0)}
-                          title={!mercadoAbierto
-                            ? "La ventana de fichajes está cerrada"
-                            : miEquipo.presupuesto == null || miEquipo.presupuesto < (p.clausula_actual || 0)
-                              ? "Presupuesto insuficiente"
-                              : `Fichar por ${formatearMillones(p.clausula_actual || 0)}`}
-                          className="mt-1 flex w-full min-h-9 items-center justify-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 text-[9px] font-black uppercase tracking-[0.1em] text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          {busy === `sign:${p.pilotoId}` && <Loader2 className="h-3 w-3 animate-spin" />}
-                          {busy === `sign:${p.pilotoId}` ? "Fichando…" : "Fichar"}
-                        </button>
+                    footer={
+                      <div className="space-y-1 border border-t-0 border-line bg-surface-2 px-2 py-1.5 text-[11px] text-ink-muted">
+                        <div className="flex justify-between"><span>Cláusula</span><span className="font-bold text-ink">{p.clausula_actual || 0}M</span></div>
+                        {p.congelado && <div className="flex justify-between"><span>Estado</span><span className="font-bold text-info">Congelado</span></div>}
                       </div>
-                    ) : undefined}
+                    }
                   />
-                </div>
-              ))}
-            </div>
-          </article>
-        )}
-      </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="Sin pilotos contratados" description="Los fichajes aparecen cuando el administrador los registra." />
+            )}
+          </Card>
 
-      {confirmDialog}
+          <LedgerSection splitId={splitId} teamId={miEquipo.id} teamName={miEquipo.nombre} balance={miEquipo.presupuesto} circuitNames={circuitNames} />
+        </>
+      )}
+
+      {otros.length > 0 && (
+        <Card as="section" aria-labelledby="otras-escuderias">
+          <h3 id="otras-escuderias" className="mb-3 text-lg font-bold text-ink">{miEquipo ? "Otras escuderías" : "Escuderías"}</h3>
+          <ul className="divide-y divide-line">
+            {otros.map((e: any) => (
+              <li key={e.id}>
+                <details className="group">
+                  <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-bold text-ink">{e.nombre}</span>
+                      <span className="block text-xs text-ink-muted">{e.pilotos.length} pilotos · {e.puntos_constructores ?? 0} pts</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-sm font-bold tabular-nums text-ink">{e.presupuesto === null ? "No disponible" : formatearMillones(e.presupuesto)}</span>
+                      <span className="block text-xs text-ink-muted">Presupuesto</span>
+                    </span>
+                  </summary>
+                  <div className="pb-3 text-sm text-ink-2">
+                    <p className="mb-1 text-xs text-ink-muted">Valor de las fichas: {formatearMillones(e.valorPilotos)}</p>
+                    {e.pilotos.length > 0
+                      ? <p>{e.pilotos.map((p: any) => p.nombre).join(" · ")}</p>
+                      : <p className="text-ink-muted">Sin pilotos contratados.</p>}
+                  </div>
+                </details>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {agentesLibres.length > 0 && (
+        <Card as="section" aria-labelledby="agentes-libres">
+          <details>
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-lg font-bold text-ink">
+              <UserPlus aria-hidden="true" className="h-5 w-5 text-ok" />
+              <span id="agentes-libres">Agentes libres ({agentesLibres.length})</span>
+            </summary>
+            <ul className="mt-3 divide-y divide-line">
+              {agentesLibres.map((p: any, i: number) => (
+                <li key={`libre-${p.pilotoId}-${i}`} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
+                  <span className="truncate font-semibold text-ink">{p.nombre}</span>
+                  <span className="shrink-0 text-xs text-ink-muted">OVR {p.rating_piloto ?? "—"} · {p.clausula_actual || 0}M</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </Card>
+      )}
     </section>
   );
 }

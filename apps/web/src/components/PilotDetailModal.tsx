@@ -62,27 +62,27 @@ export function PilotDetailModal({
       aria-labelledby="pilot-detail-title"
       onCancel={event => { event.preventDefault(); onClose(); }}
       onClick={event => { if (event.target === event.currentTarget) onClose(); }}
-      className="fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none overflow-y-auto overscroll-contain border-0 bg-black/85 p-0 text-left backdrop:bg-black/70 md:p-6"
+      className="fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none overflow-y-auto overscroll-contain border-0 bg-ink/75 p-0 text-left backdrop:bg-ink/70 md:p-6"
     >
       <div
-        className="relative mx-auto my-0 min-h-[100dvh] max-w-4xl border-white/[0.08] bg-[#0d0d0d] p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6"
+        className="relative mx-auto my-0 min-h-[100dvh] max-w-4xl border-line bg-surface p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6"
         onClick={event => event.stopPropagation()}
       >
         <button
           onClick={onClose}
           aria-label="Cerrar"
-          className="sticky top-[max(0.5rem,env(safe-area-inset-top))] z-10 -mr-1 ml-auto grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-[#0d0d0d] text-white/60 hover:text-white md:absolute md:top-4 md:right-4 md:ml-0"
+          className="sticky top-[max(0.5rem,env(safe-area-inset-top))] z-10 -mr-1 ml-auto grid h-11 w-11 place-items-center rounded-full border border-line bg-surface text-ink-muted hover:text-ink md:absolute md:top-4 md:right-4 md:ml-0"
         >
           ✕
         </button>
 
-        <p className="text-[11px] font-bold text-[#e10600] md:font-mono md:text-[9px] md:uppercase md:tracking-[0.35em]">
+        <p className="text-[11px] font-bold text-brand md:font-mono md:text-[11px] md:uppercase md:tracking-[0.08em]">
           Ficha de piloto · {split?.nombre}
         </p>
-        <h2 id="pilot-detail-title" className="mt-1 text-2xl font-black uppercase tracking-[-0.04em] text-white md:text-3xl">
+        <h2 id="pilot-detail-title" className="mt-1 text-2xl font-black uppercase tracking-[-0.04em] text-ink md:text-3xl">
           {pilot.nombre}
         </h2>
-        <p className="mt-1 text-[11px] text-white/45 md:font-mono md:text-[10px] md:uppercase md:tracking-[0.2em]">
+        <p className="mt-1 text-[11px] text-ink-muted md:font-mono md:text-xs md:uppercase md:tracking-[0.08em]">
           {team?.nombre || "Sin escudería"} · {rating} OVR
         </p>
 
@@ -93,12 +93,12 @@ export function PilotDetailModal({
 
           <div className="space-y-5">
             <section>
-              <h3 className="mb-2 text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">Rendimiento en {split?.nombre}</h3>
-              <div className="grid grid-cols-3 gap-px bg-white/[0.06]">
+              <h3 className="mb-2 text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">Rendimiento en {split?.nombre}</h3>
+              <div className="grid grid-cols-3 gap-px bg-surface-2">
                 {stats.map(stat => (
-                  <div key={stat.lbl} className="bg-[#101116] p-3 text-center">
-                    <p className="text-[8px] font-mono uppercase tracking-[0.16em] text-white/35">{stat.lbl}</p>
-                    <p className="mt-1 text-xl font-black tabular-nums text-white">{stat.val}</p>
+                  <div key={stat.lbl} className="bg-surface p-3 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">{stat.lbl}</p>
+                    <p className="mt-1 text-xl font-black tabular-nums text-ink">{stat.val}</p>
                   </div>
                 ))}
               </div>
@@ -106,53 +106,53 @@ export function PilotDetailModal({
 
             {showEconomy && (
               <section>
-                <h3 className="mb-2 text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">Valoración</h3>
-                <div className="grid grid-cols-3 gap-px bg-white/[0.06]">
+                <h3 className="mb-2 text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">Valoración</h3>
+                <div className="grid grid-cols-3 gap-px bg-surface-2">
                   {[
                     { lbl: "Compra", val: pilot.precio_compra },
                     { lbl: "Mantener", val: pilot.mantener_actual },
                     { lbl: "Cláusula", val: pilot.clausula_actual },
                   ].map(precio => (
-                    <div key={precio.lbl} className="bg-[#101116] p-3 text-center">
-                      <p className="text-[8px] font-mono uppercase tracking-[0.16em] text-white/35">{precio.lbl}</p>
-                      <p className="mt-1 text-lg font-black tabular-nums text-[#e10600]">{Number(precio.val ?? 0).toFixed(1)}M</p>
+                    <div key={precio.lbl} className="bg-surface p-3 text-center">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">{precio.lbl}</p>
+                      <p className="mt-1 text-lg font-black tabular-nums text-brand">{Number(precio.val ?? 0).toFixed(1)}M</p>
                     </div>
                   ))}
                 </div>
                 {pilot.congelado && (
-                  <p className="mt-2 text-[10px] font-mono text-sky-300/80">❄ Congelado: su precio no varía hasta que se resuelva el fichaje.</p>
+                  <p className="mt-2 text-xs font-mono text-info/80">❄ Congelado: su precio no varía hasta que se resuelva el fichaje.</p>
                 )}
               </section>
             )}
 
             <section>
-              <h3 className="mb-2 text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">Carrera a carrera</h3>
+              <h3 className="mb-2 text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">Carrera a carrera</h3>
               {carreras.length > 0 ? (
-                <ul className="grid gap-px bg-white/[0.06]">
+                <ul className="grid gap-px bg-surface-2">
                   {carreras.map(({ circuito, resultado }) => {
                     const abandono = resultado.isDnf === true;
                     return (
                       <li key={circuito.id} className={`flex items-center gap-3 px-3 py-2.5 ${
-                        abandono ? "border-l-2 border-red-500/70 bg-gradient-to-r from-red-500/[0.10] to-[#101116]" : "bg-[#101116]"
+                        abandono ? "border-l-2 border-danger/70 bg-gradient-to-r from-danger/10 to-surface-2" : "bg-surface"
                       }`}>
                         <span className="min-w-0 flex-1">
-                          <span className={`block truncate text-[12px] font-bold uppercase tracking-tight ${abandono ? "text-white/60" : "text-white/85"}`}>{circuito.nombre}</span>
+                          <span className={`block truncate text-[12px] font-bold uppercase tracking-tight ${abandono ? "text-ink-muted" : "text-ink-2"}`}>{circuito.nombre}</span>
                           {abandono && (
-                            <span className="mt-0.5 flex items-center gap-1 text-[9px] font-mono uppercase tracking-[0.18em] text-red-300/80">
+                            <span className="mt-0.5 flex items-center gap-1 text-[11px] font-mono uppercase tracking-[0.08em] text-danger/80">
                               <Flag className="h-3 w-3" aria-hidden="true" /> Abandono · 0 pts
                             </span>
                           )}
                         </span>
-                        <span className="flex shrink-0 items-center gap-2.5 text-[10px] font-mono text-white/40">
+                        <span className="flex shrink-0 items-center gap-2.5 text-xs font-mono text-ink-muted">
                           <span title="Posición de salida">Q{resultado.qualyPos === 99 ? "—" : resultado.qualyPos}</span>
-                          {resultado.fastestLap && <Zap className="h-3.5 w-3.5 text-violet-300" aria-label="Vuelta rápida" />}
-                          {resultado.isDotd && <Trophy className="h-3.5 w-3.5 text-amber-300" aria-label="Piloto del día" />}
+                          {resultado.fastestLap && <Zap className="h-3.5 w-3.5 text-violet" aria-label="Vuelta rápida" />}
+                          {resultado.isDotd && <Trophy className="h-3.5 w-3.5 text-warn" aria-label="Piloto del día" />}
                         </span>
                         <span title={abandono ? "No terminó la carrera" : undefined} className={`grid h-8 w-11 shrink-0 place-items-center border text-sm font-black tabular-nums ${
-                          abandono ? "border-red-500/60 bg-red-500/20 text-[12px] tracking-wider text-red-200"
-                            : resultado.racePos === 1 ? "border-amber-300/60 bg-amber-400/15 text-amber-100"
-                            : resultado.racePos <= 3 ? "border-slate-300/40 bg-slate-300/10 text-slate-100"
-                            : "border-white/10 bg-white/[0.03] text-white/70"
+                          abandono ? "border-danger/60 bg-danger/20 text-[12px] tracking-wider text-danger"
+                            : resultado.racePos === 1 ? "border-warn/60 bg-warn/15 text-warn"
+                            : resultado.racePos <= 3 ? "border-line bg-surface-3 text-ink-muted"
+                            : "border-line bg-surface-2 text-ink-2"
                         }`}>
                           {abandono ? "DNF" : resultado.racePos === 99 ? "—" : `P${resultado.racePos}`}
                         </span>
@@ -161,7 +161,7 @@ export function PilotDetailModal({
                   })}
                 </ul>
               ) : (
-                <p className="flex items-center gap-2 bg-[#101116] px-3 py-6 text-center text-[10px] font-mono uppercase tracking-[0.2em] text-white/25">
+                <p className="flex items-center gap-2 bg-surface px-3 py-6 text-center text-xs font-mono uppercase tracking-[0.08em] text-ink-muted">
                   <Flag className="h-4 w-4" /> Sin carreras disputadas en este split
                 </p>
               )}

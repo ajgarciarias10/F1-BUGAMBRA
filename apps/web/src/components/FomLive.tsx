@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useSplits } from "../hooks/useData";
 import { SplitIntroGallery } from "./SplitIntroGallery";
 import { getYoutubeEmbedUrl, getYoutubeThumbnailUrl, getYoutubeVideoId } from "../utils/youtube";
-import { ArrowUpRight, Loader2, MonitorPlay, Play, Plus, Radio, Trash2, Video } from "lucide-react";
+import { ArrowUpRight, Gauge, Loader2, MonitorPlay, Play, Plus, Radio, Trash2, Video } from "lucide-react";
+import type { Circuito } from "../types";
+import { buildRaceReport } from "../services/readModels";
+import { FastestLapVideoCard } from "./NextRaceWidget";
+import { Badge, Button, Card, EmptyState, StatusPill, buttonClass, cn } from "./ui";
+import { useSingleFlight } from "../hooks/useSingleFlight";
 
 const FOM_CHANNEL = {
   id: "tonicotitular",
@@ -36,7 +41,9 @@ function InterviewsSection({ compact }: { compact: boolean }) {
 
   const validUrl = getYoutubeVideoId(url) !== "";
 
+  const { run: runOnce } = useSingleFlight();
   const publish = async () => {
+    return runOnce(async () => {
     if (!user || !userData || !title.trim() || !validUrl) return;
     setPublishing(true);
     try {
@@ -51,59 +58,62 @@ function InterviewsSection({ compact }: { compact: boolean }) {
     } finally {
       setPublishing(false);
     }
+    });
   };
 
   const remove = async (id: string) => {
+    return runOnce(async () => {
     if (!isAdmin) return;
     await deleteDoc(doc(db, "fom_interviews", id));
+    });
   };
 
   return (
-    <section className="m-card border border-white/10 bg-white/[0.02] p-4 md:p-5">
+    <Card as="section">
       <div className="flex items-center gap-2 mb-4">
-        <Video className="w-4 h-4 text-[#e10600]" />
-        <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Entrevistas</span>
+        <Video className="w-4 h-4 text-brand" />
+        <h2 className="text-lg font-bold text-ink">Entrevistas</h2>
       </div>
 
       {isAdmin && (
-        <div className="m-card mb-4 flex flex-col gap-2 border border-white/10 bg-black/20 p-3 md:flex-row md:items-center">
+        <div className="m-card mb-4 flex flex-col gap-2 border border-line bg-surface-3 p-3 md:flex-row md:items-center">
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título de la entrevista" maxLength={120}
-            className="min-h-12 w-full flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-[#e10600] md:min-h-0 md:min-w-40 md:rounded-none md:py-2 md:text-xs" />
+            className="min-h-12 w-full flex-1 rounded-xl border border-line bg-surface-3 px-3 text-ink outline-none focus:border-brand md:min-h-0 md:min-w-40 md:rounded-none md:py-2 md:text-xs" />
           <input value={url} onChange={e => setUrl(e.target.value)} placeholder="URL de YouTube"
-            className="min-h-12 w-full flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-[#e10600] md:min-h-0 md:min-w-48 md:rounded-none md:py-2 md:text-xs" />
+            className="min-h-12 w-full flex-1 rounded-xl border border-line bg-surface-3 px-3 text-ink outline-none focus:border-brand md:min-h-0 md:min-w-48 md:rounded-none md:py-2 md:text-xs" />
           <button onClick={publish} disabled={publishing || !title.trim() || !validUrl}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#e10600] px-4 text-sm font-bold text-white disabled:opacity-35 md:min-h-0 md:rounded-none md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-wider">
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-ink disabled:opacity-35 md:min-h-0 md:rounded-none md:py-2 md:text-xs md:font-black md:uppercase md:tracking-wider">
             {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Añadir
           </button>
         </div>
       )}
 
       {interviews.length === 0 ? (
-        <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25 py-3 text-center">Todavía no hay entrevistas publicadas</p>
+        <p className="py-3 text-center text-sm text-ink-muted">Todavía no hay entrevistas publicadas.</p>
       ) : (
         <div className={`grid gap-3 ${compact ? "" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
           {interviews.map(item => (
-            <article key={item.id} className="border border-white/8 bg-black/25">
+            <article key={item.id} className="overflow-hidden rounded-lg border border-line bg-surface-2">
               {openId === item.id ? (
-                <div className="aspect-video bg-black">
+                <div className="aspect-video bg-surface">
                   <iframe src={getYoutubeEmbedUrl(item.youtubeUrl)} className="w-full h-full border-0" allowFullScreen
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" />
+                    allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" title={item.title} />
                 </div>
               ) : (
-                <button onClick={() => setOpenId(item.id)} className="relative block w-full aspect-video bg-black group">
-                  <img src={getYoutubeThumbnailUrl(item.youtubeUrl)} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                  <span className="absolute inset-0 grid place-items-center bg-black/30 group-hover:bg-black/15 transition-colors">
-                    <span className="w-11 h-11 grid place-items-center bg-[#e10600] shadow-[0_8px_24px_rgba(225,6,0,0.4)]"><Play className="w-5 h-5 text-white ml-0.5" fill="white" /></span>
+                <button onClick={() => setOpenId(item.id)} className="relative block w-full aspect-video bg-surface group">
+                  <img src={getYoutubeThumbnailUrl(item.youtubeUrl)} alt="" loading="lazy" className="w-full h-full object-cover" />
+                  <span className="absolute inset-0 grid place-items-center bg-ink/25 transition-colors group-hover:bg-ink/15">
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-brand text-brand-ink"><Play aria-hidden="true" className="ml-0.5 h-5 w-5" fill="currentColor" /><span className="sr-only">Reproducir {item.title}</span></span>
                   </span>
                 </button>
               )}
               <div className="p-3 flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-black uppercase text-xs truncate">{item.title}</p>
-                  <p className="text-[8px] font-mono text-white/30 uppercase tracking-wider mt-0.5">{item.authorName}</p>
+                  <p className="truncate text-sm font-bold text-ink">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">{item.authorName}</p>
                 </div>
                 {isAdmin && (
-                  <button onClick={() => remove(item.id)} className="shrink-0 text-white/20 hover:text-red-300 transition-colors">
+                  <button onClick={() => remove(item.id)} className="shrink-0 text-ink-muted hover:text-danger transition-colors">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -112,7 +122,7 @@ function InterviewsSection({ compact }: { compact: boolean }) {
           ))}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -120,58 +130,60 @@ export function FomLive({ compact = false }: { compact?: boolean }) {
   const domain = window.location.hostname || "localhost";
   const parent = domain === "localhost" ? "localhost" : domain;
   const { splits } = useSplits();
+  // El directo de Twitch no se carga hasta que la persona lo pide.
+  const [livePlaying, setLivePlaying] = useState(false);
   // Los tráilers de cada temporada son parte de la parrilla televisiva: aquí los
   // ve cualquiera que entre en TV, sin depender de en qué split esté mirando.
   const splitsConTrailer = (splits || []).filter((split: any) => split.id !== "global");
 
   return (
     <div className={compact ? "space-y-3" : "space-y-5"}>
-      <section className="m-card relative overflow-hidden border border-white/10 bg-[#08090c] text-white shadow-[0_30px_90px_rgba(0,0,0,0.45)]">
-        <img src="/fom-broadcast.jpeg" alt="" className="absolute inset-0 w-full h-full object-cover object-center opacity-30" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,6,9,0.6),rgba(5,6,9,0.93)_75%),linear-gradient(90deg,rgba(5,6,9,0.85),transparent_55%)]" />
-
-        <div className="relative z-10 flex flex-col justify-between gap-3 p-4 md:flex-row md:items-end md:gap-4 md:px-8 md:pt-8 md:pb-6">
+      <Card as="section" pad="none" className="overflow-hidden" aria-labelledby="tv-live-title">
+        <div className="flex flex-col justify-between gap-3 p-4 md:flex-row md:items-center md:p-6">
           <div className="flex items-center gap-3">
-            <div className="bg-[#e10600] p-3 shadow-[0_10px_30px_rgba(225,6,0,0.3)]">
-              <MonitorPlay className="w-6 h-6 text-white" />
+            <div className="grid h-12 w-12 place-items-center rounded-lg bg-brand text-brand-ink">
+              <MonitorPlay aria-hidden="true" className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#e10600]">F1 Bugambra TV</p>
-              <h2 className="mt-1 text-2xl font-black uppercase leading-none tracking-[-0.045em] text-white md:text-5xl md:tracking-[-0.055em]">
-                Directo oficial
-              </h2>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-brand">F1 Bugambra TV</p>
+              <h2 id="tv-live-title" className="text-xl font-bold text-ink md:text-2xl">Directo oficial</h2>
             </div>
           </div>
-          <div className="flex items-center gap-2 self-start rounded-full border border-red-400/25 bg-red-500/10 px-3 py-1.5 text-[11px] font-bold text-red-100 md:self-auto md:rounded-none md:py-2 md:text-[9px] md:font-black md:uppercase md:tracking-[0.16em]">
-            <span className="w-2 h-2 bg-[#e10600] animate-pulse" /> Señal de @{FOM_CHANNEL.id}
+          <StatusPill tone="neutral" className="self-start md:self-auto">Señal de @{FOM_CHANNEL.id}</StatusPill>
+        </div>
+
+        <div className="border-y border-line bg-surface-3">
+          <div className={`relative w-full ${compact ? "aspect-video" : "aspect-video md:min-h-[28rem]"}`}>
+            {livePlaying ? (
+              <iframe
+                src={`https://player.twitch.tv/?channel=${FOM_CHANNEL.id}&parent=${parent}&autoplay=false`}
+                title={FOM_CHANNEL.label}
+                height="100%"
+                width="100%"
+                allowFullScreen
+                className="absolute inset-0 h-full w-full border-0"
+              />
+            ) : (
+              <div className="absolute inset-0 grid place-items-center p-4 text-center">
+                <div>
+                  <Radio aria-hidden="true" className="mx-auto h-8 w-8 text-ink-muted" />
+                  <p className="mt-2 text-sm font-bold text-ink">{FOM_CHANNEL.label}</p>
+                  <p className="mx-auto mt-1 max-w-xs text-xs text-ink-muted">El reproductor solo se carga cuando lo pides para ahorrar datos.</p>
+                  <Button variant="primary" className="mt-4" onClick={() => setLivePlaying(true)}>
+                    <Play aria-hidden="true" className="h-4 w-4" fill="currentColor" /> Reproducir directo
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="relative z-10 mx-3 overflow-hidden rounded-xl border border-white/15 bg-black shadow-[0_25px_70px_rgba(0,0,0,0.6)] md:mx-8 md:rounded-none">
-          <div className="bg-[#111217] px-4 md:px-5 py-3 flex justify-between items-center border-b border-white/10">
-            <div className="flex items-center gap-2">
-              <Radio className="w-3.5 h-3.5 text-[#e10600]" />
-              <span className="font-black text-[10px] text-white uppercase tracking-[0.12em]">{FOM_CHANNEL.label}</span>
-            </div>
-            <span className="text-[8px] font-mono text-white/35 uppercase tracking-[0.2em]">Twitch Live</span>
-          </div>
-          <div className={`w-full bg-black relative ${compact ? "aspect-video" : "aspect-video md:min-h-[32rem]"}`}>
-            <iframe
-              src={`https://player.twitch.tv/?channel=${FOM_CHANNEL.id}&parent=${parent}`}
-              height="100%"
-              width="100%"
-              allowFullScreen
-              className="absolute inset-0 w-full h-full border-0"
-            />
-          </div>
+        <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-3 md:p-4">
+          <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}`} icon={<Radio className="h-4 w-4" />} label="Abrir directo" />
+          <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/videos`} icon={<Video className="h-4 w-4" />} label="Vídeos TV" />
+          <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/clips`} icon={<MonitorPlay className="h-4 w-4" />} label="Clips" />
         </div>
-
-        <div className="relative z-10 grid grid-cols-3 gap-2 p-3 md:flex md:flex-wrap md:px-8 md:py-5">
-          <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}`} icon={<Radio className="w-3.5 h-3.5" />} label="Abrir directo" />
-          <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/videos`} icon={<Video className="w-3.5 h-3.5" />} label="Vídeos TV" />
-          <MiniLink href={`https://www.twitch.tv/${FOM_CHANNEL.id}/clips`} icon={<MonitorPlay className="w-3.5 h-3.5" />} label="Clips" />
-        </div>
-      </section>
+      </Card>
 
       <SplitIntroGallery splits={splitsConTrailer} />
 
@@ -182,15 +194,110 @@ export function FomLive({ compact = false }: { compact?: boolean }) {
 
 function MiniLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/35 px-2 text-center text-[12px] font-bold text-white/65 backdrop-blur-sm transition-colors hover:border-[#e10600]/50 hover:text-white md:min-h-0 md:justify-start md:rounded-none md:px-3 md:py-2 md:text-[9px] md:font-black md:uppercase md:tracking-[0.16em]"
-    >
+    <a href={href} target="_blank" rel="noopener noreferrer" className={buttonClass({ variant: "secondary", block: true })}>
       {icon}
       {label}
-      <ArrowUpRight className="hidden w-3 h-3 opacity-50 md:block" />
+      <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5 opacity-60" />
     </a>
+  );
+}
+
+// ── TELEMETRÍA ────────────────────────────────────────────────────────────────
+
+interface TelemetryViewProps {
+  validSplits: any[];
+  currentSplitId: string;
+  onSelectSplit: (splitId: string) => void;
+  currentSplit: any;
+}
+
+/**
+ * Elige un circuito y muestra el vídeo de vuelta rápida (bajo demanda) y los datos de carrera
+ * ya guardados. No inventa velocidad, sectores ni trazadas: si algo no está guardado, no se muestra.
+ */
+export function TelemetryView({ validSplits, currentSplitId, onSelectSplit, currentSplit }: TelemetryViewProps) {
+  const circuitos: Circuito[] = useMemo(
+    () => ([...(currentSplit?.circuitos || [])] as Circuito[]).sort((a, b) => (a.numero_carrera ?? 9999) - (b.numero_carrera ?? 9999)),
+    [currentSplit],
+  );
+  const defaultId = useMemo(() => {
+    const next = circuitos.find(c => !c.completado);
+    const lastDone = [...circuitos].reverse().find(c => c.completado);
+    return (next ?? lastDone ?? circuitos[0])?.id ?? "";
+  }, [circuitos]);
+  const [pickedId, setPickedId] = useState("");
+  const selected = circuitos.find(c => c.id === pickedId) ?? circuitos.find(c => c.id === defaultId) ?? null;
+  const report = useMemo(() => (selected ? buildRaceReport(selected, currentSplit?.roster ?? []) : null), [selected, currentSplit]);
+  const ratingOf = (pilotId: string) => currentSplit?.roster?.find((p: any) => p.pilotoId === pilotId)?.rating_piloto;
+
+  return (
+    <div className="space-y-5">
+      <div className="m-rail hide-scrollbar gap-2" role="group" aria-label="Temporada">
+        {validSplits.map(split => (
+          <button key={split.id} type="button" onClick={() => { onSelectSplit(split.id); setPickedId(""); }} aria-pressed={currentSplitId === split.id}
+            className={cn("min-h-11 shrink-0 rounded-full border px-4 text-sm font-semibold transition-colors",
+              currentSplitId === split.id ? "border-brand bg-brand text-brand-ink" : "border-line-strong bg-surface text-ink-2 hover:bg-surface-3")}>
+            {split.nombre}
+          </button>
+        ))}
+      </div>
+
+      {circuitos.length === 0 || !selected || !report ? (
+        <EmptyState icon={Gauge} title="Sin circuitos en esta temporada" description="Cuando el administrador cree el calendario podrás elegir un circuito aquí." />
+      ) : (
+        <>
+          <div className="m-rail hide-scrollbar gap-2" role="group" aria-label="Circuito">
+            {circuitos.map(c => (
+              <button key={c.id} type="button" onClick={() => setPickedId(c.id)} aria-pressed={selected.id === c.id}
+                className={cn("min-h-11 shrink-0 rounded-lg border px-3 text-sm font-semibold transition-colors",
+                  selected.id === c.id ? "border-brand bg-brand-soft text-brand" : "border-line bg-surface text-ink-2 hover:bg-surface-3")}>
+                {c.numero_carrera ? `${c.numero_carrera}. ` : ""}{c.nombre}
+              </button>
+            ))}
+          </div>
+
+          <FastestLapVideoCard circuito={selected} />
+
+          <Card as="section" aria-labelledby="telemetry-race">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h2 id="telemetry-race" className="text-lg font-bold text-ink">Datos de carrera · GP de {selected.nombre}</h2>
+              <StatusPill tone={selected.completado ? "ok" : "info"}>{selected.completado ? "Disputada" : "Pendiente"}</StatusPill>
+            </div>
+            {!selected.completado || report.rows.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-line-strong bg-surface-2 p-4 text-sm text-ink-muted">
+                {selected.completado ? "No hay resultados guardados para esta carrera." : "La carrera todavía no se ha disputado. Los datos aparecerán cuando el administrador registre los resultados."}
+              </p>
+            ) : (
+              <ul className="divide-y divide-line rounded-lg border border-line">
+                {report.rows.map(row => {
+                  const delta = row.qualyPos !== null && row.racePos !== null ? row.qualyPos - row.racePos : null;
+                  const ovr = ratingOf(row.pilotId);
+                  return (
+                    <li key={row.pilotId} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-ink">{row.name}</span>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+                          <span>Qualy {row.qualyPos ?? "—"}</span>
+                          <span>· Carrera {row.status === "classified" ? row.racePos : "—"}</span>
+                          {ovr !== undefined && <span>· OVR {ovr}</span>}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                        {row.status === "dnf" && <Badge tone="danger">DNF</Badge>}
+                        {row.status === "did_not_race" && <Badge tone="neutral">No corrió</Badge>}
+                        {row.status === "unknown_position" && <Badge tone="warn">Posición desconocida</Badge>}
+                        {row.fastestLap && <Badge tone="violet">Vuelta rápida</Badge>}
+                        {delta !== null && delta !== 0 && <Badge tone={delta > 0 ? "ok" : "danger"}>{delta > 0 ? `+${delta}` : delta} pos.</Badge>}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <p className="mt-3 text-xs text-ink-muted">Solo se muestran datos guardados por la liga. No hay sectores, velocidades ni trazadas registradas.</p>
+          </Card>
+        </>
+      )}
+    </div>
   );
 }

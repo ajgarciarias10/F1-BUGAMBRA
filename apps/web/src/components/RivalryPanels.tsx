@@ -41,12 +41,12 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
 
   if (!pilot || !pilotGroup) {
     return (
-      <section className="mt-8 bg-zinc-900/60 border border-white/10 rounded-3xl p-6">
+      <section className="mt-8 bg-surface-2 border border-line rounded-3xl p-6">
         <div className="flex items-center gap-3 mb-4">
-          <ShieldAlert className="w-5 h-5 text-[#e10600]" />
-          <h2 className="text-lg font-bold uppercase tracking-[0.18em] text-white">Tus Rivalidades</h2>
+          <ShieldAlert className="w-5 h-5 text-brand" />
+          <h2 className="text-lg font-bold uppercase tracking-[0.08em] text-ink">Tus Rivalidades</h2>
         </div>
-        <p className="text-sm text-white/50">No hay rivalidades definidas para tu piloto en el split actual.</p>
+        <p className="text-sm text-ink-muted">No hay rivalidades definidas para tu piloto en el split actual.</p>
       </section>
     );
   }
@@ -91,9 +91,9 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
           <div className={s.cardHeader}>
             <div className="flex items-center gap-3">
               {myPhoto ? (
-                <img src={myPhoto} alt={pilot.nombre} referrerPolicy="no-referrer" className="w-10 h-10 rounded-full object-cover border-2 border-[#e10600]" />
+                <img src={myPhoto} alt={pilot.nombre} referrerPolicy="no-referrer" className="w-10 h-10 rounded-full object-cover border-2 border-brand" />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-sm text-white/40 uppercase">
+                <div className="w-10 h-10 rounded-full bg-surface-3 border border-line flex items-center justify-center font-bold text-sm text-ink-muted uppercase">
                   {pilot.nombre ? pilot.nombre.substring(0, 2).toUpperCase() : "??"}
                 </div>
               )}
@@ -105,7 +105,7 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
             </div>
             <div className="flex items-center gap-2">
               {myLogo && (
-                <img src={myLogo} alt={miEscuderia?.nombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
+                <img src={myLogo} alt={miEscuderia?.nombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-line" />
               )}
               <div className={s.ovrBadge}>
                 <span className={s.ovrLabel}>OVR</span>
@@ -141,22 +141,22 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
                 <div className={s.cardHeader}>
                   <div className="flex items-center gap-3">
                     {rivalPhoto ? (
-                      <img src={rivalPhoto} alt={rival.nombre} referrerPolicy="no-referrer" className="w-10 h-10 rounded-full object-cover border-2 border-white/20" />
+                      <img src={rivalPhoto} alt={rival.nombre} referrerPolicy="no-referrer" className="w-10 h-10 rounded-full object-cover border-2 border-line-strong" />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-sm text-white/40 uppercase">
+                      <div className="w-10 h-10 rounded-full bg-surface-3 border border-line flex items-center justify-center font-bold text-sm text-ink-muted uppercase">
                         {rival.nombre ? rival.nombre.substring(0, 2).toUpperCase() : "??"}
                       </div>
                     )}
                     <div>
                       <p className={s.pilotLabel}>Rival directo</p>
-                      <h4 className="text-xl font-bold text-white">{rival.nombre}</h4>
+                      <h4 className="text-xl font-bold text-ink">{rival.nombre}</h4>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {rivalLogo && (
-                      <img src={rivalLogo} alt={rival.equipoNombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
+                      <img src={rivalLogo} alt={rival.equipoNombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-line" />
                     )}
-                    <span className="rounded-full bg-white/5 px-3 py-2 text-[10px] uppercase tracking-[0.24em] text-white/60 border border-white/10">
+                    <span className="rounded-full bg-surface-2 px-3 py-2 text-xs uppercase tracking-[0.08em] text-ink-muted border border-line">
                       {rival.equipoNombre}
                     </span>
                   </div>
@@ -180,12 +180,12 @@ export function PilotRivalryPanel({ split, miEscuderia, userPilotId }: { split: 
           })}
 
           {pilotGroup.type === "solo" && (
-            <div className="bg-[#131315] border border-[#e10600]/20 rounded-3xl p-5 text-sm text-white/80">
+            <div className="bg-surface border border-brand/20 rounded-3xl p-5 text-sm text-ink-2">
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-4 h-4 text-[#e10600]" />
-                <p className="font-semibold uppercase tracking-[0.24em] text-[#e10600]">Piloto sin rival</p>
+                <Sparkles className="w-4 h-4 text-brand" />
+                <p className="font-semibold uppercase tracking-[0.08em] text-brand">Piloto sin rival</p>
               </div>
-              <p>Recibes un bono fijo de <span className="font-bold text-white">1.5M</span> por carrera mientras el split se mantiene sin emparejar un rival directo.</p>
+              <p>Recibes un bono fijo de <span className="font-bold text-ink">1.5M</span> por carrera mientras el split se mantiene sin emparejar un rival directo.</p>
             </div>
           )}
         </div>
@@ -244,16 +244,16 @@ export function AdminRivalryControlPanel({ split }: { split: any }) {
   }, [split, teamsByPilotId]);
 
   return (
-    <div className="mb-6 border border-white/[0.06] bg-white/[0.015]">
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.04]">
-        <Users className="w-3.5 h-3.5 text-[#e10600] shrink-0" />
-        <span className="text-[9px] font-mono uppercase tracking-[0.35em] text-white/40">Rivalidades del split</span>
+    <div className="mb-6 border border-line bg-surface-2">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-line">
+        <Users className="w-3.5 h-3.5 text-brand shrink-0" />
+        <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">Rivalidades del split</span>
         {financials.length > 0 && (
           <div className="ml-auto flex items-center gap-3">
             {financials.slice(0, 4).map((team: any) => (
               <div key={team.teamName} className="flex items-center gap-1.5">
-                <span className="text-[9px] font-mono text-white/30 truncate max-w-[70px]">{team.teamName}</span>
-                <span className="text-[9px] font-black text-[#e10600]/80">{formatMillions(team.total)}</span>
+                <span className="text-[11px] font-mono text-ink-muted truncate max-w-[70px]">{team.teamName}</span>
+                <span className="text-[11px] font-black text-brand/80">{formatMillions(team.total)}</span>
               </div>
             ))}
           </div>
@@ -261,23 +261,23 @@ export function AdminRivalryControlPanel({ split }: { split: any }) {
       </div>
       <div className="flex flex-wrap gap-px p-0.5">
         {(currentRivalries.groups || []).map((group: any) => (
-          <div key={group.id} className="flex items-center gap-0 bg-black/30 px-3 py-2 min-w-0">
-            <span className="text-[8px] font-mono text-white/20 uppercase mr-2 shrink-0">
+          <div key={group.id} className="flex items-center gap-0 bg-surface-3 px-3 py-2 min-w-0">
+            <span className="text-[11px] font-mono text-ink-muted uppercase mr-2 shrink-0">
               {group.type === "triad" ? "3" : group.type === "pair" ? "2" : "1"}
             </span>
             <div className="flex items-center gap-1.5 flex-wrap">
               {group.members.map((member: any, idx: number) => (
                 <span key={member.id} className="flex items-center gap-1">
-                  {idx > 0 && <ArrowRight className="w-2.5 h-2.5 text-white/10 shrink-0" />}
-                  <span className="text-[10px] font-bold text-white/70">{member.nombre}</span>
-                  <span className="text-[8px] font-mono text-white/25">{member.equipoNombre}</span>
+                  {idx > 0 && <ArrowRight className="w-2.5 h-2.5 text-ink-muted shrink-0" />}
+                  <span className="text-xs font-bold text-ink-2">{member.nombre}</span>
+                  <span className="text-[11px] font-mono text-ink-muted">{member.equipoNombre}</span>
                 </span>
               ))}
             </div>
           </div>
         ))}
         {(currentRivalries.groups || []).length === 0 && (
-          <p className="text-[9px] font-mono text-white/15 px-3 py-2">Sin rivalidades generadas</p>
+          <p className="text-[11px] font-mono text-ink-muted px-3 py-2">Sin rivalidades generadas</p>
         )}
       </div>
     </div>
