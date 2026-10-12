@@ -3,6 +3,8 @@ import { Link, useSearchParams } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
 import { Sun, Moon, Radio, Crown } from "lucide-react";
+import { useTheme } from "../hooks/useTheme";
+import { Badge, buttonClass } from "./ui";
 import { TotalStandings } from "./TotalStandings";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 
@@ -14,24 +16,12 @@ const RaceResultsView = lazy(() => import("./RaceResultsView").then(m => ({ defa
 const PaddockForum = lazy(() => import("./PaddockForum").then(m => ({ default: m.PaddockForum })));
 
 const tabFallback = (
-  <div className="py-20 text-center text-[13px] text-black/30 dark:text-white/30">Cargando…</div>
+  <div className="py-20 text-center text-[13px] text-ink-muted">Cargando…</div>
 );
 import { InstallButton } from "./InstallApp";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 
 type Tab = "clasificacion" | "equipos" | "resultados" | "paddock" | "tv";
-
-function useTheme() {
-  const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem("f1-theme") !== "light"; } catch { return true; }
-  });
-  const toggle = () => setDark(d => {
-    const next = !d;
-    try { localStorage.setItem("f1-theme", next ? "dark" : "light"); } catch {}
-    return next;
-  });
-  return { dark, toggle };
-}
 
 export function PublicHome() {
   const { user, userData } = useAuth();
@@ -146,26 +136,27 @@ export function PublicHome() {
   ];
 
   return (
-    <div className={`${dark ? "dark broadcast-shell" : ""} min-h-[100dvh] bg-[#d6d6d6] text-[#101010] dark:text-white font-sans overflow-x-hidden relative`}>
-      {dark && <div className="broadcast-grid absolute inset-x-0 top-0 h-[44rem] pointer-events-none" />}
-
+    <div className="min-h-[100dvh] bg-bg text-ink font-sans overflow-x-hidden relative">
       {/* ── NAV ── */}
-      <header className="fixed top-0 inset-x-0 z-50 min-h-14 md:min-h-16 border-b border-black/10 dark:border-white/10 bg-[#d6d6d6]/95 dark:bg-[#09090b]/95 backdrop-blur-xl flex items-center justify-between px-3 md:px-10 gap-2 md:gap-4 safe-top safe-x">
-        <div className="flex items-center gap-2.5 min-w-0 shrink">
-          <span className="grid place-items-center w-9 h-9 shrink-0 bg-[#e10600] text-white font-black italic text-sm">F1</span>
-          <span className="font-black tracking-[-0.03em] uppercase text-base truncate">Bugambra</span>
-        </div>
+      <header className="fixed top-0 inset-x-0 z-50 min-h-14 md:min-h-16 border-b border-line bg-header backdrop-blur-md flex items-center justify-between px-3 md:px-10 gap-2 md:gap-4 safe-top safe-x">
+        <Link to="/" className="flex items-center gap-2.5 min-w-0 shrink" aria-label="F1 Bugambra, inicio">
+          <img src="/bugambra-logo.png" alt="" width={40} height={40} className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-lg border border-line-strong bg-black object-contain" />
+          <span className="min-w-0 leading-none">
+            <span className="block truncate text-base font-bold tracking-[0.08em] uppercase">Bugambra</span>
+            <span className="hidden sm:block mt-1 text-[9px] font-semibold tracking-[0.25em] uppercase text-ink-muted">Liga F1</span>
+          </span>
+        </Link>
 
-        <nav aria-label="Secciones de la liga" className="hidden md:flex items-center gap-6">
+        <nav aria-label="Secciones de la liga" className="hidden md:flex items-center gap-1 min-w-0 overflow-x-auto hide-scrollbar">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
               aria-current={activeTab === t.id ? "page" : undefined}
-                className={`relative py-5 text-[11px] font-black tracking-[0.12em] uppercase transition-colors ${
+              className={`min-h-11 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors ${
                 activeTab === t.id
-                  ? "text-[#0a0a0a] dark:text-white after:absolute after:bottom-0 after:inset-x-0 after:h-1 after:bg-[#e10600]"
-                  : "text-[#111827]/75 dark:text-white/70 hover:text-[#111827] dark:hover:text-white"
+                  ? "bg-brand-soft text-brand"
+                  : "text-ink-muted hover:bg-surface-3 hover:text-ink"
               }`}
             >
               {t.label}
@@ -176,78 +167,67 @@ export function PublicHome() {
         <div className="flex items-center gap-1 md:gap-2 shrink-0">
           <button
             onClick={toggle}
-            className="grid h-11 w-11 place-items-center text-[#0a0a0a]/40 dark:text-white/40 hover:text-[#0a0a0a]/80 dark:hover:text-white/80 transition-colors"
+            className="grid h-11 w-11 place-items-center rounded-lg border border-line bg-surface text-ink-2 hover:bg-surface-3 transition-colors"
             aria-label={dark ? "Activar tema claro" : "Activar tema oscuro"}
+            aria-pressed={dark}
           >
             {dark ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
           </button>
-          <Link
-            to={dashboardLink}
-            className="flex min-h-10 items-center rounded-full md:rounded-none bg-[#0a0a0a] dark:bg-white px-4 text-[12px] font-bold text-white dark:text-black transition-all hover:bg-[#e10600] dark:hover:bg-[#e10600] dark:hover:text-white whitespace-nowrap md:text-[10px] md:font-black md:uppercase md:tracking-[0.14em]"
-          >
+          <Link to={dashboardLink} className={buttonClass({ variant: "primary" })}>
             {user ? "Mi Panel" : "Acceder"}
           </Link>
         </div>
       </header>
 
-      {/* ── HERO ──
-          En móvil se recorta a una tarjeta compacta: el titular gigante de
-          escritorio ocupaba una pantalla entera antes de llegar al contenido. */}
+      {/* ── HERO ── */}
       <section className="relative pt-appbar md:pt-28 px-3 md:px-10 max-w-[90rem] mx-auto safe-x">
-        <div className="m-card relative min-h-[17rem] sm:min-h-[24rem] md:min-h-[34rem] overflow-hidden bg-[#151518] border border-white/10 text-white flex items-end">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_30%,rgba(225,6,0,0.38),transparent_28%),linear-gradient(115deg,#111114_25%,rgba(17,17,20,0.72)_58%,#2a0909)]" />
-          <div className="absolute right-[-7%] top-[4%] text-[11rem] sm:text-[16rem] md:text-[25rem] font-black italic leading-none text-white/[0.035] select-none">F1</div>
-          <div className="absolute top-4 left-4 md:top-8 md:left-8 flex items-center gap-2 rounded-full md:rounded-none bg-[#e10600] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide">
-            <Radio className="w-3.5 h-3.5" /> {isHistoricalSplit ? "Archivo histórico" : "Temporada en curso"}
-          </div>
-
-          <div className="relative z-10 w-full p-4 sm:p-8 md:p-12 grid md:grid-cols-[1fr_auto] items-end gap-5 md:gap-8">
+        <div className="relative overflow-hidden rounded-card border border-line border-t-[3px] border-t-brand bg-surface shadow-card">
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_92%_10%,var(--c-brand-soft),transparent_60%)]" />
+          <div className="relative grid md:grid-cols-[1fr_auto] items-end gap-5 md:gap-8 p-5 sm:p-8 md:p-12">
             <div className="max-w-3xl">
-              <p className="text-[11px] font-bold tracking-wide text-white/55 mb-2 md:mb-4 md:uppercase md:font-black md:tracking-[0.24em]">
+              <Badge tone={isHistoricalSplit ? "neutral" : "ok"} dot>
+                {isHistoricalSplit ? "Archivo histórico" : "Temporada en curso"}
+              </Badge>
+              <p className="mt-4 text-xs font-semibold tracking-wide text-ink-muted md:uppercase md:tracking-[0.18em]">
                 En portada · {currentSplit?.nombre || "F1 Bugambra"}
               </p>
-              <h1 className="text-[2rem] sm:text-5xl md:text-[5.5rem] font-black uppercase leading-[0.9] md:leading-[0.84] tracking-[-0.04em] md:tracking-[-0.065em]">
-                {isHistoricalSplit ? <>El legado<br /><span className="text-[#e10600]">ya está escrito</span></> : <>La competición<br /><span className="text-[#e10600]">empieza aquí</span></>}
+              <h1 className="mt-2 text-[2rem] sm:text-5xl md:text-6xl font-bold leading-[1.02] tracking-tight">
+                {isHistoricalSplit ? <>El legado<br /><span className="text-brand">ya está escrito</span></> : <>La competición<br /><span className="text-brand">empieza aquí</span></>}
               </h1>
-              <p className="mt-3 md:mt-6 max-w-xl text-[13px] md:text-base text-white/60 leading-relaxed">
+              <p className="mt-3 md:mt-5 max-w-xl text-sm md:text-base text-ink-muted leading-relaxed">
                 {isHistoricalSplit
                   ? "Resultados, campeones y estadísticas del archivo histórico de la liga."
                   : "Sigue las carreras, elige tu equipo y comenta la jugada con la parrilla. Puedes explorar la liga sin registrarte."}
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button onClick={() => { setActiveTab("resultados"); contentHeading.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-4 text-sm font-bold text-black hover:bg-white/85">Ver resultados →</button>
-                <button onClick={() => setActiveTab("paddock")} className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/30 px-4 text-sm font-bold text-white hover:bg-white/10">Qué se comenta</button>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button onClick={() => { setActiveTab("resultados"); contentHeading.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className={buttonClass({ variant: "primary" })}>Ver resultados →</button>
+                <button onClick={() => setActiveTab("paddock")} className={buttonClass({ variant: "secondary" })}>Qué se comenta</button>
+                {isLive && (
+                  <button onClick={() => setActiveTab("tv")} className={buttonClass({ variant: "danger" })}>
+                    <Radio className="w-4 h-4" /> Ver en vivo
+                  </button>
+                )}
               </div>
-              {isLive && (
-                <button
-                  onClick={() => setActiveTab("tv")}
-                  className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 rounded-xl bg-[#e10600] px-5 text-sm font-bold text-white transition-colors hover:bg-[#ff241c] active:scale-[0.98] sm:w-auto md:rounded-none md:text-[11px] md:font-black md:uppercase md:tracking-[0.12em]"
-                >
-                  <Radio className="w-4 h-4 fill-current" /> Ver en vivo
-                </button>
-              )}
             </div>
 
-            {/* La ficha del próximo evento se oculta en móvil: la misma
-                información aparece completa en el widget de carrera. */}
-            <div className="hidden sm:block w-full md:w-72 border-t-2 border-[#e10600] bg-black/45 backdrop-blur-sm p-5">
-              <p className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
-              <p className="mt-3 text-xl font-black uppercase tracking-tight">{nextRace?.nombre || (isHistoricalSplit ? "Temporada cerrada" : "Por anunciar")}</p>
-              <div className="flex justify-between items-end mt-5 pt-4 border-t border-white/10">
-                <span className="text-[10px] uppercase text-white/45">{currentSplit?.nombre || `${validSplits.length} temporadas`}</span>
-                <span className="text-3xl font-black italic text-white/15">{String(nextRace?.numero_carrera ?? "--").padStart(2, "0")}</span>
+            {/* Ficha de evento: en móvil se muestra como una línea bajo el hero. */}
+            <div className="hidden sm:block w-full md:w-72 rounded-xl border border-line bg-surface-2 p-5">
+              <p className="text-[11px] font-bold tracking-[0.14em] text-ink-muted uppercase">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
+              <p className="mt-3 text-xl font-bold tracking-tight">{nextRace?.nombre || (isHistoricalSplit ? "Temporada cerrada" : "Por anunciar")}</p>
+              <div className="flex justify-between items-end mt-5 pt-4 border-t border-line">
+                <span className="text-xs text-ink-muted">{currentSplit?.nombre || `${validSplits.length} temporadas`}</span>
+                <span className="text-3xl font-bold tabular-nums text-brand">{String(nextRace?.numero_carrera ?? "--").padStart(2, "0")}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Versión móvil de la ficha de evento: una línea, sin robarle pantalla. */}
-        <div className="sm:hidden mt-3 flex items-center gap-3 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.04] px-4 py-3">
-          <span className="text-2xl font-black italic tabular-nums text-[#e10600]">
+        <div className="sm:hidden mt-3 flex items-center gap-3 rounded-card border border-line bg-surface px-4 py-3">
+          <span className="text-2xl font-bold tabular-nums text-brand">
             {String(nextRace?.numero_carrera ?? "--").padStart(2, "0")}
           </span>
           <div className="min-w-0">
-            <p className="text-[11px] text-black/45 dark:text-white/45">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
+            <p className="text-[11px] text-ink-muted">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
             <p className="truncate text-sm font-bold">{nextRace?.nombre || (isHistoricalSplit ? "Temporada cerrada" : "Por anunciar")}</p>
           </div>
         </div>
@@ -258,29 +238,29 @@ export function PublicHome() {
       {/* ── CONTENT ── */}
       <main className="relative max-w-[90rem] mx-auto px-3 md:px-10 pt-8 md:py-14 pb-tabbar md:pb-14 safe-x">
         <h2 ref={contentHeading} tabIndex={-1} className="rail-title mb-5 md:mb-6 scroll-mt-28">{tabs.find(tab => tab.id === activeTab)?.label}</h2>
-        {activeTab === "clasificacion" && <details className="mb-5 rounded-xl border border-black/15 bg-white/50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+        {activeTab === "clasificacion" && <details className="mb-5 rounded-card border border-line bg-surface p-4">
           <summary className="min-h-8 cursor-pointer text-sm font-bold">¿Primera vez? La liga en 30 segundos</summary>
-          <div className="mt-3 grid gap-4 text-sm leading-relaxed text-black/70 dark:text-white/70 sm:grid-cols-3">
-            <p><strong className="block text-black dark:text-white">1. Sigue la competición</strong>Cada split es una etapa de la liga. En Clasificación ves quién lidera; en Resultados, qué pasó en cada carrera.</p>
-            <p><strong className="block text-black dark:text-white">2. Encuentra tu equipo</strong>Los pilotos compiten y los jeques gestionan las escuderías. En Equipos puedes conocer a la parrilla.</p>
-            <p><strong className="block text-black dark:text-white">3. Vive el paddock</strong>Es el muro de la comunidad: bienvenidas, pronósticos y comentarios. <Link to={dashboardLink} className="font-bold text-[#e10600] underline underline-offset-4">{user ? "Ir a mi panel" : "Entrar para participar"}</Link>.</p>
+          <div className="mt-3 grid gap-4 text-sm leading-relaxed text-ink-muted sm:grid-cols-3">
+            <p><strong className="block text-ink">1. Sigue la competición</strong>Cada split es una etapa de la liga. En Clasificación ves quién lidera; en Resultados, qué pasó en cada carrera.</p>
+            <p><strong className="block text-ink">2. Encuentra tu equipo</strong>Los pilotos compiten y los jeques gestionan las escuderías. En Equipos puedes conocer a la parrilla.</p>
+            <p><strong className="block text-ink">3. Vive el paddock</strong>Es el muro de la comunidad: bienvenidas, pronósticos y comentarios. <Link to={dashboardLink} className="font-bold text-brand underline underline-offset-4">{user ? "Ir a mi panel" : "Entrar para participar"}</Link>.</p>
           </div>
         </details>}
         {(dataError || (slow && (loading || fromCache))) && (
-          <div role="status" className="mb-6 rounded-xl border border-amber-600/50 bg-amber-100 p-5 text-amber-950 dark:border-amber-300/40 dark:bg-[#302515] dark:text-amber-100">
+          <div role="status" className="mb-6 rounded-card border border-warn/40 bg-warn-soft p-5 text-ink">
             <p className="font-bold">{dataError ? "No se han podido cargar todos los datos" : "No hemos podido confirmar los datos con el servidor"}</p>
             <p className="mt-2 text-sm">{dataError ? "Comprueba tu conexión y vuelve a intentarlo. Si continúa, contacta con la administración de la liga." : "La conexión está tardando más de lo habitual. Comprueba tu red; la actualización continuará automáticamente."} {validSplits.length > 0 ? "La información visible puede estar incompleta o desactualizada." : "Esto no significa que no haya temporadas."}</p>
-            <button onClick={retry} className="mt-4 min-h-11 rounded-lg bg-amber-950 px-4 text-sm font-bold text-white dark:bg-amber-200 dark:text-amber-950">Reintentar carga</button>
+            <button onClick={retry} className={`${buttonClass({ variant: "primary" })} mt-4`}>Reintentar carga</button>
           </div>
         )}
         {loading || (fromCache && validSplits.length === 0 && !dataError && !slow) ? (
-          <div role="status" className="text-black/70 dark:text-white/75 text-sm py-16 text-center">
+          <div role="status" className="text-ink-muted text-sm py-16 text-center">
             Cargando temporadas y clasificación…
           </div>
         ) : (dataError || fromCache) && validSplits.length === 0 ? (
-          <p className="py-8 text-sm text-black/75 dark:text-white/80">Los datos de la liga todavía no están disponibles en este dispositivo.</p>
+          <p className="py-8 text-sm text-ink-muted">Los datos de la liga todavía no están disponibles en este dispositivo.</p>
         ) : validSplits.length === 0 ? (
-          <p className="py-8 text-sm text-black/75 dark:text-white/80">Todavía no hay temporadas publicadas. Vuelve más adelante.</p>
+          <p className="py-8 text-sm text-ink-muted">Todavía no hay temporadas publicadas. Vuelve más adelante.</p>
         ) : (
           <>
             {activeTab === "clasificacion" && (
@@ -336,17 +316,17 @@ function InstallPromoCard() {
   if (installed) return null;
 
   return (
-    <div className="mt-10 flex flex-col gap-4 rounded-2xl md:rounded-none border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mt-10 flex flex-col gap-4 rounded-card border border-line bg-surface shadow-card p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
         <img src="/icons/icon-192.png" alt="" className="h-12 w-12 shrink-0 rounded-xl md:rounded-none" />
         <div>
-          <p className="text-base font-black uppercase tracking-tight">Llévate la liga en el móvil</p>
-          <p className="mt-0.5 text-[13px] text-black/50 dark:text-white/50">
+          <p className="text-base font-bold tracking-tight">Llévate la liga en el móvil</p>
+          <p className="mt-0.5 text-[13px] text-ink-muted">
             Instálala gratis desde el navegador. Sin Play Store ni App Store.
           </p>
         </div>
       </div>
-      <InstallButton className="justify-center text-black dark:text-white sm:shrink-0" />
+      <InstallButton className="justify-center text-ink sm:shrink-0" />
     </div>
   );
 }

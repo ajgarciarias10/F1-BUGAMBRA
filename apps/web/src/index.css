@@ -3,10 +3,106 @@
 /* Class-based dark mode: applies when ancestor has .dark class */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ── DESIGN TOKENS ──────────────────────────────────────────────────────────────
+   Paleta "light paddock" del prototipo. useTheme() pone `dark` y data-theme en
+   <html>; los tokens cambian solos. Usar los utilities de Tailwind mapeados
+   abajo (bg-surface, text-ink-muted, border-line, text-brand...) en vez de hex. */
 :root {
+  --c-bg: #f1f4f7;
+  --c-surface: #ffffff;
+  --c-surface-2: #f6f8fb;
+  --c-surface-3: #edf1f6;
+  --c-line: #d8dfe8;
+  --c-line-strong: #b9c5d3;
+  --c-ink: #17243a;
+  --c-ink-2: #34465e;
+  --c-ink-muted: #5d6a7d;
+  --c-brand: #ce352d;
+  --c-brand-hover: #b62f27;
+  --c-brand-ink: #ffffff;
+  --c-brand-soft: #fbece8;
+  --c-ok: #18744f;
+  --c-ok-soft: #eaf5ee;
+  --c-info: #286aa8;
+  --c-info-soft: #edf2f8;
+  --c-warn: #8a5c16;
+  --c-warn-soft: #fbf4e4;
+  --c-danger: #b3261e;
+  --c-danger-soft: #fff1ee;
+  --c-violet: #7856a8;
+  --c-violet-soft: #f2edf8;
+  --c-teal: #08796d;
+  --c-focus: #286aa8;
+  --c-header: rgba(255, 255, 255, 0.82);
+  --c-shadow: 0 4px 22px rgba(39, 56, 85, 0.07);
+  --radius-card: 0.875rem;
+
   /* Altura reservada por la barra de pestañas inferior en móvil.
      Las pantallas la usan para su padding inferior; en escritorio es 0. */
   --tabbar-height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+html.dark {
+  --c-bg: #0b1120;
+  --c-surface: #131c30;
+  --c-surface-2: #182440;
+  --c-surface-3: #1f2d4b;
+  --c-line: #2a3956;
+  --c-line-strong: #41547a;
+  --c-ink: #edf3ff;
+  --c-ink-2: #c9d5e8;
+  --c-ink-muted: #a3b2c8;
+  --c-brand: #f0554b;
+  --c-brand-hover: #ff6a60;
+  --c-brand-ink: #ffffff;
+  --c-brand-soft: #3a1c22;
+  --c-ok: #4cc491;
+  --c-ok-soft: #12302b;
+  --c-info: #6aa8e6;
+  --c-info-soft: #14284a;
+  --c-warn: #e5b45c;
+  --c-warn-soft: #33290f;
+  --c-danger: #ff8a80;
+  --c-danger-soft: #3a1a1c;
+  --c-violet: #b79be0;
+  --c-violet-soft: #271f40;
+  --c-teal: #4cc4b6;
+  --c-focus: #7fb5ec;
+  --c-header: rgba(11, 17, 32, 0.85);
+  --c-shadow: 0 4px 22px rgba(0, 0, 0, 0.35);
+}
+
+/* Tailwind: bg-bg, bg-surface, bg-surface-2, text-ink, text-ink-muted, border-line,
+   bg-brand, text-brand, bg-ok-soft, text-ok... */
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-surface-3: var(--c-surface-3);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-ink: var(--c-ink);
+  --color-ink-2: var(--c-ink-2);
+  --color-ink-muted: var(--c-ink-muted);
+  --color-brand: var(--c-brand);
+  --color-brand-hover: var(--c-brand-hover);
+  --color-brand-ink: var(--c-brand-ink);
+  --color-brand-soft: var(--c-brand-soft);
+  --color-ok: var(--c-ok);
+  --color-ok-soft: var(--c-ok-soft);
+  --color-info: var(--c-info);
+  --color-info-soft: var(--c-info-soft);
+  --color-warn: var(--c-warn);
+  --color-warn-soft: var(--c-warn-soft);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-violet: var(--c-violet);
+  --color-violet-soft: var(--c-violet-soft);
+  --color-teal: var(--c-teal);
+  --color-focus: var(--c-focus);
+  --color-header: var(--c-header);
+  --shadow-card: var(--c-shadow);
+  --radius-card: 0.875rem;
 }
 
 @media (min-width: 768px) {
@@ -16,14 +112,19 @@
 }
 
 html {
-  background: #d7d7d7;
+  background: var(--c-bg);
   color-scheme: light;
   -webkit-text-size-adjust: 100%;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 body {
-  background-color: #d7d7d7;
-  color: #111827;
+  background-color: var(--c-bg);
+  color: var(--c-ink);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0;
   min-width: 320px;
   /* dvh evita el salto al aparecer/ocultarse la barra del navegador móvil */
@@ -65,7 +166,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: #111827;
+  color: var(--c-ink);
   font-size: 1rem;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -84,9 +185,6 @@ body {
   --broadcast-border: rgba(255, 255, 255, 0.1);
 }
 
-.dark .rail-title {
-  color: white;
-}
 
 button,
 a,
@@ -103,9 +201,8 @@ a {
 
 /* Foco visible tanto sobre superficies oscuras como claras. */
 :where(button, a, input, select, textarea, summary):focus-visible {
-  outline: 3px solid #fbbf24;
+  outline: 3px solid var(--c-focus);
   outline-offset: 3px;
-  box-shadow: 0 0 0 5px #111827;
 }
 
 /* El formulario necesita etiquetas legibles, no microtexto editorial. */
