@@ -1,8 +1,8 @@
 export const widgetStyles = {
   // Contenedores Base
-  wrapper: "border border-line overflow-hidden",
+  wrapper: "acrylic overflow-hidden rounded-card",
   innerBase: "p-5 lg:p-6 relative overflow-hidden transition-all duration-300",
-  neonStrip: "absolute right-0 top-0 w-0.5 h-full bg-brand pointer-events-none",
+  neonStrip: "absolute right-0 top-0 w-0.5 h-full bg-gradient-to-b from-brand to-transparent opacity-70 pointer-events-none",
   grid: "grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch relative z-10",
 
   // Columnas
@@ -15,15 +15,15 @@ export const widgetStyles = {
 
   // Temporizador Cajas
   timerGrid: "grid grid-cols-4 gap-2 text-center",
-  timerBox: "border border-line bg-surface-2 p-2",
+  timerBox: "border border-line bg-surface-2/70 rounded-md p-2",
   timerVal: "text-xl font-black text-ink tabular-nums",
   timerLabel: "text-[8px] font-mono uppercase text-ink-muted",
 
   // Panel de Neumáticos
-  aiPanel: "border border-line bg-surface-2 p-4",
+  aiPanel: "border border-line bg-surface-2/70 rounded-md p-4",
   aiHeader: "font-bold text-brand text-[10px] uppercase block font-mono tracking-[0.25em] flex items-center gap-1.5",
   aiGrid: "grid grid-cols-2 gap-2 mb-3",
-  aiBox: "border border-line bg-surface-3 p-2.5 flex flex-col justify-center items-center text-center",
+  aiBox: "border border-line bg-surface-3/70 rounded-md p-2.5 flex flex-col justify-center items-center text-center",
   aiBoxLabel: "text-[8px] uppercase tracking-wider text-ink-muted font-mono mb-1",
   aiBoxVal: "font-bold text-[10px] text-ink tracking-tight leading-tight",
   aiTextWrapper: "text-ink-muted leading-relaxed text-[10px]",
@@ -31,7 +31,7 @@ export const widgetStyles = {
 
   // Technical Grid
   techGrid: "grid grid-cols-3 gap-2 mb-3 mt-3",
-  techBox: "border border-line bg-surface-2 p-2 text-center flex flex-col justify-center",
+  techBox: "border border-line bg-surface-2/70 rounded-md p-2 text-center flex flex-col justify-center",
   techLabel: "text-[8px] uppercase tracking-wider text-brand/70 mb-0.5 font-mono",
   techVal: "font-black text-[9px] text-ink tabular-nums tracking-tighter",
 

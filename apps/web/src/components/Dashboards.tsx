@@ -98,7 +98,7 @@ function ThemeToggle() {
 function AppNav({ title, tabs, activeTab, onTab, isAdmin }: AppNavProps) {
   const { userData } = useAuth();
   return (
-    <header className="safe-top safe-x fixed inset-x-0 top-0 z-50 border-b border-line bg-header backdrop-blur-md">
+    <header className="safe-top safe-x fixed inset-x-0 top-0 z-50 border-b acrylic-bar">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-2 px-3 md:px-10">
         <Link to="/" className="flex min-w-0 items-center gap-2.5 rounded-lg py-2 text-ink">
           <span aria-hidden="true" className="h-5 w-1 shrink-0 rounded-full bg-brand" />
@@ -381,7 +381,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
   const tabsWithIcons = visibleTabs.map(t => ({ ...t, icon: t.icon ?? TAB_ICONS[t.id] }));
 
   return (
-    <div className="min-h-[100dvh] bg-bg font-sans text-ink">
+    <div className="min-h-[100dvh] bg-transparent font-sans text-ink">
       <AppNav title={title} tabs={tabsWithIcons} activeTab={activeTab} onTab={setActiveTab} isAdmin={isAdmin} />
       <MobileBottomTabs tabs={tabsWithIcons} activeTab={activeTab} onTab={setActiveTab} />
       <main className="pt-appbar safe-x pb-tabbar mx-auto max-w-7xl px-4 py-6 md:px-10 md:pt-[8.5rem] md:pb-10">

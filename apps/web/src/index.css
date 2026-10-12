@@ -4,38 +4,76 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ── DESIGN TOKENS ──────────────────────────────────────────────────────────────
-   Paleta "light paddock" del prototipo. useTheme() pone `dark` y data-theme en
-   <html>; los tokens cambian solos. Usar los utilities de Tailwind mapeados
-   abajo (bg-surface, text-ink-muted, border-line, text-brand...) en vez de hex. */
+   Lenguaje "Fluent paddock": suelo claro con lavados suaves de color, superficies
+   acrílicas translúcidas, elevación sutil en capas y rojo reservado a la acción
+   primaria. useTheme() pone `dark` y data-theme en <html>; los tokens cambian
+   solos. Usar los utilities de Tailwind mapeados abajo (bg-surface, text-ink-muted,
+   border-line, text-brand...) en vez de hex. Solo presentación. */
 :root {
-  --c-bg: #f1f4f7;
+  --c-bg: #eef3f8;
   --c-surface: #ffffff;
-  --c-surface-2: #f6f8fb;
-  --c-surface-3: #edf1f6;
-  --c-line: #d8dfe8;
-  --c-line-strong: #b9c5d3;
-  --c-ink: #17243a;
-  --c-ink-2: #34465e;
-  --c-ink-muted: #5d6a7d;
-  --c-brand: #ce352d;
-  --c-brand-hover: #b62f27;
+  --c-surface-2: #f4f7fb;
+  --c-surface-3: #e9eff6;
+  --c-line: #d3dce8;
+  --c-line-strong: #b0bfd0;
+  --c-ink: #14213a;
+  --c-ink-2: #2f4259;
+  --c-ink-muted: #556379;
+  --c-brand: #c92f2a;
+  --c-brand-hover: #b0282a;
   --c-brand-ink: #ffffff;
-  --c-brand-soft: #fbece8;
-  --c-ok: #18744f;
-  --c-ok-soft: #eaf5ee;
-  --c-info: #286aa8;
-  --c-info-soft: #edf2f8;
-  --c-warn: #8a5c16;
-  --c-warn-soft: #fbf4e4;
+  --c-brand-soft: #fbebe7;
+  --c-ok: #166c4a;
+  --c-ok-soft: #e7f4ec;
+  --c-info: #1f629f;
+  --c-info-soft: #e8f0f9;
+  --c-warn: #7f5412;
+  --c-warn-soft: #fbf3df;
   --c-danger: #b3261e;
-  --c-danger-soft: #fff1ee;
-  --c-violet: #7856a8;
-  --c-violet-soft: #f2edf8;
+  --c-danger-soft: #fff0ec;
+  --c-violet: #6f4c9f;
+  --c-violet-soft: #f1ecf8;
   --c-teal: #08796d;
-  --c-focus: #286aa8;
-  --c-header: rgba(255, 255, 255, 0.82);
-  --c-shadow: 0 4px 22px rgba(39, 56, 85, 0.07);
-  --radius-card: 0.875rem;
+  --c-focus: #1f629f;
+  --c-header: rgba(246, 249, 253, 0.74);
+  --radius-card: 0.5rem;
+
+  /* Fondo: lavados amplios y de baja saturación sobre un suelo azul-grisáceo
+     muy claro. Se pinta en body con attachment fijo. */
+  --bg-wash:
+    radial-gradient(60rem 38rem at 6% -6%, rgba(120, 205, 198, 0.34), transparent 62%),
+    radial-gradient(52rem 40rem at 98% 8%, rgba(130, 170, 232, 0.26), transparent 60%),
+    radial-gradient(46rem 34rem at 86% 104%, rgba(247, 205, 168, 0.30), transparent 62%),
+    radial-gradient(40rem 30rem at 0% 96%, rgba(168, 214, 232, 0.28), transparent 60%),
+    linear-gradient(165deg, #f7fafd 0%, #eef3f8 52%, #e8eff6 100%);
+
+  /* Acrílico: relleno translúcido + desenfoque + borde de luz interior. */
+  --c-acrylic: rgba(255, 255, 255, 0.72);
+  --c-acrylic-solid: #fbfdff;
+  --c-acrylic-border: rgba(255, 255, 255, 0.85);
+  --c-acrylic-edge: rgba(33, 58, 94, 0.10);
+  --c-inner-light: rgba(255, 255, 255, 0.9);
+  --acrylic-blur: 16px;
+  --acrylic-sat: 1.35;
+
+  /* Elevación: sombras suaves en capas, de tinte azul (nunca negro puro). */
+  --shadow-1: 0 1px 2px rgba(28, 52, 88, 0.06), 0 1px 1px rgba(28, 52, 88, 0.04);
+  --shadow-2: 0 2px 4px rgba(28, 52, 88, 0.05), 0 6px 16px rgba(28, 52, 88, 0.07);
+  --shadow-3: 0 4px 8px rgba(28, 52, 88, 0.06), 0 14px 32px rgba(28, 52, 88, 0.11);
+  --c-shadow: var(--shadow-2);
+
+  /* Acentos en degradado. El rojo queda para la acción primaria. */
+  --grad-brand: linear-gradient(135deg, #c92f2a 0%, #cf3f35 100%);
+  --grad-brand-hover: linear-gradient(135deg, #b52a28 0%, #c2362f 100%);
+  --grad-info: linear-gradient(135deg, rgba(8, 121, 109, 0.12) 0%, rgba(31, 98, 159, 0.12) 100%);
+  --grad-reveal: radial-gradient(18rem 8rem at 50% 0%, rgba(255, 255, 255, 0.75), transparent 70%);
+  --c-hover-tint: rgba(31, 98, 159, 0.07);
+  --btn-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+
+  --ease-fluent: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 140ms;
+
+  --font-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 
   /* Altura reservada por la barra de pestañas inferior en móvil.
      Las pantallas la usan para su padding inferior; en escritorio es 0. */
@@ -43,33 +81,57 @@
 }
 
 html.dark {
-  --c-bg: #0b1120;
-  --c-surface: #131c30;
-  --c-surface-2: #182440;
-  --c-surface-3: #1f2d4b;
-  --c-line: #2a3956;
-  --c-line-strong: #41547a;
-  --c-ink: #edf3ff;
-  --c-ink-2: #c9d5e8;
-  --c-ink-muted: #a3b2c8;
-  --c-brand: #f0554b;
-  --c-brand-hover: #ff6a60;
+  --c-bg: #0c1424;
+  --c-surface: #15203a;
+  --c-surface-2: #1a2745;
+  --c-surface-3: #223255;
+  --c-line: #2b3b5e;
+  --c-line-strong: #46597f;
+  --c-ink: #eef4ff;
+  --c-ink-2: #cbd8ec;
+  --c-ink-muted: #a6b5cc;
+  --c-brand: #f0645a;
+  --c-brand-hover: #ff7a70;
   --c-brand-ink: #ffffff;
-  --c-brand-soft: #3a1c22;
+  --c-brand-soft: #3a1e27;
   --c-ok: #4cc491;
-  --c-ok-soft: #12302b;
-  --c-info: #6aa8e6;
-  --c-info-soft: #14284a;
+  --c-ok-soft: #12312d;
+  --c-info: #72b0ea;
+  --c-info-soft: #16294d;
   --c-warn: #e5b45c;
   --c-warn-soft: #33290f;
   --c-danger: #ff8a80;
-  --c-danger-soft: #3a1a1c;
-  --c-violet: #b79be0;
-  --c-violet-soft: #271f40;
+  --c-danger-soft: #3a1a1e;
+  --c-violet: #bba3e4;
+  --c-violet-soft: #281f43;
   --c-teal: #4cc4b6;
-  --c-focus: #7fb5ec;
-  --c-header: rgba(11, 17, 32, 0.85);
-  --c-shadow: 0 4px 22px rgba(0, 0, 0, 0.35);
+  --c-focus: #86bcf2;
+  --c-header: rgba(14, 22, 40, 0.72);
+
+  --bg-wash:
+    radial-gradient(58rem 38rem at 6% -8%, rgba(46, 128, 138, 0.30), transparent 62%),
+    radial-gradient(50rem 40rem at 98% 6%, rgba(58, 96, 170, 0.28), transparent 60%),
+    radial-gradient(44rem 32rem at 88% 104%, rgba(150, 94, 78, 0.20), transparent 62%),
+    linear-gradient(165deg, #101a30 0%, #0c1424 55%, #0a101e 100%);
+
+  --c-acrylic: rgba(26, 39, 69, 0.66);
+  --c-acrylic-solid: #182544;
+  --c-acrylic-border: rgba(255, 255, 255, 0.09);
+  --c-acrylic-edge: rgba(0, 0, 0, 0.35);
+  --c-inner-light: rgba(255, 255, 255, 0.07);
+  --acrylic-sat: 1.2;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.22), 0 8px 20px rgba(0, 0, 0, 0.26);
+  --shadow-3: 0 4px 10px rgba(0, 0, 0, 0.28), 0 16px 36px rgba(0, 0, 0, 0.36);
+
+  /* Fondo del botón más profundo: el texto blanco mantiene contraste AA. */
+  --grad-brand: linear-gradient(135deg, #c13a35 0%, #c8473b 100%);
+  --grad-brand-hover: linear-gradient(135deg, #cf4540 0%, #d6523f 100%);
+  --grad-info: linear-gradient(135deg, rgba(76, 196, 182, 0.14) 0%, rgba(114, 176, 234, 0.14) 100%);
+  --grad-reveal: radial-gradient(18rem 8rem at 50% 0%, rgba(255, 255, 255, 0.10), transparent 70%);
+  --c-hover-tint: rgba(134, 188, 242, 0.10);
+  --btn-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 /* Tailwind: bg-bg, bg-surface, bg-surface-2, text-ink, text-ink-muted, border-line,
@@ -101,8 +163,11 @@ html.dark {
   --color-teal: var(--c-teal);
   --color-focus: var(--c-focus);
   --color-header: var(--c-header);
-  --shadow-card: var(--c-shadow);
-  --radius-card: 0.875rem;
+  --shadow-card: var(--shadow-2);
+  --shadow-fluent-1: var(--shadow-1);
+  --shadow-fluent-2: var(--shadow-2);
+  --shadow-fluent-3: var(--shadow-3);
+  --radius-card: 0.5rem;
 }
 
 @media (min-width: 768px) {
@@ -123,21 +188,106 @@ html.dark {
 
 body {
   background-color: var(--c-bg);
+  background-image: var(--bg-wash);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: var(--c-ink);
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
   margin: 0;
   min-width: 320px;
   /* dvh evita el salto al aparecer/ocultarse la barra del navegador móvil */
   min-height: 100dvh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
   touch-action: manipulation;
 }
 
+/* Jerarquía tipográfica: títulos compactos, cifras tabulares para dinero. */
+h1, h2, h3 { letter-spacing: -0.015em; }
+.tabular-nums, .money { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+/* ── ACRÍLICO ───────────────────────────────────────────────────────────────
+   Capa translúcida con desenfoque y borde de luz de 1px. Solo para barras y
+   tarjetas. Sin soporte de backdrop-filter o con "reducir transparencia" se
+   usa un relleno sólido equivalente. */
+@layer components {
+.acrylic {
+  background: var(--c-acrylic);
+  border: 1px solid var(--c-acrylic-border);
+  box-shadow: var(--shadow-2), 0 0 0 1px var(--c-acrylic-edge), inset 0 1px 0 var(--c-inner-light);
+  -webkit-backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-sat));
+  backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-sat));
+}
+
+.acrylic-bar {
+  background: var(--c-header);
+  border-color: var(--c-acrylic-edge);
+  box-shadow: var(--shadow-1), inset 0 -1px 0 var(--c-inner-light);
+  -webkit-backdrop-filter: blur(20px) saturate(var(--acrylic-sat));
+  backdrop-filter: blur(20px) saturate(var(--acrylic-sat));
+}
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .acrylic, .acrylic-bar { background: var(--c-acrylic-solid); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .acrylic,
+  .acrylic-bar {
+    background: var(--c-acrylic-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Realce suave al pasar el cursor (reveal): un velo de luz, sin JS. */
+.reveal { position: relative; isolation: isolate; }
+.reveal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--grad-reveal);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms var(--ease-fluent);
+}
+@media (hover: hover) {
+  .reveal:hover::before { opacity: 1; }
+}
+
+/* Botón primario: degradado marca -> coral con luz interior. */
+.btn-primary-fluent {
+  background-image: var(--grad-brand);
+  box-shadow: var(--shadow-1), var(--btn-highlight);
+}
+.btn-primary-fluent:not(:disabled):hover {
+  background-image: var(--grad-brand-hover);
+  box-shadow: var(--shadow-2), var(--btn-highlight);
+}
+
+.fluent-press {
+  transition: transform var(--dur-fast) var(--ease-fluent), box-shadow var(--dur-fast) var(--ease-fluent),
+    background-color var(--dur-fast) var(--ease-fluent), border-color var(--dur-fast) var(--ease-fluent);
+}
+@media (hover: hover) {
+  .fluent-press:not(:disabled):hover { transform: translateY(-1px); }
+}
+.fluent-press:not(:disabled):active { transform: translateY(0) scale(0.985); }
+
+@media (prefers-reduced-motion: reduce) {
+  .fluent-press, .reveal::before { transition: none; }
+  .fluent-press:not(:disabled):hover,
+  .fluent-press:not(:disabled):active { transform: none; }
+}
+
 ::selection {
-  background: #f4f4f5;
-  color: #09090b;
+  background: rgba(31, 98, 159, 0.22);
+  color: inherit;
 }
 
 .broadcast-shell {

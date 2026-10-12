@@ -5,7 +5,7 @@ import { cn } from "./cn";
 export type NoticeTone = "info" | "ok" | "warn" | "danger";
 
 const TONE = {
-  info: { box: "border-info/40 bg-info-soft", text: "text-info", Icon: Info },
+  info: { box: "border-info/30 bg-info-soft bg-[image:var(--grad-info)]", text: "text-info", Icon: Info },
   ok: { box: "border-ok/40 bg-ok-soft", text: "text-ok", Icon: CheckCircle2 },
   warn: { box: "border-warn/40 bg-warn-soft", text: "text-warn", Icon: AlertTriangle },
   danger: { box: "border-danger/40 bg-danger-soft", text: "text-danger", Icon: XCircle },
@@ -24,7 +24,7 @@ export interface NoticeProps {
 export function Notice({ tone = "info", title, children, action, className }: NoticeProps) {
   const { box, text, Icon } = TONE[tone];
   return (
-    <div role={tone === "danger" ? "alert" : "status"} className={cn("flex gap-3 rounded-card border p-4 text-sm text-ink", box, className)}>
+    <div role={tone === "danger" ? "alert" : "status"} className={cn("flex gap-3 rounded-card border p-4 text-sm text-ink shadow-fluent-1", box, className)}>
       <Icon aria-hidden="true" className={cn("mt-0.5 h-5 w-5 shrink-0", text)} />
       <div className="min-w-0 flex-1">
         {title && <p className={cn("font-bold", text)}>{title}</p>}

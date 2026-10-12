@@ -136,9 +136,9 @@ export function PublicHome() {
   ];
 
   return (
-    <div className="min-h-[100dvh] bg-bg text-ink font-sans overflow-x-hidden relative">
+    <div className="min-h-[100dvh] bg-transparent text-ink font-sans overflow-x-hidden relative">
       {/* ── NAV ── */}
-      <header className="fixed top-0 inset-x-0 z-50 min-h-14 md:min-h-16 border-b border-line bg-header backdrop-blur-md flex items-center justify-between px-3 md:px-10 gap-2 md:gap-4 safe-top safe-x">
+      <header className="fixed top-0 inset-x-0 z-50 min-h-14 md:min-h-16 border-b acrylic-bar flex items-center justify-between px-3 md:px-10 gap-2 md:gap-4 safe-top safe-x">
         <Link to="/" className="flex items-center gap-2.5 min-w-0 shrink" aria-label="F1 Bugambra, inicio">
           <img src="/bugambra-logo.png" alt="" width={40} height={40} className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-lg border border-line-strong bg-black object-contain" />
           <span className="min-w-0 leading-none">

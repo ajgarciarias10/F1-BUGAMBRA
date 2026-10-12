@@ -4,7 +4,7 @@ import { cn } from "./cn";
 export type BadgeTone = "neutral" | "brand" | "ok" | "warn" | "info" | "violet" | "danger";
 
 const TONE: Record<BadgeTone, string> = {
-  neutral: "bg-surface-3 text-ink-muted border-line",
+  neutral: "bg-surface-3/80 text-ink-muted border-line",
   brand: "bg-brand-soft text-brand border-brand/30",
   ok: "bg-ok-soft text-ok border-ok/30",
   warn: "bg-warn-soft text-warn border-warn/30",
@@ -23,7 +23,7 @@ export function Badge({ tone = "neutral", dot = false, className, children, ...p
   return (
     <span
       {...props}
-      className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold leading-5 tracking-wide", TONE[tone], className)}
+      className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold leading-5 tracking-wide", TONE[tone], className)}
     >
       {dot && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
       {children}

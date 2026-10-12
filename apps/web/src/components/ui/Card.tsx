@@ -20,8 +20,8 @@ export function Card({ as: Tag = "div", pad = "md", accent, tone = "default", cl
       {...props}
       style={accent ? { ...style, borderTopColor: accent, borderTopWidth: 3 } : style}
       className={cn(
-        "rounded-card border border-line text-ink",
-        tone === "muted" ? "bg-surface-2" : "bg-surface shadow-card",
+        "rounded-card text-ink",
+        tone === "muted" ? "border border-line bg-surface-2/70" : "acrylic",
         PAD[pad],
         className,
       )}

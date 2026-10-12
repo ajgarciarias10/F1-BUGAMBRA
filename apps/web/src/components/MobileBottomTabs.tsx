@@ -150,7 +150,7 @@ export function MobileBottomTabs({
       )}
 
       <nav
-        className="tabbar fixed inset-x-0 bottom-0 z-[65] border-t border-line bg-header pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+        className="tabbar fixed inset-x-0 bottom-0 z-[65] border-t acrylic-bar pb-[env(safe-area-inset-bottom)] md:hidden"
         aria-label="Navegación principal"
       >
         <div className="flex items-stretch">
