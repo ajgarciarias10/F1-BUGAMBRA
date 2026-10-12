@@ -19,6 +19,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { AdminUsersPanel } from "./AdminUsersPanel";
 import { AdminTeamManager } from "./AdminTeamManager";
 import { StatusBanner } from "./Feedback";
+import { canPilotParticipateInRace } from "../services/readModels";
+import { setFastestLapVideo } from "../services/readModelService";
+import { runAuditedAdminMutation, runAuditedAdminBatch } from "../services/adminMutationService";
+import { mergeDoc, planActaCerrada, planBooleanFlag, planNameEdit, planPhotoEdit } from "../utils/adminMutationPlans";
 import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 import { SplitIntroPanel } from "./SplitIntroPanel";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
@@ -26,6 +30,7 @@ import { PaddockAdminPanel } from "./PaddockAdminPanel";
 import { RaceWinnersImagePanel } from "./RaceWinnersImagePanel";
 import { buildHistoricalRaceCorrectionPlan, HistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
 
+import { useSingleFlight } from "../hooks/useSingleFlight";
 const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
 
 type AdminTab = "results" | "economy" | "rivalries" | "roster" | "paddock" | "production" | "suggestions" | "tools";
@@ -66,13 +71,8 @@ const getNextCircuitOfSplit = (circuitos: any[] | undefined) => {
   return circuitos[circuitos.length - 1]; // Fallback to last one
 };
 
-const canPilotParticipateInRace = (pilot: any, raceSequence: number) => {
-  const startsAt = Number(pilot.participa_desde ?? 1);
-  const endsAt = pilot.participa_hasta == null ? null : Number(pilot.participa_hasta);
-  return raceSequence >= startsAt && (endsAt == null || raceSequence <= endsAt);
-};
-
 export function AdminDashboard() {
+  const { run: runOnce, pending: pendingOnce } = useSingleFlight();
   const { userData } = useAuth();
   const { usuarios } = useUsuarios();
   const { pilotos } = usePilotos();
@@ -234,35 +234,44 @@ export function AdminDashboard() {
   }, [selectedSplitId]);
 
   const handleSaveTeamLogo = async (teamId: string, logoUrl: string) => {
+    return runOnce(async () => {
     if (!selectedSplitId) return;
     setSavingLogo(teamId);
     try {
-      await updateDoc(doc(db, `splits/${selectedSplitId}/equipos`, teamId), {
-        logo_url: logoUrl.trim() || null,
+      await runAuditedAdminMutation({
+        ref: doc(db, `splits/${selectedSplitId}/equipos`, teamId),
+        action: "team_logo_update",
+        summary: `Logo de la escudería ${teamId}`,
+        apply: current => {
+          if (!current) throw new Error("La escudería no existe. No se aplicó ningún cambio.");
+          return mergeDoc(current, { logo_url: logoUrl.trim() || null });
+        },
       });
       setMsg("Logo actualizado.");
       setTimeout(() => setMsg(""), 2500);
     } catch (err: any) {
-      setMsg("Error: " + err.message);
+      setMsg("Error: " + err.message + " (no se aplicó ningún cambio)");
     } finally {
       setSavingLogo(null);
     }
-  };
+  });
+};
 
   const handleSavePilotPhoto = async (pilotoId: string, photoUrl: string) => {
+    return runOnce(async () => {
     setSavingPhoto(pilotoId);
     try {
       const trimmed = photoUrl.trim() || null;
       const usuario = (usuarios || []).find((u: any) => u.uid === pilotoId || u.piloto_id === pilotoId);
+      const targets: { ref: ReturnType<typeof doc>; mode: "update" | "merge"; required?: boolean }[] = [];
       if (usuario) {
-        await updateDoc(doc(db, "usuarios", usuario.uid), { foto_url: trimmed });
+        targets.push({ ref: doc(db, "usuarios", usuario.uid), mode: "update", required: true });
       } else {
         // Piloto sin cuenta: guardar en colección global pilotos
-        await setDoc(doc(db, "pilotos", pilotoId), { foto_url: trimmed }, { merge: true });
+        targets.push({ ref: doc(db, "pilotos", pilotoId), mode: "merge" });
         // También en plantilla para que la foto se transfiera al registrarse
-        const inPlantilla = plantilla.find((p: any) => p.id === pilotoId);
-        if (inPlantilla) {
-          await updateDoc(doc(db, "plantilla", pilotoId), { foto_url: trimmed });
+        if (plantilla.find((p: any) => p.id === pilotoId)) {
+          targets.push({ ref: doc(db, "plantilla", pilotoId), mode: "update" });
         }
       }
 
@@ -271,36 +280,56 @@ export function AdminDashboard() {
         const rosterPilot = (currentRawSplit?.roster || []).find((p: any) => p.pilotoId === pilotoId);
         const equipoId = rosterPilot?.equipoId;
         if (equipoId && equipoId !== "agente_libre" && equipoId !== "individual") {
-          const teamPilotRef = doc(db, `splits/${selectedSplitId}/equipos/${equipoId}/pilotos`, pilotoId);
-          await setDoc(teamPilotRef, { foto_url: trimmed }, { merge: true });
+          targets.push({ ref: doc(db, `splits/${selectedSplitId}/equipos/${equipoId}/pilotos`, pilotoId), mode: "merge" });
         }
-        const splitRosterRef = doc(db, `splits/${selectedSplitId}/roster`, pilotoId);
-        await setDoc(splitRosterRef, { foto_url: trimmed }, { merge: true });
+        targets.push({ ref: doc(db, `splits/${selectedSplitId}/roster`, pilotoId), mode: "merge" });
       }
+
+      // Todos los documentos de esta edición y su registro de auditoría van en una sola transacción.
+      await runAuditedAdminBatch({
+        refs: targets.map(t => t.ref),
+        action: "pilot_photo_update",
+        summary: `Foto del piloto ${pilotoId}`,
+        apply: currents => ({
+          writes: planPhotoEdit(currents, targets.map(t => ({ path: t.ref.path, mode: t.mode, required: t.required })), trimmed),
+        }),
+      });
 
       setPhotoEdits(prev => { const n = { ...prev }; delete n[pilotoId]; return n; });
       setMsg("Foto de piloto actualizada para este split.");
       setTimeout(() => setMsg(""), 2500);
     } catch (err: any) {
-      setMsg("Error foto: " + err.message);
+      setMsg("Error foto: " + err.message + " (no se aplicó ningún cambio)");
     } finally {
       setSavingPhoto(null);
     }
-  };
+  });
+};
 
   const handleSaveJequePhoto = async (uid: string, photoUrl: string) => {
+    return runOnce(async () => {
     setSavingJequePhoto(uid);
     try {
-      await updateDoc(doc(db, "usuarios", uid), { foto_url: photoUrl.trim() || null });
+      const photo = photoUrl.trim() || null;
+      await runAuditedAdminMutation({
+        ref: doc(db, "usuarios", uid),
+        action: "jeque_photo_update",
+        summary: `Foto del jeque ${uid}`,
+        apply: current => {
+          if (!current) throw new Error("El usuario no existe. No se aplicó ningún cambio.");
+          return mergeDoc(current, { foto_url: photo });
+        },
+      });
       setJequePhotoEdits(prev => { const next = { ...prev }; delete next[uid]; return next; });
       setMsg("Foto de jeque actualizada.");
       setTimeout(() => setMsg(""), 2500);
     } catch (err: any) {
-      setMsg("Error foto: " + err.message);
+      setMsg("Error foto: " + err.message + " (no se aplicó ningún cambio)");
     } finally {
       setSavingJequePhoto(null);
     }
-  };
+  });
+};
 
   // Auto-select next circuit on load or when splits change
   useEffect(() => {
@@ -353,25 +382,40 @@ export function AdminDashboard() {
   }, [selectedSplitId, selectedCircuitoId, splits]);
 
   const handleSaveSchedule = async () => {
+    return runOnce(async () => {
     if (!selectedSplitId || !selectedCircuitoId) return;
     setIsSavingSchedule(true);
     setMsg("");
     try {
       const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
-      await updateDoc(ref, {
-        fecha: fechaVal,
-        hora: horaVal,
-        hotlap_url: hotlapUrl.trim() || null,
-        numero_carrera: numeroCarrera
+      await runAuditedAdminMutation({
+        ref,
+        action: "race_schedule_update",
+        summary: `Programación de la carrera ${selectedCircuitoId}`,
+        apply: current => {
+          if (!current) throw new Error("La carrera no existe. No se aplicó ningún cambio.");
+          return mergeDoc(current, { fecha: fechaVal, hora: horaVal, numero_carrera: numeroCarrera });
+        },
       });
+      // El vídeo se guarda por el servicio auditado (transacción + registro antes/después).
+      const storedHotlap = splits.find(s => s.id === selectedSplitId)?.circuitos.find((c: any) => c.id === selectedCircuitoId)?.hotlap_url || "";
+      if (hotlapUrl.trim() !== storedHotlap) {
+        try {
+          await setFastestLapVideo(selectedSplitId, selectedCircuitoId, hotlapUrl);
+        } catch (videoErr: any) {
+          setMsg("Programación guardada, pero el vídeo NO se guardó: " + videoErr.message);
+          return;
+        }
+      }
       setMsg("Programación de la carrera guardada correctamente.");
       setTimeout(() => setMsg(""), 4000);
     } catch (err: any) {
-      setMsg("Error guardando programación: " + err.message);
+      setMsg("Error guardando programación: " + err.message + " (no se aplicó ningún cambio)");
     } finally {
       setIsSavingSchedule(false);
     }
-  };
+  });
+};
 
   // Management State
   const [confirmModal, setConfirmModal] = useState<{
@@ -382,79 +426,92 @@ export function AdminDashboard() {
   } | null>(null);
 
   const handleUpdatePilotName = async (pilotId: string, newName: string) => {
+    return runOnce(async () => {
     if (!newName || !newName.trim()) return;
     const trimmedName = newName.trim();
 
     try {
-      // 1. Update in "usuarios"
-      const userRef = doc(db, "usuarios", pilotId);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        await updateDoc(userRef, { nombre: trimmedName });
-      }
-      
-      // 2. Update in "plantilla"
-      const plantillaRef = doc(db, "plantilla", pilotId);
-      const plantillaSnap = await getDoc(plantillaRef);
-      if (plantillaSnap.exists()) {
-        await updateDoc(plantillaRef, { nombre: trimmedName });
-      }
-      
-      // 3. Update in global pilotos collection
-      const pilotoRef = doc(db, "pilotos", pilotId);
-      const pilotoSnap = await getDoc(pilotoRef);
-      if (pilotoSnap.exists()) {
-        await updateDoc(pilotoRef, { nombre: trimmedName });
-      }
-      
+      // usuarios, plantilla y pilotos: una sola transacción y una sola entrada de auditoría.
+      const refs = [doc(db, "usuarios", pilotId), doc(db, "plantilla", pilotId), doc(db, "pilotos", pilotId)];
+      await runAuditedAdminBatch({
+        refs,
+        action: "pilot_name_update",
+        summary: `Nombre del piloto ${pilotId}: "${trimmedName}"`,
+        apply: currents => ({ writes: planNameEdit(currents, trimmedName) }),
+      });
+
       setMsg(`Nombre de piloto actualizado a "${trimmedName}"`);
       setTimeout(() => {
         setMsg("");
       }, 3000);
     } catch (err: any) {
-      setMsg("Error al actualizar nombre: " + err.message);
+      setMsg("Error al actualizar nombre: " + err.message + " (no se aplicó ningún cambio)");
     }
-  };
+  });
+};
 
   const handleToggleFichajes = async () => {
+    return runOnce(async () => {
     if (!selectedSplitId) return;
     setLoading(true);
     try {
       const currentSplit = splits.find(s => s.id === selectedSplitId);
-      const finalVal = !(currentSplit?.fichajes_abiertos);
+      const expected = !!currentSplit?.fichajes_abiertos;
+      const finalVal = !expected;
       const ref = doc(db, "splits", selectedSplitId);
-      await updateDoc(ref, { fichajes_abiertos: finalVal, mercado_cerrado_por_plantillas: false });
+      // Se valida contra el valor guardado dentro de la transacción; si difiere del panel, no se aplica nada.
+      await runAuditedAdminBatch({
+        refs: [ref],
+        action: "fichajes_abiertos_toggle",
+        summary: `Ventana de fichajes ${finalVal ? "abierta" : "cerrada"} en ${selectedSplitId}`,
+        apply: currents => ({
+          writes: { [ref.path]: planBooleanFlag(currents[ref.path], "fichajes_abiertos", expected, { mercado_cerrado_por_plantillas: false }).after },
+        }),
+      });
       setMsg(`Ventana de fichajes ${finalVal ? "ABIERTA" : "CERRADA"} para ${currentSplit?.nombre || "Split"}.`);
       setTimeout(() => setMsg(""), 4000);
     } catch (err: any) {
-      setMsg("Error: " + err.message);
+      setMsg("Error: " + err.message + " (no se aplicó ningún cambio)");
     } finally {
       setLoading(false);
     }
-  };
+  });
+};
 
   // El interruptor vivía en la vista del jeque, donde no servía de nada: las reglas de
   // Firestore solo dejan escribir el documento del split al admin, así que la casilla se
   // revertía sola y sin mensaje. Aquí, junto al resto de interruptores del split, sí manda.
   const handleToggleSubasta = async () => {
+    return runOnce(async () => {
     if (!selectedSplitId) return;
     setLoading(true);
     try {
       const currentSplit = splits.find(s => s.id === selectedSplitId);
-      const finalVal = !(currentSplit?.mercado_subasta_activado);
-      await updateDoc(doc(db, "splits", selectedSplitId), { mercado_subasta_activado: finalVal });
+      const expected = !!currentSplit?.mercado_subasta_activado;
+      const finalVal = !expected;
+      const splitRef = doc(db, "splits", selectedSplitId);
+      await runAuditedAdminBatch({
+        refs: [splitRef],
+        action: "mercado_subasta_toggle",
+        summary: `Subasta en vivo ${finalVal ? "activada" : "desactivada"} en ${selectedSplitId}`,
+        apply: currents => ({
+          writes: { [splitRef.path]: planBooleanFlag(currents[splitRef.path], "mercado_subasta_activado", expected).after },
+        }),
+      });
       setMsg(finalVal
         ? `Subasta en vivo ACTIVADA en ${currentSplit?.nombre || "el split"}: la pestaña Mercado abre la sala de pujas.`
         : `Subasta en vivo DESACTIVADA en ${currentSplit?.nombre || "el split"}: los jeques fichan directamente desde Mercado.`);
       setTimeout(() => setMsg(""), 5000);
     } catch (err: any) {
-      setMsg("Error: " + err.message);
+      setMsg("Error: " + err.message + " (no se aplicó ningún cambio)");
     } finally {
       setLoading(false);
     }
-  };
+  });
+};
 
   const handleSetSplitActivo = async () => {
+    return runOnce(async () => {
     if (!selectedSplitId) return;
     setLoading(true);
     try {
@@ -475,7 +532,8 @@ export function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  });
+};
 
   const handleStartSplit = () => {
     if (!currentRawSplit || loading) return;
@@ -485,6 +543,7 @@ export function AdminDashboard() {
       title: `Comenzar ${currentRawSplit.nombre}`,
       message: "Se cerrará el mercado de este split y pasará a ser el split activo de la liga.",
       onConfirm: async () => {
+    return runOnce(async () => {
         setLoading(true);
         try {
           const result = await comenzarTemporada(splitId);
@@ -492,7 +551,8 @@ export function AdminDashboard() {
         } catch (error: any) {
           setMsg(`Error al comenzar el split: ${error.message}`);
         } finally { setLoading(false); }
-      },
+      });
+},
     });
   };
 
@@ -503,6 +563,7 @@ export function AdminDashboard() {
       title: `Inicializar ${currentSplitName}`,
        message: `¿Seguro que quieres INICIALIZAR las plantillas del ${currentSplitName.toUpperCase()} a partir del Split anterior? Los presupuestos heredarán el saldo conciliado, mientras que los puntos, victorias y podios empezarán en 0. El RATING de cada piloto se heredará del valor final que tenga en el split anterior.`,
       onConfirm: async () => {
+    return runOnce(async () => {
         setLoading(true);
         try {
           const sortedSplits = splits
@@ -634,7 +695,8 @@ export function AdminDashboard() {
         } finally {
           setLoading(false);
         }
-      }
+      });
+}
     });
   };
 
@@ -645,21 +707,28 @@ export function AdminDashboard() {
       title: "Cerrar Acta de Carrera",
       message: "¿Seguro que quieres CERRAR EL ACTA? Esto impedirá cualquier modificación posterior de resultados.",
       onConfirm: async () => {
+    return runOnce(async () => {
         setLoading(true);
         try {
           const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
-          await updateDoc(ref, { acta_cerrada: true });
+          const res = await runAuditedAdminBatch({
+            refs: [ref],
+            action: "acta_cerrada_close",
+            summary: `Acta cerrada en ${selectedCircuitoId}`,
+            apply: currents => ({ writes: { [ref.path]: planActaCerrada(currents[ref.path], true).after } }),
+          });
           setIsActaCerrada(true);
-          setMsg("Acta cerrada correctamente. Resultados bloqueados.");
+          setMsg(res.changed ? "Acta cerrada correctamente. Resultados bloqueados." : "El acta ya estaba cerrada. No se cambió nada.");
           setTimeout(() => {
             setMsg("");
           }, 4000);
         } catch (err: any) {
-          setMsg("Error al cerrar acta: " + err.message);
+          setMsg("Error al cerrar acta: " + err.message + " (no se aplicó ningún cambio)");
         } finally {
           setLoading(false);
         }
-      }
+      });
+}
     });
   };
 
@@ -694,6 +763,7 @@ export function AdminDashboard() {
       title: "Revertir economía de la carrera",
       message: "Devuelve a cada equipo lo que se le ingresó por esta carrera, borra sus transacciones y restaura el precio de cada piloto a como estaba antes. ¿Continuar?",
       onConfirm: async () => {
+    return runOnce(async () => {
         setRevirtiendoEconomia(true);
         try {
           const result = await revertirEconomiaCarrera(selectedSplitId, selectedCircuitoId);
@@ -704,7 +774,8 @@ export function AdminDashboard() {
         } finally {
           setRevirtiendoEconomia(false);
         }
-      }
+      });
+}
     });
   };
 
@@ -717,6 +788,7 @@ export function AdminDashboard() {
         ? "Esta carrera ya tiene la economía procesada. Para editar los resultados (como desmarcar carrera limpia a Carlos), se revertirá primero su liquidación económica para evitar descuadres. Una vez guardados los cambios, podrás volver a cerrar el acta y procesar la economía. ¿Continuar?"
         : "Vuelve a permitir editar los resultados de esta carrera. ¿Continuar?",
       onConfirm: async () => {
+    return runOnce(async () => {
         setReabriendoActa(true);
         try {
           if (isEconomiaProcesada) {
@@ -728,16 +800,23 @@ export function AdminDashboard() {
             setIsEconomiaProcesada(false);
           }
           const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
-          await updateDoc(ref, { acta_cerrada: false });
+          const res = await runAuditedAdminBatch({
+            refs: [ref],
+            action: "acta_cerrada_reopen",
+            summary: `Acta reabierta en ${selectedCircuitoId}`,
+            apply: currents => ({ writes: { [ref.path]: planActaCerrada(currents[ref.path], false).after } }),
+          });
           setIsActaCerrada(false);
-          setMsg(isEconomiaProcesada ? "Economía revertida y acta reabierta: ya puedes modificar los resultados." : "Acta reabierta: ya se pueden corregir los resultados.");
+          if (!res.changed && !isEconomiaProcesada) setMsg("El acta ya estaba abierta. No se cambió nada.");
+          else setMsg(isEconomiaProcesada ? "Economía revertida y acta reabierta: ya puedes modificar los resultados." : "Acta reabierta: ya se pueden corregir los resultados.");
           setTimeout(() => setMsg(""), 4000);
         } catch (err: any) {
-          setMsg("Error al reabrir acta: " + err.message);
+          setMsg("Error al reabrir acta: " + err.message + " (no se aplicó ningún cambio)");
         } finally {
           setReabriendoActa(false);
         }
-      }
+      });
+}
     });
   };
 
@@ -748,6 +827,7 @@ export function AdminDashboard() {
       title: "Deshacer esta carrera por completo",
       message: "Borra los resultados, reabre el acta y corrige puntos y rating en una sola operación. Si esta carrera o una posterior tiene economía aplicada, revierte primero esa economía. ¿Continuar?",
       onConfirm: async () => {
+    return runOnce(async () => {
         setDeshaciendoCarrera(true);
         try {
           const result = await revertirCarreraCompleta(selectedSplitId, selectedCircuitoId);
@@ -763,7 +843,8 @@ export function AdminDashboard() {
         } finally {
           setDeshaciendoCarrera(false);
         }
-      }
+      });
+}
     });
   };
 
@@ -779,6 +860,7 @@ export function AdminDashboard() {
   };
 
   const handleSubmit = async () => {
+    return runOnce(async () => {
     if (!selectedSplitId || !selectedCircuitoId) {
       setMsg("Selecciona un circuito primero.");
       return;
@@ -854,7 +936,8 @@ export function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  });
+};
 
   const getCircuitName = () => {
     const s = splits.find(sp => sp.id === selectedSplitId);
@@ -863,23 +946,23 @@ export function AdminDashboard() {
   };
 
   if (loadingSplits) return (
-    <div className="dark min-h-[100dvh] bg-[#0a0a0a] flex items-center justify-center">
-      <div className="text-center font-mono animate-pulse text-white/50">
-        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-[#e10600]" />
+    <div className="min-h-[100dvh] bg-bg flex items-center justify-center">
+      <div className="text-center font-mono animate-pulse text-ink-2">
+        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-brand" />
         Cargando temporada...
       </div>
     </div>
   );
 
   return (
-    <div className="dark min-h-[100dvh] bg-[#0a0a0a] text-slate-100 px-3 md:px-4 pt-3 md:pt-4 pb-10 safe-x">
+    <div className="min-h-[100dvh] bg-bg text-ink px-3 md:px-4 pt-3 md:pt-4 pb-10 safe-x">
       <div className="max-w-7xl mx-auto">
           <UserHeader
             title="Panel de Administración"
             action={(
               <Link
                 to="/piloto"
-                className="flex min-h-11 w-full items-center justify-center rounded-xl border border-white/15 bg-white/[0.05] px-4 text-xs font-black uppercase tracking-[0.12em] text-white/80 transition-colors hover:border-[#e10600]/50 hover:bg-[#e10600]/10 hover:text-white sm:w-auto sm:rounded-sm sm:text-[10px]"
+                className="flex min-h-11 w-full items-center justify-center rounded-xl border border-line bg-surface-3 px-4 text-xs font-bold uppercase tracking-[0.12em] text-ink transition-colors hover:border-brand/50 hover:bg-brand/10 hover:text-ink sm:w-auto sm:rounded-sm sm:text-[10px]"
               >
                 {userData?.piloto_id ? "Ir a mi panel de piloto" : "Acceder a la web"}
               </Link>
@@ -887,16 +970,16 @@ export function AdminDashboard() {
           />
 
         {/* Navigation Tabs */}
-         <nav aria-label="Secciones de administración" className="mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-white/10 bg-zinc-950 p-1 sm:grid-cols-3 lg:grid-cols-8">
+         <nav aria-label="Secciones de administración" className="mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-line bg-surface p-1 sm:grid-cols-3 lg:grid-cols-8">
           {ADMIN_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setAdminTab(tab.id)}
               aria-current={adminTab === tab.id ? "page" : undefined}
-              className={`min-h-12 cursor-pointer rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
+              className={`min-h-12 cursor-pointer rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
                 adminTab === tab.id
-                  ? "text-white bg-[#e10600] shadow-lg shadow-red-950/30"
-                   : "text-white/65 hover:text-white hover:bg-white/[0.04]"
+                  ? "text-brand-ink bg-brand shadow-lg"
+                   : "text-ink-2 hover:text-ink hover:bg-surface-3"
               }`}
             >
               {tab.label}
@@ -904,7 +987,7 @@ export function AdminDashboard() {
           ))}
         </nav>
 
-        <p className="mb-5 text-sm leading-relaxed text-white/60">{ADMIN_TABS.find(tab => tab.id === adminTab)?.description}</p>
+        <p className="mb-5 text-sm leading-relaxed text-ink-2">{ADMIN_TABS.find(tab => tab.id === adminTab)?.description}</p>
 
         {adminTab === "rivalries" ? (
           <AdminRivalriesPanel splits={splits} />
@@ -915,23 +998,23 @@ export function AdminDashboard() {
             <AdminTeamManager splitId={selectedSplitId} teams={currentRawSplit?.equipos || []} roster={currentRawSplit?.roster || []} splits={splits} onSelectSplit={(id: string) => setSelectedSplitId(id)} />
             <AdminUsersPanel />
             {msg && <StatusBanner message={msg} tone={msg.toLowerCase().includes("error") ? "error" : "exito"} onDismiss={() => setMsg("")} />}
-          <details className="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+          <details className="bg-surface-2 border border-line rounded-xl p-4">
             <summary className="min-h-8 cursor-pointer text-sm font-bold">Fotos de pilotos y escudos de {currentRawSplit?.nombre || "este split"}</summary>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
               <div>
-                <p className="mt-2 text-sm text-white/60">Sube una imagen o pega su enlace para actualizar la ficha.</p>
+                <p className="mt-2 text-sm text-ink-2">Sube una imagen o pega su enlace para actualizar la ficha.</p>
               </div>
             </div>
 
             {/* Logos de escuderías */}
-            <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
-              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Logos de escuderías</p>
+            <div className="mb-4 pb-4 border-b border-line space-y-1.5">
+              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-ink-muted mb-2">Logos de escuderías</p>
               {(currentRawSplit?.equipos || []).map((team: any) => {
                 const editVal = logoEdits[team.id] ?? (team.logo_url ?? "");
                 const isSavingL = savingLogo === team.id;
                 return (
                   <div key={team.id} className="flex items-center gap-2">
-                    <span className="text-[10px] text-white/50 w-28 shrink-0 truncate font-mono">{team.nombre}</span>
+                    <span className="text-[10px] text-ink-2 w-28 shrink-0 truncate font-mono">{team.nombre}</span>
                     <StorageImageUpload
                       storagePath={`logos/${selectedSplitId}/${team.id}`}
                       currentUrl={editVal || undefined}
@@ -946,12 +1029,12 @@ export function AdminDashboard() {
                       value={editVal}
                       onChange={e => setLogoEdits(prev => ({ ...prev, [team.id]: e.target.value }))}
                       placeholder="o pega URL aquí"
-                      className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                      className="flex-1 min-w-0 bg-surface-2 border border-line px-2.5 py-1.5 text-[10px] text-ink outline-none focus:border-brand transition-colors font-mono"
                     />
-                    <button
+                    <button aria-busy={pendingOnce || undefined}
                       onClick={() => handleSaveTeamLogo(team.id, editVal)}
-                      disabled={isSavingL}
-                      className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                      disabled={(isSavingL) || pendingOnce}
+                      className="px-3 py-1.5 bg-surface-3 hover:bg-surface-3 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
                     >
                       {isSavingL ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
                     </button>
@@ -959,13 +1042,13 @@ export function AdminDashboard() {
                 );
               })}
               {(currentRawSplit?.equipos || []).length === 0 && (
-                <p className="text-[9px] font-mono text-white/15">Sin escuderías en este split</p>
+                <p className="text-[9px] font-mono text-ink-muted">Sin escuderías en este split</p>
               )}
             </div>
 
             {/* Fotos de pilotos */}
-            <div className="mb-4 pb-4 border-b border-white/[0.04] space-y-1.5">
-              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Fotos de pilotos</p>
+            <div className="mb-4 pb-4 border-b border-line space-y-1.5">
+              <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-ink-muted mb-2">Fotos de pilotos</p>
               {(currentRawSplit?.roster || [])
                 .slice()
                 .sort((a: any, b: any) => (a.nombre || "").localeCompare(b.nombre || ""))
@@ -977,14 +1060,14 @@ export function AdminDashboard() {
                   return (
                     <div key={p.pilotoId} className="flex items-center gap-2">
                       {/* Preview */}
-                      <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 shrink-0 bg-white/[0.02] flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full overflow-hidden border border-line shrink-0 bg-surface-2 flex items-center justify-center">
                         {currentPhoto ? (
                           <img src={currentPhoto} className="w-full h-full object-cover" />
                         ) : (
-                          <UserIcon className="w-4 h-4 text-white/10" />
+                          <UserIcon className="w-4 h-4 text-ink-muted" />
                         )}
                       </div>
-                      <span className="text-[10px] text-white/50 w-24 shrink-0 truncate font-mono">{p.nombre}</span>
+                      <span className="text-[10px] text-ink-2 w-24 shrink-0 truncate font-mono">{p.nombre}</span>
                       <StorageImageUpload
                         storagePath={`fotos/pilotos/${p.pilotoId}`}
                         currentUrl={currentPhoto || undefined}
@@ -996,12 +1079,12 @@ export function AdminDashboard() {
                         value={editVal}
                         onChange={e => setPhotoEdits(prev => ({ ...prev, [p.pilotoId]: e.target.value }))}
                         placeholder="o pega URL aquí"
-                        className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                        className="flex-1 min-w-0 bg-surface-2 border border-line px-2.5 py-1.5 text-[10px] text-ink outline-none focus:border-brand transition-colors font-mono"
                       />
-                      <button
+                      <button aria-busy={pendingOnce || undefined}
                         onClick={() => handleSavePilotPhoto(p.pilotoId, editVal)}
-                        disabled={isSaving}
-                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                        disabled={(isSaving) || pendingOnce}
+                        className="px-3 py-1.5 bg-surface-3 hover:bg-surface-3 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
                       >
                         {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
                       </button>
@@ -1009,14 +1092,14 @@ export function AdminDashboard() {
                   );
                 })}
              {(currentRawSplit?.roster || []).length === 0 && (
-               <p className="text-[9px] font-mono text-white/15">Sin pilotos en este split</p>
+               <p className="text-[9px] font-mono text-ink-muted">Sin pilotos en este split</p>
              )}
              </div>
 
              {/* Fotos de jeques */}
              <div className="space-y-1.5">
-               <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-white/20 mb-2">Fotos de jeques y directores deportivos</p>
-               <p className="mb-3 text-[10px] text-white/35">Estas fotos aparecerán junto a los pilotos en la sección Equipos.</p>
+               <p className="text-[9px] font-mono uppercase tracking-[0.4em] text-ink-muted mb-2">Fotos de jeques y directores deportivos</p>
+               <p className="mb-3 text-[10px] text-ink-muted">Estas fotos aparecerán junto a los pilotos en la sección Equipos.</p>
                {(usuarios || [])
                  .filter((usuario: any) => usuario.rol === "jeque" || usuario.rol === "director_deportivo")
                  .slice()
@@ -1028,12 +1111,12 @@ export function AdminDashboard() {
                    const team = (currentRawSplit?.equipos || []).find((item: any) => item.id === jeque.escuderia_id);
                    return (
                      <div key={jeque.uid} className="flex items-center gap-2">
-                       <div className="w-8 h-8 rounded-full overflow-hidden border border-amber-300/20 shrink-0 bg-white/[0.02] flex items-center justify-center">
-                         {editVal ? <img src={editVal} alt="" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-white/10" />}
+                       <div className="w-8 h-8 rounded-full overflow-hidden border border-warn/40 shrink-0 bg-surface-2 flex items-center justify-center">
+                         {editVal ? <img src={editVal} alt="" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-ink-muted" />}
                        </div>
                        <div className="w-32 shrink-0 min-w-0">
-                         <span className="block truncate text-[10px] text-white/60 font-mono">{jeque.nombre || "Sin nombre"}</span>
-                         <span className="block truncate text-[9px] text-amber-200/45">{team?.nombre || jeque.escuderia_id || "Sin escudería"}</span>
+                         <span className="block truncate text-[10px] text-ink-2 font-mono">{jeque.nombre || "Sin nombre"}</span>
+                         <span className="block truncate text-[9px] text-warn">{team?.nombre || jeque.escuderia_id || "Sin escudería"}</span>
                        </div>
                        <StorageImageUpload
                          storagePath={`fotos/jeques/${jeque.uid}`}
@@ -1046,12 +1129,12 @@ export function AdminDashboard() {
                          value={editVal}
                          onChange={event => setJequePhotoEdits(prev => ({ ...prev, [jeque.uid]: event.target.value }))}
                          placeholder="o pega URL aquí"
-                         className="flex-1 min-w-0 bg-white/[0.02] border border-white/10 px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-[#e10600] transition-colors font-mono"
+                         className="flex-1 min-w-0 bg-surface-2 border border-line px-2.5 py-1.5 text-[10px] text-ink outline-none focus:border-brand transition-colors font-mono"
                        />
-                       <button
+                       <button aria-busy={pendingOnce || undefined}
                          onClick={() => handleSaveJequePhoto(jeque.uid, editVal)}
-                         disabled={isSaving}
-                         className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                         disabled={(isSaving) || pendingOnce}
+                         className="px-3 py-1.5 bg-surface-3 hover:bg-surface-3 text-[10px] uppercase font-bold tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
                        >
                          {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
                        </button>
@@ -1059,21 +1142,21 @@ export function AdminDashboard() {
                    );
                  })}
                {(usuarios || []).filter((usuario: any) => usuario.rol === "jeque" || usuario.rol === "director_deportivo").length === 0 && (
-                 <p className="text-[9px] font-mono text-white/15">Sin jeques ni directores deportivos registrados</p>
+                 <p className="text-[9px] font-mono text-ink-muted">Sin jeques ni directores deportivos registrados</p>
                )}
              </div>
 
            </details>
             {!isSelectedSplitInitialized && selectedSplitId !== "split_1" && (
-              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+              <div className="mb-4 p-3 bg-warn-soft border border-warn/40 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div>
-                  <h4 className="text-sm font-bold text-amber-400">Este split todavía no tiene pilotos</h4>
-                  <p className="text-[10px] text-white/60 mt-0.5 max-w-2xl">
+                  <h4 className="text-sm font-bold text-warn">Este split todavía no tiene pilotos</h4>
+                  <p className="text-[10px] text-ink-2 mt-0.5 max-w-2xl">
                     Copia la plantilla del split anterior para empezar a gestionar sus fichajes.
                   </p>
                 </div>
                   <button onClick={() => handleSyncSplitRosters(selectedSplitId)} disabled={loading}
-                    className="min-h-11 rounded-lg bg-amber-500 hover:bg-amber-600 text-black px-3 text-sm font-bold shrink-0 transition-colors cursor-pointer disabled:opacity-40">
+                    className="min-h-11 rounded-lg bg-warn-soft border border-warn/40 hover:bg-warn-soft/20 text-warn px-3 text-sm font-bold shrink-0 transition-colors cursor-pointer disabled:opacity-40">
                     Copiar plantilla anterior
                 </button>
               </div>
@@ -1088,22 +1171,22 @@ export function AdminDashboard() {
           <SuggestionsView isAdmin={true} />
         ) : adminTab === "tools" ? (
           <div className="space-y-6">
-            <section className="rounded-2xl border border-white/15 bg-white/[0.04] p-5 space-y-5">
+            <section className="rounded-2xl border border-line bg-surface-3 p-5 space-y-5">
               <div>
-                <h2 className="text-lg font-black">Mercado y subasta</h2>
-                <p className="mt-1 text-sm text-white/60">1. Elige el split. 2. Abre los fichajes. 3. Activa la subasta si quieres usar pujas.</p>
+                <h2 className="text-lg font-bold">Mercado y subasta</h2>
+                <p className="mt-1 text-sm text-ink-2">1. Elige el split. 2. Abre los fichajes. 3. Activa la subasta si quieres usar pujas.</p>
               </div>
               <label className="block text-sm font-bold">Split que quieres gestionar
-                <select value={selectedSplitId} onChange={event => setSelectedSplitId(event.target.value)} disabled={loading} className="mt-2 block min-h-12 w-full rounded-xl border border-white/20 bg-[#151515] px-3 text-white">
+                <select value={selectedSplitId} onChange={event => setSelectedSplitId(event.target.value)} disabled={loading} className="mt-2 block min-h-12 w-full rounded-xl border border-line bg-surface px-3 text-ink">
                   {splits.filter(split => split.id !== "global").map(split => <option key={split.id} value={split.id}>{split.nombre}</option>)}
                 </select>
               </label>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
                 <div>
                   <p className="text-sm font-bold">{currentRawSplit?.activo ? "Split destacado en la web" : "Este split no es el destacado"}</p>
-                  <p className="mt-1 text-sm text-white/60">El split destacado es el que se muestra primero al entrar.</p>
+                  <p className="mt-1 text-sm text-ink-2">El split destacado es el que se muestra primero al entrar.</p>
                 </div>
-                <button type="button" onClick={handleSetSplitActivo} disabled={loading || !currentRawSplit} className="min-h-11 rounded-xl border border-white/20 px-4 text-sm font-bold hover:bg-white/10 disabled:opacity-40">
+                <button aria-busy={pendingOnce || undefined} type="button" onClick={handleSetSplitActivo} disabled={(loading || !currentRawSplit) || pendingOnce} className="min-h-11 rounded-xl border border-line px-4 text-sm font-bold hover:bg-surface-3 disabled:opacity-40">
                   {currentRawSplit?.activo ? "Quitar destacado" : "Destacar este split"}
                 </button>
               </div>
@@ -1111,12 +1194,12 @@ export function AdminDashboard() {
                 {[
                   { label: "Ventana de fichajes", checked: currentRawSplit?.fichajes_abiertos === true, action: handleToggleFichajes, description: "Permite las operaciones de mercado de este split." },
                   { label: "Subasta en vivo", checked: currentRawSplit?.mercado_subasta_activado === true, action: handleToggleSubasta, description: "Activada: sala de pujas. Desactivada: fichaje directo." },
-                ].map(control => <button key={control.label} type="button" role="switch" aria-checked={control.checked} aria-label={control.label} disabled={loading || !currentRawSplit || currentRawSplit.tipo === "individual"} onClick={control.action} className="rounded-xl border border-white/15 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-40">
-                  <span className="flex items-center justify-between gap-3"><span className="font-bold">{control.label}</span><span aria-hidden="true" className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors ${control.checked ? "bg-emerald-500" : "bg-white/20"}`}><span className={`h-5 w-5 rounded-full bg-white transition-transform ${control.checked ? "translate-x-5" : ""}`} /></span></span>
-                  <span className="mt-2 block text-sm text-white/65">{control.checked ? "Activada" : "Desactivada"} · {control.description}</span>
+                ].map(control => <button key={control.label} type="button" role="switch" aria-checked={control.checked} aria-label={control.label} disabled={loading || !currentRawSplit || currentRawSplit.tipo === "individual"} onClick={control.action} className="rounded-xl border border-line p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-info disabled:opacity-40">
+                  <span className="flex items-center justify-between gap-3"><span className="font-bold">{control.label}</span><span aria-hidden="true" className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors ${control.checked ? "bg-ok" : "bg-surface-3"}`}><span className={`h-5 w-5 rounded-full bg-surface transition-transform ${control.checked ? "translate-x-5" : ""}`} /></span></span>
+                  <span className="mt-2 block text-sm text-ink-2">{control.checked ? "Activada" : "Desactivada"} · {control.description}</span>
                 </button>)}
-              </div> : <p className="text-sm text-white/60">{currentRawSplit?.tipo === "individual" ? "Este split individual no utiliza mercado de equipos." : "El mercado de preparación ya está cerrado para este split."}</p>}
-              <p className="text-sm text-white/60">Con tu sesión de admin abierta, las bienvenidas y el cierre por plantillas completas se gestionan automáticamente.</p>
+              </div> : <p className="text-sm text-ink-2">{currentRawSplit?.tipo === "individual" ? "Este split individual no utiliza mercado de equipos." : "El mercado de preparación ya está cerrado para este split."}</p>}
+              <p className="text-sm text-ink-2">Con tu sesión de admin abierta, las bienvenidas y el cierre por plantillas completas se gestionan automáticamente.</p>
               {currentRawSplit?.mercado_cerrado_por_plantillas && <StatusBanner tone="exito" message="Todas las plantillas están completas. Mercado cerrado para este split." />}
               {msg && <StatusBanner message={msg} tone={msg.startsWith("Error") ? "error" : "exito"} onDismiss={() => setMsg("")} />}
               {marketLifecycleError && <StatusBanner message={marketLifecycleError} tone="error" />}
@@ -1124,18 +1207,18 @@ export function AdminDashboard() {
             {currentRawSplit?.mercado_subasta_activado && currentRawSplit.tipo !== "individual" && !currentRawSplit.completado && !currentRawSplit.temporada_iniciada && (
               <AuctionRoom key={selectedSplitId} splits={splits} splitId={selectedSplitId} />
             )}
-            <section className="rounded-2xl border border-white/10 p-5 space-y-4">
-              <h2 className="text-lg font-black">Temporada</h2>
+            <section className="rounded-2xl border border-line p-5 space-y-4">
+              <h2 className="text-lg font-bold">Temporada</h2>
               {currentRawSplit && currentRawSplit.tipo !== "individual" && !currentRawSplit.completado && !currentRawSplit.temporada_iniciada && (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm text-white/60">Cuando termine el mercado, comienza {currentRawSplit.nombre}.</p>
-                  <button type="button" disabled={loading} onClick={handleStartSplit} className="min-h-11 rounded-xl bg-[#e10600] px-4 text-sm font-bold disabled:opacity-40">Comenzar split</button>
+                  <p className="text-sm text-ink-2">Cuando termine el mercado, comienza {currentRawSplit.nombre}.</p>
+                  <button type="button" disabled={loading} onClick={handleStartSplit} className="min-h-11 rounded-xl bg-brand px-4 text-sm font-bold disabled:opacity-40">Comenzar split</button>
                 </div>
               )}
-              {currentRawSplit?.temporada_iniciada && <p className="text-sm text-emerald-300">{currentRawSplit.nombre} ya ha comenzado. Gestiona sus carreras desde «Carreras».</p>}
-              <button type="button" aria-expanded={showSplitBuilder} aria-controls="admin-split-builder" onClick={() => setShowSplitBuilder(true)} disabled={showSplitBuilder} className="min-h-11 rounded-xl border border-white/20 px-4 text-sm font-bold hover:bg-white/10 disabled:opacity-40">Preparar siguiente split o temporada</button>
+              {currentRawSplit?.temporada_iniciada && <p className="text-sm text-ok">{currentRawSplit.nombre} ya ha comenzado. Gestiona sus carreras desde «Carreras».</p>}
+              <button type="button" aria-expanded={showSplitBuilder} aria-controls="admin-split-builder" onClick={() => setShowSplitBuilder(true)} disabled={showSplitBuilder} className="min-h-11 rounded-xl border border-line px-4 text-sm font-bold hover:bg-surface-3 disabled:opacity-40">Preparar siguiente split o temporada</button>
               {showSplitBuilder && <div id="admin-split-builder">
-                <Suspense fallback={<p role="status" className="py-4 text-sm text-white/60">Cargando preparación del split…</p>}>
+                <Suspense fallback={<p role="status" className="py-4 text-sm text-ink-2">Cargando preparación del split…</p>}>
                   <SplitBuilderPanel splits={splits} onClose={() => setShowSplitBuilder(false)} />
                 </Suspense>
               </div>}
@@ -1153,10 +1236,10 @@ export function AdminDashboard() {
                 const next = getNextCircuitOfSplit(s.circuitos) || s.circuitos[s.circuitos.length - 1];
                 if (next) setSelectedCircuitoId(next.id);
               }}
-              className={`px-3 py-1.5 rounded-sm font-black text-[10px] uppercase tracking-widest transition-all ${
+              className={`px-3 py-1.5 rounded-sm font-bold text-[10px] uppercase tracking-widest transition-all ${
                 selectedSplitId === s.id
-                ? "bg-[#e10600] text-white shadow-lg shadow-red-900/20"
-                : "bg-white/[0.03] text-white/40 border border-white/5 hover:border-white/20"
+                ? "bg-brand text-brand-ink shadow-lg"
+                : "bg-surface-2 text-ink-muted border border-line hover:border-line"
               }`}
             >
               {s.nombre}
@@ -1166,32 +1249,31 @@ export function AdminDashboard() {
 
         {/* Selector de Circuito */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-          <div className="bg-white/[0.03] border border-white/10 rounded-sm p-3 flex items-center gap-3">
-            <div className="p-1.5 bg-[#e10600]/10 rounded-sm">
-              <Calendar className="w-4 h-4 text-[#e10600]" />
+          <div className="bg-surface-2 border border-line rounded-sm p-3 flex items-center gap-3">
+            <div className="p-1.5 bg-brand/10 rounded-sm">
+              <Calendar className="w-4 h-4 text-brand" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[9px] text-white/40 uppercase tracking-widest font-mono">Circuito activo</p>
+              <p className="text-[9px] text-ink-muted uppercase tracking-widest font-mono">Circuito activo</p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="font-bold text-xs tracking-tight truncate">{getCircuitName()}</span>
                 {isActaCerrada ? (
-                  <span className="flex items-center gap-1 text-[9px] bg-red-500/20 text-red-500 px-1.5 py-0.5 font-bold uppercase tracking-tighter shrink-0">
+                  <span className="flex items-center gap-1 text-[9px] bg-danger-soft text-danger px-1.5 py-0.5 font-bold uppercase tracking-tighter shrink-0">
                     Cerrada
                   </span>
                 ) : isEditingFinished ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-ok shrink-0" />
                 ) : null}
               </div>
             </div>
           </div>
 
-          <div className="col-span-2 bg-white/[0.03] border border-white/10 rounded-sm p-3">
+          <div className="col-span-2 bg-surface-2 border border-line rounded-sm p-3">
             <div className="flex items-center gap-3">
                <div className="flex-1">
-                  <p className="text-[9px] text-white/40 uppercase tracking-widest font-mono mb-1.5">Seleccionar GP</p>
+                  <p className="text-[9px] text-ink-muted uppercase tracking-widest font-mono mb-1.5">Seleccionar GP</p>
                   <select
-                    style={{ colorScheme: "dark", backgroundColor: "#0d0d0d", color: "#fff" }}
-                    className="w-full border border-white/10 py-1.5 px-2.5 text-xs outline-none focus:border-[#e10600] transition-colors cursor-pointer"
+                    className="w-full bg-surface text-ink border border-line py-1.5 px-2.5 text-xs outline-none focus:border-brand transition-colors cursor-pointer"
                     value={`${selectedSplitId}|${selectedCircuitoId}`}
                     onChange={(e) => {
                       const [sid, cid] = e.target.value.split("|");
@@ -1241,60 +1323,60 @@ export function AdminDashboard() {
         </div>
 
         {/* PROGRAMACIÓN DEL CIRCUITO */}
-        <div className="bg-white/[0.03] border border-white/10 rounded-sm p-3 mb-4">
-          <div className="flex items-center gap-2 mb-3 border-b border-white/5 pb-2">
-            <Calendar className="w-3.5 h-3.5 text-[#e10600]" />
-            <h3 className="font-bold text-[10px] uppercase tracking-wider text-white">Programación — {getCircuitName()}</h3>
+        <div className="bg-surface-2 border border-line rounded-sm p-3 mb-4">
+          <div className="flex items-center gap-2 mb-3 border-b border-line pb-2">
+            <Calendar className="w-3.5 h-3.5 text-brand" />
+            <h3 className="font-bold text-[10px] uppercase tracking-wider text-ink">Programación — {getCircuitName()}</h3>
           </div>
           <div className="grid grid-cols-1 max-w-2xl gap-3">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div>
-                <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Nº carrera</label>
+                <label className="block text-[9px] text-ink-muted uppercase font-mono mb-1 font-bold">Nº carrera</label>
                 <input type="number" min={1} max={20} value={numeroCarrera}
                   onChange={(e) => setNumeroCarrera(parseInt(e.target.value) || 1)}
-                  className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors text-center"
+                  className="w-full bg-surface-2 border border-line min-h-11 rounded-lg px-2.5 text-ink outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-brand transition-colors text-center"
                 />
               </div>
               <div>
-                <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Fecha</label>
+                <label className="block text-[9px] text-ink-muted uppercase font-mono mb-1 font-bold">Fecha</label>
                 <input type="date" value={fechaVal} onChange={(e) => setFechaVal(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors"
+                  className="w-full bg-surface-2 border border-line min-h-11 rounded-lg px-2.5 text-ink outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-brand transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Hora</label>
+                <label className="block text-[9px] text-ink-muted uppercase font-mono mb-1 font-bold">Hora</label>
                 <input type="time" value={horaVal} onChange={(e) => setHoraVal(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors"
+                  className="w-full bg-surface-2 border border-line min-h-11 rounded-lg px-2.5 text-ink outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-brand transition-colors"
                 />
               </div>
               <div className="flex items-end">
-                <button onClick={handleSaveSchedule} disabled={isSavingSchedule}
-                  className="w-full border border-white/10 text-white/80 min-h-11 rounded-lg px-3 text-[12px] font-bold md:min-h-0 md:rounded-sm md:py-1.5 md:text-[9px] md:uppercase md:tracking-wider transition-all flex items-center justify-center gap-1.5 hover:bg-white/[0.06] cursor-pointer disabled:opacity-40"
+                <button aria-busy={pendingOnce || undefined} onClick={handleSaveSchedule} disabled={(isSavingSchedule) || pendingOnce}
+                  className="w-full border border-line text-ink min-h-11 rounded-lg px-3 text-[12px] font-bold md:min-h-0 md:rounded-sm md:py-1.5 md:text-[9px] md:uppercase md:tracking-wider transition-all flex items-center justify-center gap-1.5 hover:bg-surface-3 cursor-pointer disabled:opacity-40"
                 >
                   {isSavingSchedule ? <Loader2 className="w-3 h-3 animate-spin" /> : "Guardar"}
                 </button>
               </div>
             </div>
             <div>
-              <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">URL Hotlap (YouTube)</label>
+              <label className="block text-[9px] text-ink-muted uppercase font-mono mb-1 font-bold">URL Hotlap (YouTube)</label>
               <input type="url" value={hotlapUrl} onChange={(e) => setHotlapUrl(e.target.value)}
                 placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors font-mono"
+                className="w-full bg-surface-2 border border-line min-h-11 rounded-lg px-2.5 text-ink outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-brand transition-colors font-mono"
               />
             </div>
           </div>
         </div>
         
-        <section className="bg-white/[0.03] border border-white/10 p-4 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-[#e10600]/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
+        <section className="bg-surface-2 border border-line p-4 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 blur-[100px] -mr-32 -mt-32 rounded-full" />
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
             <div>
-              <h2 className="text-base font-black italic tracking-tighter text-white flex items-center gap-2.5">
-                <span className="w-1 h-5 bg-[#e10600] block" />
+              <h2 className="text-base font-bold italic tracking-tighter text-ink flex items-center gap-2.5">
+                <span className="w-1 h-5 bg-brand block" />
                 {isActaCerrada ? "Acta cerrada" : isEditingFinished ? "Corrección de resultados" : "Carga de resultados"}
               </h2>
-              <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1 font-mono">
+              <p className="text-[10px] text-ink-muted uppercase tracking-widest mt-1 font-mono">
                 {isActaCerrada
                   ? "Este acta no se puede modificar"
                   : isEditingFinished ? `Edición GP: ${getCircuitName()}` : `Registro GP: ${getCircuitName()}`}
@@ -1303,7 +1385,7 @@ export function AdminDashboard() {
 
             <div className="flex items-center gap-2">
               {isActaCerrada && raceImageWinners.length > 0 && (
-                <a href="#race-winners-image" className="min-h-10 inline-flex items-center rounded-sm border border-violet-400/40 px-3 text-[10px] font-black uppercase text-violet-200 hover:bg-violet-400/10">
+                <a href="#race-winners-image" className="min-h-10 inline-flex items-center rounded-sm border border-violet/40 px-3 text-[10px] font-bold uppercase text-violet hover:bg-violet-soft">
                   Crear imagen con Gemini
                 </a>
               )}
@@ -1311,14 +1393,14 @@ export function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setShowRaceReport(true)}
-                  className="min-h-10 inline-flex items-center gap-1.5 rounded-sm border border-amber-400/40 px-3 text-[10px] font-black uppercase text-amber-300 hover:bg-amber-400/10"
+                  className="min-h-10 inline-flex items-center gap-1.5 rounded-sm border border-warn/40 px-3 text-[10px] font-bold uppercase text-warn hover:bg-warn-soft"
                 >
-                  <FileText className="w-3.5 h-3.5 text-amber-400" />
+                  <FileText className="w-3.5 h-3.5 text-warn" />
                   Informe Oficial GP
                 </button>
               )}
               {((Object.values(qualyCount) as number[]).some(c => c > 1) || (Object.values(raceCount) as number[]).some(c => c > 1)) && (
-                <div className="text-[9px] text-amber-400 font-mono flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 mr-1 max-w-xs">
+                <div className="text-[9px] text-warn font-mono flex items-center gap-1 bg-warn-soft border border-warn/40 px-2.5 py-1 mr-1 max-w-xs">
                   <AlertCircle className="w-3 h-3 flex-shrink-0" />
                   <span>Posiciones duplicadas (en ámbar)</span>
                 </div>
@@ -1327,7 +1409,7 @@ export function AdminDashboard() {
               {isEditingFinished && !isActaCerrada && (
                 <button
                   onClick={handleCerrarActa}
-                  className="px-4 py-1.5 rounded-sm border border-red-500/30 text-red-500 text-[10px] font-black uppercase hover:bg-red-500/10 transition-all"
+                  className="px-4 py-1.5 rounded-sm border border-danger/40 text-danger text-[10px] font-bold uppercase hover:bg-danger-soft transition-all"
                 >
                   Cerrar Acta
                 </button>
@@ -1338,7 +1420,7 @@ export function AdminDashboard() {
                   type="button"
                   disabled={reabriendoActa || revirtiendoEconomia}
                   onClick={handleReabrirActa}
-                  className="px-4 py-1.5 rounded-sm border border-sky-500/40 text-sky-400 text-[10px] font-black uppercase hover:bg-sky-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-4 py-1.5 rounded-sm border border-info/40 text-info text-[10px] font-bold uppercase hover:bg-info-soft transition-all disabled:opacity-50 flex items-center gap-1.5"
                   title={isEconomiaProcesada ? "Reabrir acta (revertirá primero la economía para poder corregir resultados)" : "Reabrir acta"}
                 >
                   {reabriendoActa ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
@@ -1347,9 +1429,10 @@ export function AdminDashboard() {
               )}
 
               {isActaCerrada && !isEconomiaProcesada && (
-                <button
-                  disabled={procesandoEconomia}
+                <button aria-busy={pendingOnce || undefined}
+                  disabled={(procesandoEconomia) || pendingOnce}
                   onClick={async () => {
+    return runOnce(async () => {
                     setProcesandoEconomia(true);
                     setEconomiaMsg("");
                     const currentSplit = splits.find(s => s.id === selectedSplitId);
@@ -1370,38 +1453,39 @@ export function AdminDashboard() {
                     // nada y no hay que marcar la economía como procesada.
                     if (result.processed > 0) setIsEconomiaProcesada(true);
                     setProcesandoEconomia(false);
-                  }}
-                  className="px-4 py-1.5 rounded-sm border border-amber-500/40 text-amber-400 text-[10px] font-black uppercase hover:bg-amber-500/10 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                  });
+}}
+                  className="px-4 py-1.5 rounded-sm border border-warn/40 text-warn text-[10px] font-bold uppercase hover:bg-warn-soft transition-all disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {procesandoEconomia ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                   {procesandoEconomia ? "Procesando..." : "Procesar Economía"}
                 </button>
               )}
 
-              <button
+              <button aria-busy={pendingOnce || undefined}
                 onClick={handleSubmit}
-                disabled={loading || isActaCerrada}
-                className="group relative bg-[#e10600] px-5 py-1.5 rounded-sm font-black text-[10px] uppercase hover:bg-red-700 transition-all shadow-lg shadow-red-900/30 overflow-hidden active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                disabled={(loading || isActaCerrada) || pendingOnce}
+                className="group relative bg-brand px-5 py-1.5 rounded-sm font-bold text-[10px] uppercase hover:bg-danger-soft transition-all shadow-lg overflow-hidden active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 <span className="relative z-10 flex items-center gap-1.5">
-                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : (isEditingFinished ? "Guardar Corrección" : "Procesar Carrera")}
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-ink" /> : (isEditingFinished ? "Guardar Corrección" : "Procesar Carrera")}
                 </span>
-                <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                <div className="absolute inset-0 bg-surface-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
               </button>
             </div>
           </div>
 
-          <details className="mt-3 rounded-xl border border-white/10 p-3">
-            <summary className="min-h-8 cursor-pointer text-sm font-bold text-white/70">Corregir una carrera o recalcular el split</summary>
-            <p className="mt-2 text-sm text-white/60">Para editar un acta cerrada, revierte primero su economía y después reabre el acta.</p>
+          <details className="mt-3 rounded-xl border border-line p-3">
+            <summary className="min-h-8 cursor-pointer text-sm font-bold text-ink-2">Corregir una carrera o recalcular el split</summary>
+            <p className="mt-2 text-sm text-ink-2">Para editar un acta cerrada, revierte primero su economía y después reabre el acta.</p>
             {isEditingFinished && (planForSelectedRace?.laterProcessedNewestFirst.length ?? 0) > 0 && (
-              <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
-                <p className="text-sm font-bold text-amber-200">Esta carrera es histórica y hay liquidaciones posteriores.</p>
-                <p className="mt-1 text-xs text-white/60">Prepara una guía para revertir las carreras posteriores en orden seguro antes de editar este acta.</p>
+              <div className="mt-3 rounded-lg border border-warn/40 bg-warn-soft p-3">
+                <p className="text-sm font-bold text-warn">Esta carrera es histórica y hay liquidaciones posteriores.</p>
+                <p className="mt-1 text-xs text-ink-2">Prepara una guía para revertir las carreras posteriores en orden seguro antes de editar este acta.</p>
                 <button
                   type="button"
                   onClick={() => planForSelectedRace && setHistoricalCorrectionPlan({ ...planForSelectedRace, splitId: selectedSplitId })}
-                  className="mt-2 min-h-10 rounded-lg border border-amber-300/40 px-3 text-xs font-bold text-amber-200 hover:bg-amber-300/10"
+                  className="mt-2 min-h-10 rounded-lg border border-warn/40 px-3 text-xs font-bold text-warn hover:bg-warn-soft"
                 >Preparar plan de corrección histórica</button>
               </div>
             )}
@@ -1410,18 +1494,19 @@ export function AdminDashboard() {
                 disabled={revirtiendoEconomia || !esUltimaCarreraProcesada}
                 title={esUltimaCarreraProcesada ? "" : "Hay una carrera posterior con economía procesada: revierte primero esa."}
                 onClick={handleRevertirEconomia}
-                className="min-h-11 rounded-lg border border-orange-500/40 px-3 text-sm font-bold text-orange-300 disabled:opacity-40"
+                className="min-h-11 rounded-lg border border-warn/40 px-3 text-sm font-bold text-warn disabled:opacity-40"
               >{revirtiendoEconomia ? "Revirtiendo…" : "Revertir economía"}</button>}
               {isActaCerrada && <button
                 disabled={reabriendoActa || revirtiendoEconomia} onClick={handleReabrirActa}
-                className="min-h-11 rounded-lg border border-sky-500/40 px-3 text-sm font-bold text-sky-300 disabled:opacity-40"
+                className="min-h-11 rounded-lg border border-info/40 px-3 text-sm font-bold text-info disabled:opacity-40"
               >{reabriendoActa ? "Reabriendo…" : "Reabrir acta"}</button>}
               {isEditingFinished && (!isEconomiaProcesada || esUltimaCarreraProcesada) && <button
                 disabled={deshaciendoCarrera} onClick={handleDeshacerCarrera}
-                className="min-h-11 rounded-lg border border-red-500/40 px-3 text-sm font-bold text-red-300 disabled:opacity-40"
+                className="min-h-11 rounded-lg border border-danger/40 px-3 text-sm font-bold text-danger disabled:opacity-40"
               >{deshaciendoCarrera ? "Deshaciendo…" : "Deshacer carrera"}</button>}
-            <button
+            <button aria-busy={pendingOnce || undefined}
               onClick={async () => {
+    return runOnce(async () => {
                 if (!selectedSplitId) return;
                 setRecalculandoPuntos(true);
                 try {
@@ -1433,10 +1518,11 @@ export function AdminDashboard() {
                 } finally {
                   setRecalculandoPuntos(false);
                 }
-              }}
-              disabled={recalculandoPuntos || !selectedSplitId}
+              });
+}}
+              disabled={(recalculandoPuntos || !selectedSplitId) || pendingOnce}
               title="Rehace puntos, rating y puntos de constructor desde cero a partir de los circuitos que sigan completados. Úsalo si un split se queda con cifras desincronizadas."
-              className="min-h-11 rounded-lg border border-sky-500/40 px-3 text-sm font-bold text-sky-300 disabled:opacity-40 flex items-center gap-1"
+              className="min-h-11 rounded-lg border border-info/40 px-3 text-sm font-bold text-info disabled:opacity-40 flex items-center gap-1"
             >
               {recalculandoPuntos ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
               Recalcular puntos y rating
@@ -1445,55 +1531,55 @@ export function AdminDashboard() {
           </details>
 
           {historicalCorrectionPlan?.splitId === selectedSplitId && (
-            <section className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4" aria-live="polite">
+            <section className="mt-3 rounded-xl border border-warn/40 bg-warn-soft p-4" aria-live="polite">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <h3 className="text-sm font-black text-amber-100">Plan manual: corregir {historicalCorrectionPlan.target.nombre || "carrera histórica"}</h3>
-                  <p className="mt-1 text-xs text-white/60">El plan solo guía la navegación. Cada reversión y liquidación sigue siendo una acción individual.</p>
+                  <h3 className="text-sm font-bold text-warn">Plan manual: corregir {historicalCorrectionPlan.target.nombre || "carrera histórica"}</h3>
+                  <p className="mt-1 text-xs text-ink-2">El plan solo guía la navegación. Cada reversión y liquidación sigue siendo una acción individual.</p>
                 </div>
-                <button type="button" onClick={() => setHistoricalCorrectionPlan(null)} className="min-h-10 rounded-lg border border-white/15 px-3 text-xs text-white/70">Cerrar plan</button>
+                <button type="button" onClick={() => setHistoricalCorrectionPlan(null)} className="min-h-10 rounded-lg border border-line px-3 text-xs text-ink-2">Cerrar plan</button>
               </div>
 
               <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <div className="rounded-lg border border-white/10 p-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-orange-200">1. Revertir posteriores, de más nueva a más antigua</h4>
+                <div className="rounded-lg border border-line p-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-warn">1. Revertir posteriores, de más nueva a más antigua</h4>
                   {historicalCorrectionPlan.laterProcessedNewestFirst.length ? (
                     <ol className="mt-2 space-y-2">
                       {historicalCorrectionPlan.laterProcessedNewestFirst.map((race, index) => (
-                        <li key={race.id} className="flex items-center justify-between gap-2 text-xs text-white/75">
+                        <li key={race.id} className="flex items-center justify-between gap-2 text-xs text-ink">
                           <span>{index + 1}. {race.nombre || `Carrera ${race.numero_carrera ?? ""}`}</span>
-                          <button type="button" onClick={() => setSelectedCircuitoId(race.id)} className="min-h-9 rounded border border-orange-300/30 px-2 text-orange-200">Ir</button>
+                          <button type="button" onClick={() => setSelectedCircuitoId(race.id)} className="min-h-9 rounded border border-warn/40 px-2 text-warn">Ir</button>
                         </li>
                       ))}
                     </ol>
-                  ) : <p className="mt-2 text-xs text-emerald-200">No quedan economías posteriores por revertir.</p>}
+                  ) : <p className="mt-2 text-xs text-ok">No quedan economías posteriores por revertir.</p>}
                 </div>
 
-                <div className="rounded-lg border border-white/10 p-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-sky-200">2. Corregir la carrera objetivo</h4>
-                  <p className="mt-2 text-xs leading-relaxed text-white/70">Vuelve al objetivo, revierte su economía, reabre el acta, guarda las posiciones, sanciones y DNFs correctos, y cierra el acta otra vez.</p>
-                  <button type="button" onClick={() => setSelectedCircuitoId(historicalCorrectionPlan.target.id)} className="mt-2 min-h-9 rounded border border-sky-300/30 px-2 text-xs text-sky-200">Ir al objetivo: {historicalCorrectionPlan.target.nombre || `Carrera ${historicalCorrectionPlan.target.numero_carrera ?? ""}`}</button>
+                <div className="rounded-lg border border-line p-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-info">2. Corregir la carrera objetivo</h4>
+                  <p className="mt-2 text-xs leading-relaxed text-ink-2">Vuelve al objetivo, revierte su economía, reabre el acta, guarda las posiciones, sanciones y DNFs correctos, y cierra el acta otra vez.</p>
+                  <button type="button" onClick={() => setSelectedCircuitoId(historicalCorrectionPlan.target.id)} className="mt-2 min-h-9 rounded border border-info/40 px-2 text-xs text-info">Ir al objetivo: {historicalCorrectionPlan.target.nombre || `Carrera ${historicalCorrectionPlan.target.numero_carrera ?? ""}`}</button>
                 </div>
 
-                <div className="rounded-lg border border-white/10 p-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-emerald-200">3. Reprocesar en orden cronológico</h4>
+                <div className="rounded-lg border border-line p-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-ok">3. Reprocesar en orden cronológico</h4>
                   <ol className="mt-2 space-y-2">
                     {historicalCorrectionPlan.replayChronological.map((race, index) => (
-                      <li key={race.id} className="flex items-center justify-between gap-2 text-xs text-white/75">
+                      <li key={race.id} className="flex items-center justify-between gap-2 text-xs text-ink">
                         <span>{index + 1}. {race.nombre || `Carrera ${race.numero_carrera ?? ""}`}</span>
-                        <button type="button" onClick={() => setSelectedCircuitoId(race.id)} className="min-h-9 rounded border border-emerald-300/30 px-2 text-emerald-200">Ir</button>
+                        <button type="button" onClick={() => setSelectedCircuitoId(race.id)} className="min-h-9 rounded border border-ok/40 px-2 text-ok">Ir</button>
                       </li>
                     ))}
-                    {!historicalCorrectionPlan.replayChronological.length && <li className="text-xs text-white/50">La carrera objetivo no tenía economía procesada al preparar el plan; procésala después de cerrarla y luego continúa con las posteriores.</li>}
+                    {!historicalCorrectionPlan.replayChronological.length && <li className="text-xs text-ink-2">La carrera objetivo no tenía economía procesada al preparar el plan; procésala después de cerrarla y luego continúa con las posteriores.</li>}
                   </ol>
                 </div>
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-amber-100/80">Límite actual: las ganancias y los cambios de precio se revierten y aplican una carrera cada vez. Este plan solo vive en esta pantalla; no es una operación duradera, no se reanuda automáticamente y una interrupción puede dejar el split a medio corregir. Comprueba cada mensaje de éxito antes de seguir.</p>
+              <p className="mt-3 text-xs leading-relaxed text-warn">Límite actual: las ganancias y los cambios de precio se revierten y aplican una carrera cada vez. Este plan solo vive en esta pantalla; no es una operación duradera, no se reanuda automáticamente y una interrupción puede dejar el split a medio corregir. Comprueba cada mensaje de éxito antes de seguir.</p>
             </section>
           )}
 
           {economiaMsg && (
-            <div className="mt-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-sm text-xs text-amber-400 font-mono">
+            <div className="mt-3 px-4 py-2.5 bg-warn-soft border border-warn/40 rounded-sm text-xs text-warn font-mono">
               {economiaMsg}
             </div>
           )}
@@ -1518,8 +1604,8 @@ export function AdminDashboard() {
               >
                 <div className={`p-3 border rounded-sm flex items-center gap-2.5 text-xs ${
                   msg.toLowerCase().includes("error")
-                  ? "bg-red-500/10 border-red-500/20 text-red-400"
-                  : "bg-green-500/10 border-green-500/20 text-green-400"
+                  ? "bg-danger-soft border-danger/40 text-danger"
+                  : "bg-ok-soft border-ok/40 text-ok"
                 }`}>
                   {msg.toLowerCase().includes("error") ? <AlertCircle className="w-4 h-4 flex-shrink-0" /> : <CheckCircle2 className="w-4 h-4 flex-shrink-0" />}
                   <span className="font-medium">{msg}</span>
@@ -1531,7 +1617,7 @@ export function AdminDashboard() {
           <div className="-mx-3 overflow-x-auto px-3 md:-mx-4 md:px-4">
             <table className="w-full text-sm text-left border-collapse">
               <thead>
-                <tr className="text-[9px] text-white/30 uppercase tracking-[0.2em] font-mono border-b border-white/10 pb-2">
+                <tr className="text-[9px] text-ink-muted uppercase tracking-[0.2em] font-mono border-b border-line pb-2">
                    <th className="pb-2 pl-3 font-normal">Piloto</th>
                    <th className="pb-2 text-center font-normal">No corrió</th>
                    <th className="pb-2 text-center font-normal">Qualy</th>
@@ -1552,15 +1638,15 @@ export function AdminDashboard() {
                    const isRaceDuplicated = !isPilotDnf && typeof rPosVal === "number" && rPosVal !== 99 && (raceCount[rPosVal] || 0) > 1;
                    const didNotRace = noCorrieron.has(p.pilotoId);
                   return (
-                    <tr key={`pilot-row-${p.pilotoId}-${i}`} className="group border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <tr key={`pilot-row-${p.pilotoId}-${i}`} className="group border-b border-line hover:bg-surface-3 transition-colors">
                       <td className="py-2.5 pl-3">
                         <div className="flex items-center gap-2.5">
-                          <span className="text-[10px] font-mono text-white/20 w-4">{i+1}</span>
+                          <span className="text-[10px] font-mono text-ink-muted w-4">{i+1}</span>
                           <div>
                             <EditableName
                               pilotId={p.pilotoId}
                               initialName={p.nombre}
-                              className="font-bold tracking-tight group-hover:text-[#e10600]"
+                              className="font-bold tracking-tight group-hover:text-brand"
                               onSave={handleUpdatePilotName}
                             />
                           </div>
@@ -1568,7 +1654,7 @@ export function AdminDashboard() {
                       </td>
                       <td className="py-2.5 text-center">
                         <input type="checkbox" checked={didNotRace} disabled={isActaCerrada} title="Marcar si el piloto no corrió esta carrera"
-                          className="w-4 h-4 accent-zinc-400 disabled:opacity-40"
+                          className="w-4 h-4 accent-brand disabled:opacity-40"
                           onChange={e => {
                             const skip = e.target.checked;
                             setNoCorrieron(prev => {
@@ -1585,7 +1671,7 @@ export function AdminDashboard() {
                           }} />
                       </td>
                       {didNotRace ? (
-                        <td colSpan={5} className="py-2.5 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">
+                        <td colSpan={5} className="py-2.5 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-ink-muted">
                           No corrió · sin puntos ni cambios de rating
                         </td>
                       ) : (
@@ -1593,7 +1679,7 @@ export function AdminDashboard() {
                        <td className="py-2.5 text-center">
                          <input type="number" min="1" max="20" disabled={isActaCerrada}
                            value={qPosVal ?? ""} title={isQualyDuplicated ? "¡Posición de clasificación duplicada!" : qPosVal === 1 ? "Pole position" : undefined}
-                           className={`w-12 bg-[#1a1a1a]/50 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${isQualyDuplicated ? "border-amber-500/60 text-amber-300 bg-amber-500/5" : "border-white/10 text-white"}`}
+                           className={`w-12 bg-surface-2 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-brand transition-colors font-mono text-xs disabled:opacity-40 ${isQualyDuplicated ? "border-warn/40 text-warn bg-warn-soft" : "border-line text-ink"}`}
                            onChange={e => {
                              const val = parseInt(e.target.value);
                              handleUpdate(p.pilotoId, "qualyPos", isNaN(val) ? "" : val);
@@ -1628,16 +1714,16 @@ export function AdminDashboard() {
                        </td>
                        <td className="py-2.5">
                         {isPilotDnf ? (
-                          <span className="inline-block w-12 rounded-sm border border-red-600/50 bg-red-600/10 px-2 py-1.5 text-center font-mono text-xs font-bold text-red-400">DNF</span>
+                          <span className="inline-block w-12 rounded-sm border border-danger/40 bg-danger-soft px-2 py-1.5 text-center font-mono text-xs font-bold text-danger">DNF</span>
                         ) : (
                         <input
                           type="number"
                           min="1"
                           max="20"
-                          className={`w-12 bg-[#1a1a1a]/50 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-[#e10600] transition-colors font-mono text-xs disabled:opacity-40 ${
+                          className={`w-12 bg-surface-2 border rounded-sm px-2 py-1.5 text-center outline-none focus:border-brand transition-colors font-mono text-xs disabled:opacity-40 ${
                             isRaceDuplicated
-                              ? "border-amber-500/60 text-amber-300 bg-amber-500/5"
-                              : "border-white/10 text-white"
+                              ? "border-warn/40 text-warn bg-warn-soft"
+                              : "border-line text-ink"
                           }`}
                           title={isRaceDuplicated ? "¡Posición de carrera duplicada!" : undefined}
                            disabled={isActaCerrada}
@@ -1668,25 +1754,25 @@ export function AdminDashboard() {
 
         {confirmModal && confirmModal.isOpen && (
           <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
-            <div className="bg-[#0a0a0a] border border-white/10 p-4 max-w-sm w-full relative text-left">
-              <h3 className="text-sm font-black text-white uppercase tracking-tight mb-2 flex items-center gap-2">
-                <span className="w-1 h-4 bg-[#e10600]" />
+            <div className="bg-surface border border-line p-4 max-w-sm w-full relative text-left">
+              <h3 className="text-sm font-bold text-ink uppercase tracking-tight mb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-brand" />
                 {confirmModal.title}
               </h3>
-              <p className="text-xs text-white/60 leading-relaxed mb-4">{confirmModal.message}</p>
+              <p className="text-xs text-ink-2 leading-relaxed mb-4">{confirmModal.message}</p>
               <div className="flex justify-end gap-2 font-semibold text-[10px] uppercase tracking-wider">
                 <button
                   onClick={() => setConfirmModal(null)}
-                  className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-sm transition-colors border border-white/5"
+                  className="px-3 py-2 bg-surface-3 hover:bg-surface-3 text-ink rounded-sm transition-colors border border-line"
                 >
                   Cancelar
                 </button>
-                <button
+                <button aria-busy={pendingOnce || undefined} disabled={pendingOnce}
                   onClick={() => {
                     confirmModal.onConfirm();
                     setConfirmModal(null);
                   }}
-                  className="px-3 py-2 bg-[#e10600] text-white rounded-sm hover:bg-red-700 transition-colors shadow-lg shadow-red-900/30"
+                  className="px-3 py-2 bg-brand text-brand-ink rounded-sm hover:bg-danger-soft transition-colors shadow-lg"
                 >
                   Confirmar
                 </button>
@@ -1753,7 +1839,7 @@ function EditableName({ pilotId, initialName, className = "", onSave }: Editable
     return (
       <input
         type="text"
-        className="bg-[#1a1a1a] text-white font-bold px-2 py-0.5 rounded border border-[#e10600] outline-none text-xs w-32 font-sans focus:ring-1 focus:ring-[#e10600]"
+        className="bg-surface text-ink font-bold px-2 py-0.5 rounded border border-brand outline-none text-xs w-32 font-sans focus:ring-1 focus:ring-brand"
         value={name}
         onChange={(e) => setName(e.target.value)}
         onBlur={handleBlurOrSubmit}
@@ -1771,10 +1857,10 @@ function EditableName({ pilotId, initialName, className = "", onSave }: Editable
         setIsEditing(true);
       }}
       title="Click para editar nombre de piloto"
-      className={`${className} cursor-pointer hover:underline decoration-dashed decoration-[#e10600] hover:text-white px-1 py-0.5 rounded transition-all inline-flex items-center gap-1`}
+      className={`${className} cursor-pointer hover:underline decoration-dashed decoration-brand hover:text-ink px-1 py-0.5 rounded transition-all inline-flex items-center gap-1`}
     >
       {name}
-      <span className="opacity-0 group-hover:opacity-60 text-[9px] text-[#e10600] font-mono select-none">✏️</span>
+      <span className="opacity-0 group-hover:opacity-60 text-[9px] text-brand font-mono select-none">✏️</span>
     </span>
   );
 }

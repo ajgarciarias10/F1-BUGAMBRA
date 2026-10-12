@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useSplits, usePilotos } from "../hooks/useData";
 import { CalendarClock, Megaphone, ShieldAlert, Sparkles, TrendingUp, Trash2, UserX } from "lucide-react";
 
+import { useSingleFlight } from "../hooks/useSingleFlight";
 type MarketPostKind = "rumor" | "rookie" | "regreso";
 
 interface MarketPost {
@@ -63,6 +64,7 @@ function createCopy(pilot: any, split: any, kind: MarketPostKind) {
 }
 
 export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean }) {
+  const { run: runOnce, pending: pendingOnce } = useSingleFlight();
   const { user, userData } = useAuth();
   const { splits } = useSplits();
   const [posts, setPosts] = useState<MarketPost[]>([]);
@@ -137,6 +139,7 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
   const splitPosts = useMemo(() => posts.filter(post => post.splitId === marketSplit?.id), [posts, marketSplit]);
 
   const publishPost = async (pilot: any, kind: MarketPostKind) => {
+    return runOnce(async () => {
     if (!user || !userData || !marketSplit) return;
     setPublishingId(pilot.pilotoId);
     try {
@@ -159,16 +162,19 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
     } finally {
       setPublishingId(null);
     }
-  };
+  });
+};
 
   const removePost = async (postId: string) => {
+    return runOnce(async () => {
     if (!isAdmin) return;
     await deleteDoc(doc(db, "market_posts", postId));
-  };
+  });
+};
 
   if (!marketSplit) {
     return (
-      <div className="border border-white/10 bg-white/[0.02] p-6 text-center text-white/30 font-mono text-[10px] uppercase tracking-[0.3em]">
+      <div className="border border-line bg-surface-2 p-6 text-center text-ink-muted font-mono text-[10px] uppercase tracking-[0.3em]">
         No hay split de mercado disponible
       </div>
     );
@@ -176,21 +182,21 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
 
   return (
     <section className="space-y-6">
-      <div className="m-card border border-white/10 bg-gradient-to-r from-[#e10600]/15 via-white/[0.03] to-white/[0.02] p-4 md:p-6">
+      <div className="m-card border border-line bg-gradient-to-r from-brand-soft via-surface-2 to-surface p-4 md:p-6">
         <div className="flex items-center gap-3 mb-3">
-          <span className="w-1 h-5 bg-[#e10600]" />
-          <p className="text-[12px] font-black text-[#e10600] md:font-mono md:text-[9px] md:uppercase md:tracking-[0.35em]">Deadline Market</p>
+          <span className="w-1 h-5 bg-brand" />
+          <p className="text-[12px] font-bold text-brand md:font-mono md:text-[9px] md:uppercase md:tracking-[0.35em]">Deadline Market</p>
         </div>
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
-            <h2 className="text-xl md:text-3xl font-black uppercase tracking-[-0.03em] md:tracking-[-0.04em]">Rumores, rookies y humo de paddock</h2>
-            <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-white/55 md:text-sm">
+            <h2 className="text-xl md:text-3xl font-bold uppercase tracking-[-0.03em] md:tracking-[-0.04em]">Rumores, rookies y humo de paddock</h2>
+            <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-ink-2 md:text-sm">
               Posts para calentar el mercado del {marketSplit.nombre}. Cada agente libre puede tener su propio rumor y cada rookie, su anuncio de llegada.
             </p>
           </div>
           {marketSplit.activo && (
-            <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.25em] text-white/30">
-              <CalendarClock className="w-4 h-4 text-[#e10600]" /> {marketSplit.nombre} activo
+            <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.25em] text-ink-muted">
+              <CalendarClock className="w-4 h-4 text-brand" /> {marketSplit.nombre} activo
             </div>
           )}
         </div>
@@ -200,10 +206,10 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
               <button
                 key={split.id}
                 onClick={() => setSelectedSplitId(split.id)}
-                className={`min-h-10 shrink-0 rounded-full px-3 text-[12px] font-bold transition-colors md:min-h-0 md:rounded-none md:py-1.5 md:text-[10px] md:font-black md:uppercase md:tracking-widest ${
+                className={`min-h-10 shrink-0 rounded-full px-3 text-[12px] font-bold transition-colors md:min-h-0 md:rounded-none md:py-1.5 md:text-[10px] md:font-bold md:uppercase md:tracking-widest ${
                   marketSplit.id === split.id
-                    ? "bg-[#e10600] text-white"
-                    : "bg-white/[0.03] text-white/40 border border-white/10 hover:border-white/25 hover:text-white/70"
+                    ? "bg-brand text-brand-ink"
+                    : "bg-surface-2 text-ink-muted border border-line hover:border-line hover:text-ink-2"
                 }`}
               >
                 {split.nombre}
@@ -216,10 +222,10 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
       {seasonSummaries.length > 0 && (
         <div className="grid gap-3 md:grid-cols-2">
           {seasonSummaries.map(summary => (
-            <article key={summary.id} className="m-card border border-amber-500/20 bg-amber-500/[0.04] p-4 md:p-5">
-              <div className="flex items-center gap-2 text-amber-300 text-[9px] font-mono uppercase tracking-[0.28em]"><TrendingUp className="w-4 h-4" /> Resumen del mundial · {summary.name}</div>
-              <h3 className="mt-3 text-xl font-black uppercase">El mundial ya tiene dueño</h3>
-              <p className="mt-2 text-sm text-white/60 leading-relaxed">{summary.winner} se corona campeón de pilotos con {summary.points} puntos. {summary.team} domina el mundial de equipos. En clasificación, {summary.poles} lideró las poles{summary.poleCount ? ` con ${summary.poleCount}` : ""}.</p>
+            <article key={summary.id} className="m-card border border-warn/40 bg-warn-soft p-4 md:p-5">
+              <div className="flex items-center gap-2 text-warn text-[9px] font-mono uppercase tracking-[0.28em]"><TrendingUp className="w-4 h-4" /> Resumen del mundial · {summary.name}</div>
+              <h3 className="mt-3 text-xl font-bold uppercase">El mundial ya tiene dueño</h3>
+              <p className="mt-2 text-sm text-ink-2 leading-relaxed">{summary.winner} se corona campeón de pilotos con {summary.points} puntos. {summary.team} domina el mundial de equipos. En clasificación, {summary.poles} lideró las poles{summary.poleCount ? ` con ${summary.poleCount}` : ""}.</p>
             </article>
           ))}
         </div>
@@ -227,84 +233,84 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
 
       {!readOnly && isAdmin && (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <div className="m-card border border-white/10 bg-white/[0.02] p-4">
+          <div className="m-card border border-line bg-surface-2 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Megaphone className="w-4 h-4 text-[#e10600]" />
-              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Agentes libres</span>
+              <Megaphone className="w-4 h-4 text-brand" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-ink-muted">Agentes libres</span>
             </div>
             <div className="space-y-2">
               {freeAgents.length > 0 ? freeAgents.map((pilot: any) => {
                 const draft = createCopy(pilot, marketSplit, "rumor");
                 return (
-                  <div key={pilot.pilotoId} className="m-card flex flex-col gap-3 border border-white/10 bg-black/20 p-3 md:flex-row md:items-center md:justify-between">
+                  <div key={pilot.pilotoId} className="m-card flex flex-col gap-3 border border-line bg-surface-2 p-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="font-black uppercase tracking-tight">{pilot.nombre}</p>
-                      <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto ?? 70} OVR · {pilot.puntos_piloto ?? 0} PTS · {pilot.clausula_actual ?? 0}M</p>
+                      <p className="font-bold uppercase tracking-tight">{pilot.nombre}</p>
+                      <p className="text-[10px] text-ink-muted font-mono">{pilot.rating_piloto ?? 70} OVR · {pilot.puntos_piloto ?? 0} PTS · {pilot.clausula_actual ?? 0}M</p>
                     </div>
-                    <button
+                    <button aria-busy={pendingOnce || undefined}
                       onClick={() => publishPost(pilot, "rumor")}
-                      disabled={publishingId === pilot.pilotoId}
-                      className="min-h-11 rounded-xl bg-[#e10600] px-3 text-[13px] font-bold text-white transition-colors hover:bg-[#ff241c] disabled:opacity-40 md:min-h-0 md:rounded-none md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-[0.2em]"
+                      disabled={(publishingId === pilot.pilotoId) || pendingOnce}
+                      className="min-h-11 rounded-xl bg-brand px-3 text-[13px] font-bold text-brand-ink transition-colors hover:bg-brand-hover disabled:opacity-40 md:min-h-0 md:rounded-none md:py-2 md:text-[10px] md:font-bold md:uppercase md:tracking-[0.2em]"
                     >
                       {publishingId === pilot.pilotoId ? "Publicando..." : "Publicar rumor"}
                     </button>
-                    <p className="text-[10px] text-white/35 leading-relaxed md:hidden">{draft.headline}</p>
+                    <p className="text-[10px] text-ink-muted leading-relaxed md:hidden">{draft.headline}</p>
                   </div>
                 );
               }) : (
-                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay agentes libres en {marketSplit.nombre}.</p>
+                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-ink-muted">No hay agentes libres en {marketSplit.nombre}.</p>
               )}
             </div>
           </div>
 
-          <div className="m-card border border-white/10 bg-white/[0.02] p-4">
+          <div className="m-card border border-line bg-surface-2 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Rookies drafteados</span>
+              <Sparkles className="w-4 h-4 text-warn" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-ink-muted">Rookies drafteados</span>
             </div>
             <div className="space-y-2">
               {rookies.length > 0 ? rookies.map((pilot: any) => (
-                <div key={pilot.pilotoId} className="m-card flex flex-col gap-3 border border-white/10 bg-black/20 p-3 md:flex-row md:items-center md:justify-between">
+                <div key={pilot.pilotoId} className="m-card flex flex-col gap-3 border border-line bg-surface-2 p-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="font-black uppercase tracking-tight">{pilot.nombre}</p>
-                    <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto ?? 70} OVR · debutante</p>
+                    <p className="font-bold uppercase tracking-tight">{pilot.nombre}</p>
+                    <p className="text-[10px] text-ink-muted font-mono">{pilot.rating_piloto ?? 70} OVR · debutante</p>
                   </div>
-                  <button
+                  <button aria-busy={pendingOnce || undefined}
                     onClick={() => publishPost(pilot, "rookie")}
-                    disabled={publishingId === pilot.pilotoId}
-                    className="min-h-11 rounded-xl border border-amber-500/20 bg-amber-500/15 px-3 text-[13px] font-bold text-amber-300 transition-colors hover:bg-amber-500/25 disabled:opacity-40 md:min-h-0 md:rounded-none md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-[0.2em]"
+                    disabled={(publishingId === pilot.pilotoId) || pendingOnce}
+                    className="min-h-11 rounded-xl border border-warn/40 bg-warn-soft px-3 text-[13px] font-bold text-warn transition-colors hover:bg-warn-soft disabled:opacity-40 md:min-h-0 md:rounded-none md:py-2 md:text-[10px] md:font-bold md:uppercase md:tracking-[0.2em]"
                   >
                     {publishingId === pilot.pilotoId ? "Publicando..." : "Publicar rookie"}
                   </button>
                 </div>
               )) : (
-                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay rookies detectados en {marketSplit.nombre}.</p>
+                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-ink-muted">No hay rookies detectados en {marketSplit.nombre}.</p>
               )}
             </div>
           </div>
 
-          <div className="m-card border border-white/10 bg-white/[0.02] p-4">
+          <div className="m-card border border-line bg-surface-2 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <UserX className="w-4 h-4 text-violet-400" />
-              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/40">Ex-pilotos</span>
+              <UserX className="w-4 h-4 text-violet" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-ink-muted">Ex-pilotos</span>
             </div>
             <div className="space-y-2">
               {exPilotos.length > 0 ? exPilotos.map((pilot) => (
-                <div key={pilot.pilotoId} className="m-card flex flex-col gap-3 border border-white/10 bg-black/20 p-3 md:flex-row md:items-center md:justify-between">
+                <div key={pilot.pilotoId} className="m-card flex flex-col gap-3 border border-line bg-surface-2 p-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="font-black uppercase tracking-tight">{pilot.nombre}</p>
-                    <p className="text-[10px] text-white/40 font-mono">{pilot.rating_piloto} OVR · fuera de la parrilla</p>
+                    <p className="font-bold uppercase tracking-tight">{pilot.nombre}</p>
+                    <p className="text-[10px] text-ink-muted font-mono">{pilot.rating_piloto} OVR · fuera de la parrilla</p>
                   </div>
-                  <button
+                  <button aria-busy={pendingOnce || undefined}
                     onClick={() => publishPost(pilot, "regreso")}
-                    disabled={publishingId === pilot.pilotoId}
-                    className="min-h-11 rounded-xl border border-violet-500/20 bg-violet-500/15 px-3 text-[13px] font-bold text-violet-300 transition-colors hover:bg-violet-500/25 disabled:opacity-40 md:min-h-0 md:rounded-none md:py-2 md:text-[10px] md:font-black md:uppercase md:tracking-[0.2em]"
+                    disabled={(publishingId === pilot.pilotoId) || pendingOnce}
+                    className="min-h-11 rounded-xl border border-violet/40 bg-violet-soft px-3 text-[13px] font-bold text-violet transition-colors hover:bg-violet-soft disabled:opacity-40 md:min-h-0 md:rounded-none md:py-2 md:text-[10px] md:font-bold md:uppercase md:tracking-[0.2em]"
                   >
                     {publishingId === pilot.pilotoId ? "Publicando..." : "Publicar rumor"}
                   </button>
                 </div>
               )) : (
-                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">No hay expilotos fuera de la parrilla.</p>
+                <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-ink-muted">No hay expilotos fuera de la parrilla.</p>
               )}
             </div>
           </div>
@@ -313,41 +319,41 @@ export function MarketDeadlineView({ readOnly = false }: { readOnly?: boolean })
 
       <div className="grid gap-3">
         {splitPosts.length > 0 ? splitPosts.map(post => (
-          <article key={post.id} className="m-card border border-white/10 bg-white/[0.02] p-4 md:p-5">
+          <article key={post.id} className="m-card border border-line bg-surface-2 p-4 md:p-5">
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-[9px] font-mono uppercase tracking-[0.25em] px-2 py-1 border ${
-                    post.kind === "rookie" ? "border-amber-500/25 text-amber-300 bg-amber-500/10"
-                      : post.kind === "regreso" ? "border-violet-500/25 text-violet-300 bg-violet-500/10"
-                      : "border-[#e10600]/25 text-[#e10600] bg-[#e10600]/10"
+                    post.kind === "rookie" ? "border-warn/40 text-warn bg-warn-soft"
+                      : post.kind === "regreso" ? "border-violet/40 text-violet bg-violet-soft"
+                      : "border-brand/25 text-brand bg-brand/10"
                   }`}>
                     {post.kind === "rookie" ? "Rookie draft" : post.kind === "regreso" ? "Rumor de regreso" : "Rumor de mercado"}
                   </span>
-                  <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-white/25">{post.authorName}</span>
+                  <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-ink-muted">{post.authorName}</span>
                 </div>
-                <h3 className="mt-3 text-lg font-black uppercase tracking-[-0.03em] md:text-xl">{post.headline}</h3>
-                <p className="mt-2 text-[13px] leading-relaxed text-white/65 md:text-sm">{post.body}</p>
+                <h3 className="mt-3 text-lg font-bold uppercase tracking-[-0.03em] md:text-xl">{post.headline}</h3>
+                <p className="mt-2 text-[13px] leading-relaxed text-ink-2 md:text-sm">{post.body}</p>
               </div>
               {isAdmin && !readOnly && (
-                <button onClick={() => removePost(post.id)} className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/35 hover:text-red-300 transition-colors">
+                <button aria-busy={pendingOnce || undefined} disabled={pendingOnce} onClick={() => removePost(post.id)} className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted hover:text-danger transition-colors">
                   <Trash2 className="w-3.5 h-3.5" /> Borrar
                 </button>
               )}
             </div>
-            <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-[0.22em] text-white/35">
-              <span className="px-2 py-1 border border-white/10">{post.pilotName}</span>
-              {post.kind !== "regreso" && <span className="px-2 py-1 border border-white/10">{post.points ?? 0} pts</span>}
-              <span className="px-2 py-1 border border-white/10">{post.rating ?? 0} ovr</span>
+            <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-[0.22em] text-ink-muted">
+              <span className="px-2 py-1 border border-line">{post.pilotName}</span>
+              {post.kind !== "regreso" && <span className="px-2 py-1 border border-line">{post.points ?? 0} pts</span>}
+              <span className="px-2 py-1 border border-line">{post.rating ?? 0} ovr</span>
               {post.candidateTeams.slice(0, 3).map(team => (
-                <span key={team.id} className="px-2 py-1 border border-white/10 text-white/50">{team.nombre}</span>
+                <span key={team.id} className="px-2 py-1 border border-line text-ink-2">{team.nombre}</span>
               ))}
             </div>
           </article>
         )) : (
-          <div className="border border-dashed border-white/10 bg-black/20 p-8 text-center">
-            <ShieldAlert className="w-8 h-8 mx-auto text-white/20" />
-            <p className="mt-3 text-[10px] font-mono uppercase tracking-[0.3em] text-white/25">Todavía no hay posts del deadline en {marketSplit.nombre}</p>
+          <div className="border border-dashed border-line bg-surface-2 p-8 text-center">
+            <ShieldAlert className="w-8 h-8 mx-auto text-ink-muted" />
+            <p className="mt-3 text-[10px] font-mono uppercase tracking-[0.3em] text-ink-muted">Todavía no hay posts del deadline en {marketSplit.nombre}</p>
           </div>
         )}
       </div>

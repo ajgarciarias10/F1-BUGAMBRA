@@ -5,6 +5,7 @@ import { db } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { requestRaceWinnerImage, type RaceImageWinner } from "../services/raceWinnerImageService";
 
+import { useSingleFlight } from "../hooks/useSingleFlight";
 interface Props {
   raceName: string;
   splitName: string;
@@ -15,6 +16,7 @@ interface Props {
 type CardMode = "podium" | "winner" | "pole";
 
 export function RaceWinnersImagePanel({ raceName, splitName, winners, poleWinner }: Props) {
+  const { run: runOnce, pending: pendingOnce } = useSingleFlight();
   const { user, userData } = useAuth();
   const fileInputId = useId();
   const [cardMode, setCardMode] = useState<CardMode>("podium");
@@ -185,6 +187,7 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
   };
 
   const generate = async () => {
+    return runOnce(async () => {
     if (busy) return;
     const targets = cardMode === "winner"
       ? (winnerP1 ? [winnerP1] : [])
@@ -216,9 +219,11 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
     } finally {
       setBusy(false);
     }
-  };
+  });
+};
 
   const publishToPaddock = async () => {
+    return runOnce(async () => {
     if (!imageUrl || !user || !userData || publishing) return;
     setPublishing(true);
     try {
@@ -245,7 +250,8 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
     } finally {
       setPublishing(false);
     }
-  };
+  });
+};
 
   return (
     <section
@@ -254,18 +260,18 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
       onDrop={handleDrop}
       onPaste={handleContainerPaste}
       tabIndex={0}
-      className="mt-4 scroll-mt-6 rounded-sm border border-violet-400/20 bg-violet-400/[0.04] p-3 focus:outline-none focus:ring-1 focus:ring-violet-400/50"
+      className="mt-4 scroll-mt-6 rounded-sm border border-violet/40 bg-violet-soft p-3 focus:outline-none focus:ring-1 focus:ring-violet/40"
     >
       {/* Selector de modo de cartel */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => { setCardMode("podium"); setImageUrl(""); setMessage(""); }}
             className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-bold transition-colors ${
               cardMode === "podium"
-                ? "bg-violet-600 text-white"
-                : "bg-white/5 text-white/60 hover:bg-white/10"
+                ? "bg-violet-soft border border-violet/40 text-violet"
+                : "bg-surface-3 text-ink-2 hover:bg-surface-3"
             }`}
           >
             <Trophy className="h-3.5 w-3.5" /> Podio 16:9
@@ -275,8 +281,8 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
             onClick={() => { setCardMode("winner"); setImageUrl(""); setMessage(""); }}
             className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-bold transition-colors ${
               cardMode === "winner"
-                ? "bg-violet-600 text-white"
-                : "bg-white/5 text-white/60 hover:bg-white/10"
+                ? "bg-violet-soft border border-violet/40 text-violet"
+                : "bg-surface-3 text-ink-2 hover:bg-surface-3"
             }`}
           >
             <Award className="h-3.5 w-3.5" /> Cartel Ganador ({winnerP1?.name || "P1"})
@@ -287,8 +293,8 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
               onClick={() => { setCardMode("pole"); setImageUrl(""); setMessage(""); }}
               className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-bold transition-colors ${
                 cardMode === "pole"
-                  ? "bg-violet-600 text-white"
-                  : "bg-white/5 text-white/60 hover:bg-white/10"
+                  ? "bg-violet-soft border border-violet/40 text-violet"
+                  : "bg-surface-3 text-ink-2 hover:bg-surface-3"
               }`}
             >
               <Flag className="h-3.5 w-3.5" /> Cartel Pole ({poleWinner.name})
@@ -299,14 +305,14 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-xs font-black uppercase tracking-wider text-violet-200">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-violet">
             {cardMode === "winner"
               ? `Cartel oficial ganador: ${winnerP1?.name || "1º puesto"}`
               : cardMode === "pole"
                 ? `Cartel oficial pole: ${poleWinner?.name || "1º clasificación"}`
                 : "Imagen del podio con champán"}
           </h3>
-          <p className="mt-1 text-[11px] text-white/50">
+          <p className="mt-1 text-[11px] text-ink-2">
             {cardMode === "podium"
               ? "Ilustración 16:9 con champán y confeti en el podio."
               : "Cartel vertical con diseño gráfico oficial de F1 (fondo azul cobalto, texto grande y retrato del piloto)."}
@@ -315,9 +321,9 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
             {(cardMode === "winner" && winnerP1 ? [winnerP1] : cardMode === "pole" && poleWinner ? [poleWinner] : winners).map((winner) => (
               <div
                 key={winner.name}
-                className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-black/40 p-2 pr-3.5 shadow-sm"
+                className="flex items-center gap-2.5 rounded-lg border border-line bg-surface-2 p-2 pr-3.5 shadow-sm"
               >
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-violet-400/50 bg-zinc-800">
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-violet/40 bg-brand">
                   {winner.photoUrl ? (
                     <img
                       src={winner.photoUrl}
@@ -325,21 +331,21 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center font-bold text-white/30 text-xs">
+                    <div className="flex h-full w-full items-center justify-center font-bold text-ink-muted text-xs">
                       {winner.name.slice(0, 2).toUpperCase()}
                     </div>
                   )}
-                  <span className="absolute bottom-0 right-0 rounded-full bg-violet-600 px-1 text-[8px] font-black text-white">
+                  <span className="absolute bottom-0 right-0 rounded-full bg-violet-soft border border-violet/40 px-1 text-[8px] font-bold text-violet">
                     {winner.position ? `P${winner.position}` : "POLE"}
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-black text-white">{winner.name}</p>
+                  <p className="truncate text-xs font-bold text-ink">{winner.name}</p>
                   <p className="text-[10px]">
                     {winner.photoUrl ? (
-                      <span className="text-emerald-400 font-medium">✓ Foto oficial vinculada</span>
+                      <span className="text-ok font-medium">✓ Foto oficial vinculada</span>
                     ) : (
-                      <span className="text-amber-400 font-medium">⚠️ Sin foto asignada</span>
+                      <span className="text-warn font-medium">⚠️ Sin foto asignada</span>
                     )}
                   </p>
                   {winner.photoUrl && (
@@ -347,7 +353,7 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
                       <button
                         type="button"
                         onClick={() => copyImageBlob(winner.photoUrl!, winner.name)}
-                        className="inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-white/20 transition-colors"
+                        className="inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 text-[9px] font-bold text-ink hover:bg-surface-3 transition-colors"
                         title={`Copiar foto de ${winner.name} al portapapeles`}
                       >
                         <Copy className="h-2.5 w-2.5" /> Copiar foto
@@ -355,7 +361,7 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
                       <a
                         href={winner.photoUrl}
                         download={`foto-${winner.name.toLowerCase().replace(/\s+/g, "_")}.jpg`}
-                        className="inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-white/70 hover:bg-white/20 transition-colors"
+                        className="inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 text-[9px] font-bold text-ink-2 hover:bg-surface-3 transition-colors"
                         title={`Descargar foto de ${winner.name}`}
                       >
                         <Download className="h-2.5 w-2.5" /> Descargar
@@ -372,17 +378,17 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
           <button
             type="button"
             onClick={copyFullPack}
-            className="flex min-h-10 items-center gap-1.5 rounded-sm border border-emerald-500/40 bg-emerald-950/70 px-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70 transition-colors shadow-sm"
+            className="flex min-h-10 items-center gap-1.5 rounded-sm border border-ok/40 bg-ok-soft px-3 text-xs font-bold text-ok hover:bg-ok-soft transition-colors shadow-sm"
             title="Copia el prompt y las imágenes de los pilotos juntas para pegarlos en Gemini o ChatGPT"
           >
-            {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+            {copied ? <Check className="h-4 w-4 text-ok" /> : <Copy className="h-4 w-4" />}
             {copied ? "¡Pack copiado!" : "Copiar Pack (Prompt + Fotos)"}
           </button>
 
           <button
             type="button"
             onClick={copyPrompt}
-            className="flex min-h-10 items-center gap-1.5 rounded-sm border border-violet-400/40 bg-violet-950/60 px-3 text-xs font-bold text-violet-200 hover:bg-violet-900/60 transition-colors"
+            className="flex min-h-10 items-center gap-1.5 rounded-sm border border-violet/40 bg-violet-soft px-3 text-xs font-bold text-violet hover:bg-violet-soft transition-colors"
             title="Copia solo el texto del prompt"
           >
             <Copy className="h-4 w-4" />
@@ -391,10 +397,10 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
 
           <label
             htmlFor={fileInputId}
-            className="flex min-h-10 cursor-pointer items-center gap-1.5 rounded-sm border border-white/20 bg-white/5 px-3 text-xs font-bold text-white hover:bg-white/10 transition-colors"
+            className="flex min-h-10 cursor-pointer items-center gap-1.5 rounded-sm border border-line bg-surface-3 px-3 text-xs font-bold text-ink hover:bg-surface-3 transition-colors"
             title="Sube una imagen generada externamente o arrástrala al panel"
           >
-            <Upload className="h-4 w-4 text-white/70" />
+            <Upload className="h-4 w-4 text-ink-2" />
             Cargar imagen
             <input
               id={fileInputId}
@@ -407,61 +413,61 @@ Keep the scene dynamic, celebratory with spraying champagne bottles and golden c
         </div>
       </div>
 
-      <div className="mt-3 rounded border border-violet-500/30 bg-violet-950/30 p-2.5 text-[11px] text-violet-200">
-        <div className="flex items-center gap-1.5 font-bold text-violet-100">
+      <div className="mt-3 rounded border border-violet/40 bg-violet-soft p-2.5 text-[11px] text-violet">
+        <div className="flex items-center gap-1.5 font-bold text-violet">
           <span>⚡ Flujo Copiar & Pegar (Sin límites de API):</span>
         </div>
-        <ol className="mt-1 list-decimal list-inside space-y-1 text-white/80 text-[10px]">
+        <ol className="mt-1 list-decimal list-inside space-y-1 text-ink text-[10px]">
           <li>Pulsa <b>«Copiar Pack (Prompt + Fotos)»</b> (o usa <b>«Copiar foto»</b> en cada piloto de arriba).</li>
-          <li>Pégalos (<kbd className="px-1 py-0.5 bg-black/40 border border-white/20 rounded font-mono">Ctrl+V</kbd>) en <a href="https://gemini.google.com" target="_blank" rel="noreferrer" className="underline font-bold text-violet-300 hover:text-violet-100">Gemini Web</a> o ChatGPT.</li>
-          <li>Copia la imagen generada, haz clic en este recuadro y pulsa <kbd className="px-1 py-0.5 bg-black/40 border border-white/20 rounded font-mono">Ctrl+V</kbd> (o arrástrala aquí).</li>
+          <li>Pégalos (<kbd className="px-1 py-0.5 bg-surface-2 border border-line rounded font-mono">Ctrl+V</kbd>) en <a href="https://gemini.google.com" target="_blank" rel="noreferrer" className="underline font-bold text-violet hover:text-violet">Gemini Web</a> o ChatGPT.</li>
+          <li>Copia la imagen generada, haz clic en este recuadro y pulsa <kbd className="px-1 py-0.5 bg-surface-2 border border-line rounded font-mono">Ctrl+V</kbd> (o arrástrala aquí).</li>
           <li>Comprueba la vista previa y dale a <b>«Subir al Paddock Social»</b>.</li>
         </ol>
       </div>
 
-      <label className="mt-3 block text-[10px] font-bold uppercase tracking-wide text-white/50">
+      <label className="mt-3 block text-[10px] font-bold uppercase tracking-wide text-ink-2">
         Dirección creativa opcional
         <textarea
           value={creativeDirection}
           maxLength={500}
           onChange={(event) => setCreativeDirection(event.target.value)}
           placeholder={cardMode === "podium" ? "Ej.: celebración nocturna bajo confeti" : "Ej.: estilo carrera sprint nocturna"}
-          className="mt-1 min-h-14 w-full resize-y rounded-sm border border-white/10 bg-black/20 p-2 text-xs normal-case tracking-normal text-white outline-none focus:border-violet-400"
+          className="mt-1 min-h-14 w-full resize-y rounded-sm border border-line bg-surface-2 p-2 text-xs normal-case tracking-normal text-ink outline-none focus:border-violet/40"
         />
       </label>
 
       {/* Vista previa desplegable del prompt */}
-      <details className="mt-2 rounded-sm border border-white/10 bg-black/20 p-2 text-xs">
-        <summary className="cursor-pointer text-[11px] font-bold text-violet-300 hover:text-violet-200">
+      <details className="mt-2 rounded-sm border border-line bg-surface-2 p-2 text-xs">
+        <summary className="cursor-pointer text-[11px] font-bold text-violet hover:text-violet">
           Ver texto del Prompt ({cardMode === "podium" ? "Podio 16:9" : cardMode === "winner" ? "Cartel Ganador" : "Cartel Pole"})
         </summary>
-        <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-[10px] text-white/70 bg-black/40 p-2 rounded">
+        <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-[10px] text-ink-2 bg-surface-2 p-2 rounded">
           {buildPromptText()}
         </pre>
       </details>
 
-      {message && <p role="status" className="mt-2 text-xs text-violet-200">{message}</p>}
+      {message && <p role="status" className="mt-2 text-xs text-violet">{message}</p>}
 
       {imageUrl && (
         <div className="mt-3 space-y-2">
           <img
             src={imageUrl}
             alt={`Borrador de imagen de ${raceName}`}
-            className="max-h-[520px] w-full rounded-sm border border-white/10 object-contain bg-black/40"
+            className="max-h-[520px] w-full rounded-sm border border-line object-contain bg-surface-2"
           />
           <div className="flex flex-wrap items-center gap-2">
             <a
               href={imageUrl}
               download={`bugambra-${splitName}-${raceName}-${cardMode}.${imageExtension}`}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-white/20 px-3 text-xs font-bold text-white hover:bg-white/10"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-line px-3 text-xs font-bold text-ink hover:bg-surface-3"
             >
               <Download className="h-3.5 w-3.5" /> Descargar imagen
             </a>
-            <button
+            <button aria-busy={pendingOnce || undefined}
               type="button"
               onClick={publishToPaddock}
-              disabled={publishing}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+              disabled={(publishing) || pendingOnce}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-ok-soft border border-ok/40 px-3 text-xs font-bold text-ok hover:bg-ok-soft/20 disabled:opacity-50"
             >
               {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SendHorizontal className="h-3.5 w-3.5" />}
               {publishing ? "Publicando en el Paddock…" : "Subir al Paddock Social"}

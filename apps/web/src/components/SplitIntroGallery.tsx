@@ -28,20 +28,20 @@ export function SplitIntroGallery({ splits }: { splits: any[] }) {
       <div className="rail-title mb-4">Tráilers de las temporadas</div>
 
       {activo && (
-        <div className="m-card m-expand mb-4 border border-[#0a0a0a]/[0.08] dark:border-white/[0.08]">
-          <div className="flex items-center justify-between gap-3 border-b border-[#0a0a0a]/[0.08] px-4 py-2.5 dark:border-white/[0.08]">
-            <span className="truncate text-[13px] font-black uppercase tracking-tight">
+        <div className="m-card m-expand mb-4 border border-line">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
+            <span className="truncate text-[13px] font-bold uppercase tracking-tight">
               Intro · {activo.split.nombre}
             </span>
             <button
               onClick={() => setAbierto("")}
               aria-label="Cerrar vídeo"
-              className="-mr-2 grid h-10 w-10 shrink-0 place-items-center text-[#0a0a0a]/40 hover:text-[#0a0a0a] dark:text-white/40 dark:hover:text-white"
+              className="-mr-2 grid h-10 w-10 shrink-0 place-items-center text-surface-2 hover:text-ink"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="aspect-video w-full bg-black">
+          <div className="aspect-video w-full bg-surface">
             <iframe
               className="h-full w-full"
               src={getYoutubeEmbedUrl(activo.url)}
@@ -64,11 +64,11 @@ export function SplitIntroGallery({ splits }: { splits: any[] }) {
               aria-pressed={activa}
               className={`m-card group relative overflow-hidden border text-left transition-all active:scale-[0.99] ${
                 activa
-                  ? "border-[#e10600]"
-                  : "border-[#0a0a0a]/[0.08] hover:border-[#e10600]/50 dark:border-white/[0.08]"
+                  ? "border-brand"
+                  : "border-line hover:border-brand/50"
               }`}
             >
-              <div className="relative aspect-video w-full bg-black">
+              <div className="relative aspect-video w-full bg-surface">
                 {miniatura && (
                   <img
                     src={miniatura}
@@ -78,7 +78,7 @@ export function SplitIntroGallery({ splits }: { splits: any[] }) {
                   />
                 )}
                 <span className="absolute inset-0 grid place-items-center">
-                  <span className="grid h-11 w-11 place-items-center rounded-full bg-[#e10600] text-white shadow-lg">
+                  <span className="grid h-11 w-11 place-items-center rounded-full bg-brand text-brand-ink shadow-lg">
                     <Play className="h-5 w-5 fill-current" />
                   </span>
                 </span>
