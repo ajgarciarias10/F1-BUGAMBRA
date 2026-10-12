@@ -1,0 +1,42 @@
+[
+  {
+    "originalURL": "https://f1-bugambra.luckyape32.chatgpt.site/admin.css",
+    "savedAs": "assets/0000_admin.css",
+    "contentType": "text/css"
+  },
+  {
+    "originalURL": "https://f1-bugambra.luckyape32.chatgpt.site/light.css",
+    "savedAs": "assets/0001_light.css",
+    "contentType": "text/css"
+  },
+  {
+    "originalURL": "https://f1-bugambra.luckyape32.chatgpt.site/theme.css",
+    "savedAs": "assets/0002_theme.css",
+    "contentType": "text/css"
+  },
+  {
+    "originalURL": "https://f1-bugambra.luckyape32.chatgpt.site/admin.js",
+    "savedAs": "assets/0003_admin.js",
+    "contentType": "text/javascript"
+  },
+  {
+    "originalURL": "https://f1-bugambra.luckyape32.chatgpt.site/theme.js",
+    "savedAs": "assets/0004_theme.js",
+    "contentType": "text/javascript"
+  },
+  {
+    "originalURL": "https://f1-bugambra.luckyape32.chatgpt.site/assets/bugambra-logo.png",
+    "savedAs": "assets/0005_bugambra-logo.png",
+    "contentType": "image/png"
+  },
+  {
+    "originalURL": "https://f1-bugambra.luckyape32.chatgpt.site/_sites/dispatch-assets/sites-widget.js",
+    "savedAs": "assets/0006_sites-widget.js",
+    "contentType": "text/javascript"
+  },
+  {
+    "originalURL": "https://f1-bugambra.luckyape32.chatgpt.site/_sites/dispatch-assets/app-openai.svg",
+    "savedAs": "assets/0007_app-openai.svg",
+    "contentType": "image/svg+xml"
+  }
+]
