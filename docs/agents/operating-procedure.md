@@ -40,7 +40,7 @@ The only executable procedure: the steps, in order, from starting a ticket to cl
 
 ## 4. Integration (owner only)
 
-The coordinator reviews the pushed branch, checks it touched only owned files and that checks are green, then walks the owner through the merge in plain words, one step at a time. The owner merges and deploys. After the merge reaches `origin`, the branch is deleted locally and on GitHub in the same turn.
+The coordinator reviews the pushed branch, runs the ownership guard (`node tool/agent-guard.mjs --branch <branch> --base <base>`; exit 0 means nobody left their files, 1 means someone did, 2 means there is no reliable base) and checks that tests are green. CI runs the same guard on every branch push and PR (`.github/workflows/agent-guard.yml`); tickets are read from the base ref, so a branch cannot widen its own scope. The coordinator then walks the owner through the merge in plain words, one step at a time. The owner merges and deploys. After the merge reaches `origin`, the branch is deleted locally and on GitHub in the same turn.
 
 ## 5. When something goes wrong
 

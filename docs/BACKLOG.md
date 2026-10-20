@@ -6,7 +6,9 @@ What is open right now. Details per feature go in `docs/trabajo/<slug>/`. Remove
 
 - [ ] 01 Design prototype with Review mode (Codex, in progress): `docs/redesign/prototype/`
 - [ ] 02 Owner review of the prototype using Review mode, then decide what to keep
-- [ ] 03 Apply the approved design to the React app (blocked on 02)
+- [ ] 03 Foundation: tokens, primitives, shell (Codex mid-tier; blocked on 02; merges first)
+- [ ] 04 User and public screens (Claude; blocked on 03)
+- [ ] 05 Admin screens (Claude, economy paths untouched; blocked on 03)
 - [ ] Decide fate of `GuestDashboard.tsx` and `AestheticLogin.tsx` (no references found outside their own files)
 - [ ] Vercel does not build `feature/stitch-redesign` automatically; check Settings > Git (ignored build step, branch filter, connection)
 
