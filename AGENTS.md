@@ -1,3 +1,34 @@
+# Rules for any agent working in this repository
+
+Claude, Codex and any other tool read this same file. Read it fully before touching anything. The economy and data guardrails further down are unchanged and still apply to every task.
+
+## How we work
+
+1. **One branch per piece of work**, named for what it does (`feature/...`, `fix/...`, `docs/...`), never for who wrote it. Do not commit big changes on whatever branch you found checked out.
+2. **The ticket decides your scope.** Non-trivial work arrives as `docs/trabajo/<slug>/tickets/NN-<name>.md` (template: `docs/plantillas/ticket.md`). Touch only the files in its `Owned files:`. If you need something that is not written there, the ticket is incomplete: say so, do not improvise. Read-only investigations need no ticket.
+3. **One logical change, one commit, with its proof.** Nothing validated stays uncommitted, nothing is committed red, and a fix ships with a test that fails before it and passes after.
+4. **Push only your own branch.** Only the owner integrates (merges) anything into `main` or the integration branch. No agent merges, force-pushes someone else's work, or deploys.
+5. **No agent signatures.** Commit messages and PR descriptions carry no `Co-Authored-By`, no tool names, no "generated with". The author is the project owner.
+6. **Stop and ask before adding a dependency or technique that is not already in the repo.** "Only to try it" does not count.
+7. **Read the callee before writing a fallback.** Before any `try/catch`, `||`, `??` or default that rescues a main path, read the body of that path and find what it really treats as failure.
+8. **Presentation work never changes behaviour.** A redesign must not alter calculations, Firestore writes, transactions, permissions, routes or auth. Keep the single-flight guards and audited writes intact on every action.
+9. **Prototype before implementation for large visual changes.** Review a static prototype first (`docs/redesign/prototype/`), then implement only what the owner approved.
+10. **Retire what is discarded in the same turn**: the doc section, the branch, the unused file. History stays in git; no current document may keep presenting discarded work as valid.
+11. **Cost discipline for agents.** The default model for delegated work is the mid-tier one; the top-tier model only with the owner's say-so (see `docs/agents/reparto-entre-agentes.md`). Do not re-read what you already know or start a task over after an interruption: continue it.
+
+## Where the rest lives
+
+| File | What it holds |
+|---|---|
+| `CLAUDE.md` | Project context: stack, layout, how to run and preview |
+| `docs/agents/operating-procedure.md` | The steps, in order, from pre-flight to closing a ticket |
+| `docs/agents/reparto-entre-agentes.md` | Which kind of work goes to which agent and model; who integrates |
+| `docs/plantillas/ticket.md` | The ticket template |
+| `docs/BACKLOG.md` | What is open right now |
+| `docs/adr/` | Decisions already taken; do not revive them without a new reason |
+
+If any of those contradicts this file, this file wins.
+
 # Repository guardrails
 
 ## Economy and transfer corrections
