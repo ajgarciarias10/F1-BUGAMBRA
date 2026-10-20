@@ -597,7 +597,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                     width: `${porcentaje}%`,
                     transition: "width 120ms linear",
                     ...(agonia ? {
-                      backgroundImage: "linear-gradient(90deg,#e10600,#ff6a00,#e10600)",
+                      backgroundImage: "linear-gradient(90deg,var(--c-brand),var(--c-warn),var(--c-brand))",
                       backgroundSize: "200% 100%",
                       animation: "subasta-barrido 0.8s linear infinite",
                     } : {}),
@@ -682,7 +682,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
       {/* ── Panel de puja ── */}
       {panelAbierto && miEquipo && enAtril && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-0 sm:items-center sm:p-4"
           style={{ animation: "subasta-velo 0.2s ease-out" }}
           onClick={() => setPanelAbierto(false)}>
           <div onClick={e => e.stopPropagation()}

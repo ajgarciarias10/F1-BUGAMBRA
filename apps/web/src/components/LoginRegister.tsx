@@ -17,6 +17,9 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { authFeedback } from "../utils/authFeedback";
 import { useSingleFlight } from "../hooks/useSingleFlight";
+import { Button, Card, Notice, buttonClass } from "./ui";
+
+const FIELD_CLASS = "min-h-12 w-full rounded-lg border border-line-strong bg-surface/90 px-3.5 text-base text-ink shadow-fluent-1 transition-colors placeholder:text-ink-muted/80 hover:border-info/60 focus:border-info focus-visible:outline-2 focus-visible:outline-offset-2 read-only:opacity-70 md:text-sm";
 
 interface PendingGoogleLink {
   credential: AuthCredential;
@@ -222,15 +225,15 @@ export function LoginRegister() {
   return (
     <div className="min-h-[100dvh] bg-bg flex font-sans text-ink">
       {/* Left — Editorial */}
-      <div className="hidden lg:flex w-1/2 flex-col justify-between p-16 border-r border-line">
-        <Link to="/" className="flex items-center gap-3 group">
-          <span className="w-0.5 h-7 bg-brand" />
+      <div className="relative hidden w-1/2 flex-col justify-between border-r border-line bg-surface-2/50 bg-[image:var(--grad-info)] p-16 lg:flex">
+        <Link to="/" className="flex min-h-11 items-center gap-3 self-start rounded-lg">
+          <span aria-hidden="true" className="h-7 w-1 rounded-full bg-brand" />
           <span className="text-ink font-extrabold tracking-tight text-lg">F1 Bugambra</span>
         </Link>
 
         <div>
           <p className="text-xs font-bold tracking-[0.14em] text-ink-muted uppercase mb-6">Liga Virtual · Temporada Activa</p>
-          <h1 className="text-6xl font-extrabold text-ink leading-none tracking-tight">
+          <h1 className="text-6xl font-semibold leading-[1.05] tracking-tight text-ink">
             El Paddock<br />
             <span className="text-brand">te espera.</span>
           </h1>
@@ -241,7 +244,7 @@ export function LoginRegister() {
 
         <div className="flex items-center gap-6 text-xs text-ink-muted">
           <span>F1 Bugambra</span>
-          <span className="w-px h-3 bg-surface-3" />
+          <span aria-hidden="true" className="h-3 w-px bg-line-strong" />
           <span>Liga Privada</span>
         </div>
       </div>
@@ -250,18 +253,18 @@ export function LoginRegister() {
       <div className="safe-top safe-bottom flex flex-1 flex-col items-center justify-center px-5 py-8 lg:p-16">
         {/* Mobile logo */}
         <div className="mb-8 flex items-center gap-2 lg:mb-12 lg:hidden">
-          <span className="w-0.5 h-6 bg-brand" />
+          <span aria-hidden="true" className="h-6 w-1 rounded-full bg-brand" />
           <span className="text-ink font-extrabold tracking-tight">F1 Bugambra</span>
         </div>
 
-        <div className="w-full max-w-sm">
+        <Card as="section" aria-label="Acceso a F1 Bugambra" pad="lg" className="w-full max-w-md">
           {/* Tab toggle */}
           <div className="mb-8 grid grid-cols-2 border-b border-line lg:mb-10 lg:flex">
             <button
               onClick={() => changeMode(true)}
               disabled={loading}
               aria-pressed={isLogin}
-              className={`-mb-px min-h-12 border-b-2 px-2 text-sm font-bold transition-colors lg:mr-6 ${isLogin ? "border-brand text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
+              className={`-mb-px min-h-12 rounded-t-lg border-b-2 px-3 text-sm font-semibold transition-colors lg:mr-4 ${isLogin ? "border-brand text-ink" : "border-transparent text-ink-muted hover:bg-info/10 hover:text-ink"}`}
             >
               Acceder
             </button>
@@ -269,33 +272,29 @@ export function LoginRegister() {
               onClick={() => changeMode(false)}
               disabled={loading}
               aria-pressed={!isLogin}
-              className={`-mb-px min-h-12 border-b-2 px-2 text-sm font-bold transition-colors ${!isLogin ? "border-brand text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
+              className={`-mb-px min-h-12 rounded-t-lg border-b-2 px-3 text-sm font-semibold transition-colors ${!isLogin ? "border-brand text-ink" : "border-transparent text-ink-muted hover:bg-info/10 hover:text-ink"}`}
             >
               Registrarse
             </button>
           </div>
 
           {success && (
-            <div role="status" className="mb-6 rounded-lg border border-ok/40 bg-ok-soft p-4 text-sm text-ok">
-              {success}
-            </div>
+            <Notice tone="ok" className="mb-6">{success}</Notice>
           )}
           {error && (
-            <div role="alert" className="mb-6 rounded-lg border border-danger/40 bg-danger-soft p-4 text-sm text-danger">
-              {error}
-            </div>
+            <Notice tone="danger" className="mb-6">{error}</Notice>
           )}
 
           <button
             type="button"
             onClick={handleGoogleAuth}
             disabled={loading}
-            className="flex min-h-12 w-full items-center justify-center gap-3 rounded-lg border border-line-strong bg-surface text-sm font-semibold text-ink transition-colors hover:bg-surface-3 disabled:opacity-40"
+            className={buttonClass({ block: true }) + " min-h-12 gap-3"}
           >
             {operation === "google" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" />
             ) : (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[12px] font-black normal-case text-info">G</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full border border-line bg-surface text-[12px] font-bold normal-case text-info">G</span>
             )}
             {operation === "google" ? "Conectando con Google…" : "Continuar con Google"}
           </button>
@@ -318,7 +317,7 @@ export function LoginRegister() {
                 readOnly={loading}
                 required
                 type="email"
-                className="min-h-12 w-full rounded-lg border border-line-strong bg-surface px-3 text-ink transition-colors placeholder:text-ink-muted focus:border-brand focus:outline-none"
+                className={FIELD_CLASS}
                 placeholder="correo@ejemplo.com"
                 value={email}
                 onChange={e => {
@@ -339,13 +338,13 @@ export function LoginRegister() {
                 aria-describedby={!isLogin ? "password-help" : undefined}
                 readOnly={loading}
                 type={showPassword ? "text" : "password"}
-                className="min-h-12 w-full rounded-lg border border-line-strong bg-surface px-3 text-ink transition-colors placeholder:text-ink-muted focus:border-brand focus:outline-none"
+                className={FIELD_CLASS}
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
               />
               {!isLogin && <p id="password-help" className="mt-2 text-sm text-ink-2">Usa al menos 6 caracteres. Una contraseña larga protege mejor tu cuenta.</p>}
-              <button type="button" onClick={() => setShowPassword(value => !value)} aria-pressed={showPassword} className="mt-2 min-h-11 text-sm text-ink-2 underline underline-offset-4">
+              <button type="button" onClick={() => setShowPassword(value => !value)} aria-pressed={showPassword} className="mr-4 mt-1 inline-flex min-h-11 items-center rounded-md text-sm text-ink-2 underline underline-offset-4 hover:text-ink">
                 {showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
               </button>
               {isLogin && (
@@ -353,7 +352,7 @@ export function LoginRegister() {
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={loading}
-                  className="mt-2 min-h-11 text-sm text-ink-muted transition-colors hover:text-brand"
+                  className="mt-1 inline-flex min-h-11 items-center rounded-md text-sm text-ink-muted transition-colors hover:text-brand disabled:opacity-50"
                 >
                   {operation === "reset" ? "Enviando recuperación…" : "¿Olvidaste tu contraseña?"}
                 </button>
@@ -371,7 +370,7 @@ export function LoginRegister() {
                   readOnly={loading}
                   required
                   type={showPassword ? "text" : "password"}
-                  className="min-h-12 w-full rounded-lg border border-line-strong bg-surface px-3 text-ink transition-colors placeholder:text-ink-muted focus:border-brand focus:outline-none"
+                  className={FIELD_CLASS}
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
@@ -379,24 +378,26 @@ export function LoginRegister() {
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
+              variant="primary"
+              block
               disabled={loading}
-              className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-brand text-sm font-bold text-brand-ink transition-colors hover:bg-brand-hover disabled:opacity-50"
+              className="mt-4 min-h-12"
             >
-              {operation === "email" ? <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> {isLogin ? "Accediendo…" : "Creando cuenta…"}</> : pendingGoogleLink && isLogin ? "Entrar y vincular Google" : (isLogin ? "Entrar" : "Crear cuenta")}
-            </button>
+              {operation === "email" ? <><Loader2 aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" /> {isLogin ? "Accediendo…" : "Creando cuenta…"}</> : pendingGoogleLink && isLogin ? "Entrar y vincular Google" : (isLogin ? "Entrar" : "Crear cuenta")}
+            </Button>
           </form>
 
           <div className="mt-8 pt-8 border-t border-line">
             <Link
               to="/"
-              className="flex min-h-12 items-center justify-center text-center text-sm text-ink-muted transition-colors hover:text-ink"
+              className="flex min-h-12 items-center justify-center rounded-lg text-center text-sm text-ink-muted transition-colors hover:text-ink"
             >
               ← Ver clasificación pública
             </Link>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

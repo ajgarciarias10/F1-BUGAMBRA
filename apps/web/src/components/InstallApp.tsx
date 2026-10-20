@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router";
 import { ArrowLeft, Check, Download, Share, PlusSquare, MoreVertical, Smartphone, WifiOff, Zap, Bell } from "lucide-react";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 import { usePageBackground } from "../hooks/usePageBackground";
+import { Button, Card, Notice, buttonClass } from "./ui";
 
 const DISMISS_KEY = "f1-install-banner-dismissed";
 
@@ -37,24 +38,21 @@ export function InstallBanner() {
 
   return (
     <div className="fixed inset-x-0 bottom-[calc(var(--tabbar-height,0px)+0.75rem)] z-[60] px-3 pointer-events-none">
-      <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-3 border border-line-strong bg-surface p-3 shadow-card backdrop-blur-xl">
-        <img src="/icons/icon-192.png" alt="" className="h-11 w-11 shrink-0" />
+      <div role="region" aria-label="Instalar la app" className="acrylic pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-card p-3">
+        <img src="/icons/icon-192.png" alt="" className="h-11 w-11 shrink-0 rounded-lg" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black uppercase leading-tight tracking-tight text-ink">Instala F1 Bugambra</p>
-          <p className="text-[11px] leading-snug text-ink-muted">Gratis, sin tienda de apps y en tu pantalla de inicio.</p>
+          <p className="text-sm font-semibold leading-tight text-ink">Instala F1 Bugambra</p>
+          <p className="text-xs leading-snug text-ink-muted">Gratis, sin tienda de apps y en tu pantalla de inicio.</p>
         </div>
         {canInstall ? (
-          <button
-            onClick={() => { void install(); dismiss(); }}
-            className="min-h-11 shrink-0 bg-brand px-4 text-[11px] font-black uppercase tracking-[0.12em] text-brand-ink active:scale-95"
-          >
+          <Button variant="primary" size="sm" onClick={() => { void install(); dismiss(); }} className="shrink-0">
             Instalar
-          </button>
+          </Button>
         ) : (
           <Link
             to="/instalar"
             onClick={dismiss}
-            className="grid min-h-11 shrink-0 place-items-center bg-ink px-4 text-[11px] font-black uppercase tracking-[0.12em] text-surface active:scale-95"
+            className={buttonClass({ size: "sm" }) + " shrink-0"}
           >
             Cómo
           </Link>
@@ -62,7 +60,7 @@ export function InstallBanner() {
         <button
           onClick={dismiss}
           aria-label="Descartar"
-          className="grid min-h-11 w-9 shrink-0 place-items-center text-2xl leading-none text-ink-muted active:text-ink"
+          className="grid min-h-11 w-11 shrink-0 place-items-center rounded-lg text-2xl leading-none text-ink-muted hover:bg-info/10 hover:text-ink"
         >
           ×
         </button>
@@ -79,21 +77,18 @@ export function InstallButton({ className = "" }: { className?: string }) {
 
   if (canInstall) {
     return (
-      <button
-        onClick={() => void install()}
-        className={`inline-flex min-h-11 items-center gap-2 bg-brand px-4 text-[11px] font-black uppercase tracking-[0.12em] text-brand-ink transition-colors hover:bg-brand ${className}`}
-      >
-        <Download className="h-4 w-4" /> Instalar app
-      </button>
+      <Button variant="primary" onClick={() => void install()} className={className}>
+        <Download aria-hidden="true" className="h-4 w-4" /> Instalar app
+      </Button>
     );
   }
 
   return (
     <Link
       to="/instalar"
-      className={`inline-flex min-h-11 items-center gap-2 border border-current/25 px-4 text-[11px] font-black uppercase tracking-[0.12em] transition-colors hover:border-current/60 ${className}`}
+      className={`inline-flex min-h-11 items-center gap-2 rounded-lg border border-current/30 px-4 text-sm font-semibold fluent-press hover:border-current/60 hover:bg-info/10 ${className}`}
     >
-      <Smartphone className="h-4 w-4" /> Instalar app
+      <Smartphone aria-hidden="true" className="h-4 w-4" /> Instalar app
     </Link>
   );
 }
@@ -114,33 +109,31 @@ const IOS_STEPS = [
 
 export function InstallApp() {
   const { canInstall, installed, platform, install } = usePWAInstall();
-  usePageBackground("#0a0a0a");
+  usePageBackground("var(--c-bg)");
   const [tab, setTab] = useState<"android" | "ios">(platform === "ios" ? "ios" : "android");
   const steps = tab === "ios" ? IOS_STEPS : ANDROID_STEPS;
 
   return (
     <div className="min-h-[100dvh] bg-bg font-sans text-ink">
-      <header className="safe-top sticky top-0 z-20 flex min-h-14 items-center gap-3 border-b border-line bg-bg px-4 backdrop-blur-xl">
-        <Link to="/" aria-label="Volver" className="-ml-2 grid h-11 w-11 place-items-center text-ink-muted active:text-ink">
+      <header className="safe-top sticky top-0 z-20 flex min-h-14 items-center gap-3 acrylic-bar border-b px-4">
+        <Link to="/" aria-label="Volver" className="-ml-2 grid h-11 w-11 place-items-center rounded-lg text-ink-muted hover:bg-info/10 hover:text-ink">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <span className="h-5 w-0.5 bg-brand" />
-        <span className="text-sm font-black uppercase tracking-[0.08em]">Instalar la app</span>
+        <span aria-hidden="true" className="h-5 w-1 rounded-full bg-brand" />
+        <span className="text-sm font-semibold">Instalar la app</span>
       </header>
 
       <main className="safe-bottom mx-auto max-w-2xl px-4 py-8">
         <div className="flex items-center gap-4">
-          <img src="/icons/icon-192.png" alt="" className="h-20 w-20 shrink-0 border border-line" />
+          <img src="/icons/icon-192.png" alt="" className="h-20 w-20 shrink-0 rounded-2xl border border-line shadow-fluent-2" />
           <div className="min-w-0">
-            <h1 className="text-3xl font-black uppercase leading-[0.9] tracking-[-0.04em]">F1 Bugambra</h1>
-            <p className="mt-1 text-xs uppercase tracking-[0.08em] text-ink-muted">App gratuita · sin tienda</p>
+            <h1 className="text-3xl font-semibold leading-tight tracking-tight">F1 Bugambra</h1>
+            <p className="mt-1 text-sm text-ink-muted">App gratuita · sin tienda</p>
           </div>
         </div>
 
         {installed ? (
-          <p className="mt-8 flex items-center gap-2 border border-ok/30 bg-ok/10 p-4 text-sm font-bold text-ok">
-            <Check className="h-5 w-5 shrink-0" /> Ya estás usando la app instalada.
-          </p>
+          <Notice tone="ok" className="mt-8">Ya estás usando la app instalada.</Notice>
         ) : (
           <>
             <p className="mt-6 text-sm leading-relaxed text-ink-muted">
@@ -149,22 +142,20 @@ export function InstallApp() {
             </p>
 
             {canInstall && (
-              <button
-                onClick={() => void install()}
-                className="mt-6 flex min-h-14 w-full items-center justify-center gap-3 bg-brand text-sm font-black uppercase tracking-[0.08em] text-brand-ink transition-colors hover:bg-brand active:scale-[0.98]"
-              >
-                <Download className="h-5 w-5" /> Instalar ahora
-              </button>
+              <Button variant="primary" block onClick={() => void install()} className="mt-6 min-h-14 text-base">
+                <Download aria-hidden="true" className="h-5 w-5" /> Instalar ahora
+              </Button>
             )}
 
             <div className="mt-8">
-              <div className="flex border border-line">
+              <div role="group" aria-label="Plataforma" className="flex gap-1 rounded-lg border border-line bg-surface-2/70 p-1">
                 {(["android", "ios"] as const).map(value => (
                   <button
                     key={value}
                     onClick={() => setTab(value)}
-                    className={`min-h-12 flex-1 text-[11px] font-black uppercase tracking-[0.08em] transition-colors ${
-                      tab === value ? "bg-ink text-surface" : "text-ink-muted active:text-ink"
+                    aria-pressed={tab === value}
+                    className={`min-h-11 flex-1 rounded-md text-sm font-semibold transition-colors ${
+                      tab === value ? "bg-surface text-ink shadow-fluent-1" : "text-ink-muted hover:bg-info/10 hover:text-ink"
                     }`}
                   >
                     {value === "android" ? "Android" : "iPhone / iPad"}
@@ -172,43 +163,43 @@ export function InstallApp() {
                 ))}
               </div>
 
-              <ol className="mt-4 space-y-px bg-surface-2">
+              <ol className="mt-4 space-y-3">
                 {steps.map((step, index) => (
-                  <li key={step.title} className="flex gap-4 bg-surface p-4">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center bg-brand/15 text-brand">
-                      <step.icon className="h-5 w-5" />
+                  <Card as="li" key={step.title} tone="solid" pad="sm" className="flex gap-4">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
+                      <step.icon aria-hidden="true" className="h-5 w-5" />
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-black uppercase tracking-tight">
-                        <span className="mr-2 font-mono text-brand">{String(index + 1).padStart(2, "0")}</span>
+                      <p className="text-sm font-semibold text-ink">
+                        <span className="mr-2 text-brand">{String(index + 1).padStart(2, "0")}</span>
                         {step.title}
                       </p>
-                      <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{step.body}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-ink-muted">{step.body}</p>
                     </div>
-                  </li>
+                  </Card>
                 ))}
               </ol>
             </div>
           </>
         )}
 
-        <div className="mt-10 grid gap-px bg-surface-2 sm:grid-cols-3">
+        <div className="mt-10 grid gap-3 sm:grid-cols-3">
           {[
             { icon: Zap, title: "Arranque instantáneo", body: "Se abre a pantalla completa, sin barra del navegador." },
             { icon: WifiOff, title: "Aguanta sin cobertura", body: "La última pantalla vista sigue disponible sin conexión." },
             { icon: Bell, title: "Siempre al día", body: "Se actualiza sola cada vez que la abres con datos." },
           ].map(feature => (
-            <div key={feature.title} className="bg-surface p-4">
-              <feature.icon className="h-5 w-5 text-brand" />
-              <p className="mt-3 text-xs font-black uppercase tracking-tight">{feature.title}</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">{feature.body}</p>
-            </div>
+            <Card key={feature.title} tone="muted" pad="sm">
+              <feature.icon aria-hidden="true" className="h-5 w-5 text-info" />
+              <p className="mt-3 text-sm font-semibold text-ink">{feature.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted">{feature.body}</p>
+            </Card>
           ))}
         </div>
 
         <Link
           to="/"
-          className="mt-8 flex min-h-12 items-center justify-center border border-line-strong text-[11px] font-black uppercase tracking-[0.08em] text-ink-muted active:text-ink"
+          className={buttonClass({ block: true }) + " mt-8"}
         >
           Volver a la liga
         </Link>

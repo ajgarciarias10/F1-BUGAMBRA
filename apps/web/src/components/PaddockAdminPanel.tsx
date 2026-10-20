@@ -87,7 +87,7 @@ export function PaddockAdminPanel({ splits }: { splits: any[] }) {
     </div>
     {!completa && <p className="text-xs text-warn">No se puede dar el OK: todavía falta completar algún equipo.</p>}
     {busy === "cargando" ? <Loader2 className="h-5 w-5 animate-spin text-ink-muted" /> : <div className="grid gap-3 md:grid-cols-2">{equipos.map(equipo => <article key={equipo.id} className="border border-line p-4">
-      <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-ink">{equipo.nombre}</h3><p className={`text-[10px] font-mono ${equipo.completa ? "text-ok" : "amber-300"}`}>{equipo.pilotos.length} pilotos · {equipo.completa ? "equipo confirmado" : "pendiente de confirmar"} · {equipo.publicada ? "publicada" : "pendiente"}</p></div><Image className="h-4 w-4 text-ink-muted" /></div>
+      <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-ink">{equipo.nombre}</h3><p className={`text-[10px] font-mono ${equipo.completa ? "text-ok" : "text-warn"}`}>{equipo.pilotos.length} pilotos · {equipo.completa ? "equipo confirmado" : "pendiente de confirmar"} · {equipo.publicada ? "publicada" : "pendiente"}</p></div><Image className="h-4 w-4 text-ink-muted" /></div>
       <p className="mt-2 text-xs text-ink-muted">{equipo.pilotos.map(pilot => pilot.nombre).join(" · ") || "Sin pilotos"}</p>
       <button aria-busy={pendingOnce || undefined} onClick={async () => {
     return runOnce(async () => { setBusy(equipo.id); try { await marcarEquipoCompleto(splitId, equipo.id, !equipo.completa); await load(); } catch (error: any) { setMessage(error.message); } finally { setBusy(""); } });

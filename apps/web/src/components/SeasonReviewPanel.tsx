@@ -7,6 +7,9 @@ import { auth } from "../services/auth";
 import { recalcSplitPoints } from "../services/raceProcessor";
 import { historicalResultPositions, requireHistoricalPriceDerivedValues, requireOpeningBudget, rivalryPayoutFromPositions } from "../utils/seasonReviewImport";
 import { useSingleFlight } from "../hooks/useSingleFlight";
+import { Button, Card, Notice } from "./ui";
+
+const INPUT = "min-h-11 rounded-lg border border-line-strong bg-surface/90 px-3 text-sm text-ink shadow-fluent-1 transition-colors hover:border-info/60 focus:border-info";
 
 type SheetCell = { formattedValue?: string; effectiveValue?: Record<string, unknown>; effectiveFormat?: { textFormat?: { bold?: boolean; foregroundColor?: { red?: number; green?: number; blue?: number }; foregroundColorStyle?: { rgbColor?: { red?: number; green?: number; blue?: number } } } } };
 type Sheet = { properties: { sheetId: number; title: string; gridProperties?: { rowCount?: number; columnCount?: number } }; data?: Array<{ rowData?: Array<{ values?: SheetCell[] }> }> };
@@ -740,50 +743,80 @@ export function SeasonReviewPanel({ splits }: { splits: any[] }) {
     });
   };
 
+  const seasonLabel = reviewSeasons.find(season => season.id === seasonId)?.label || seasonId;
+  const loadTarget = seasonId === "origins" ? "Origins" : seasonId === "split_1" ? "Split 1" : "Split 2";
   return (
     <section className="space-y-5">
-      <div className="border border-line bg-surface-2 p-5 rounded-sm">
-        <div className="flex items-start gap-3 mb-5">
-          <div className="p-2 bg-ok/10 text-ok"><FileSpreadsheet className="w-5 h-5" /></div>
-          <div><h2 className="font-black uppercase tracking-tight text-lg">Revisión de temporadas</h2><p className="text-xs text-ink-muted mt-1">Revisando exclusivamente: <strong className="text-ok">{reviewSeasons.find(season => season.id === seasonId)?.label || seasonId}</strong>. Sus rangos no se mezclan con ninguna otra temporada.</p></div>
+      <Card pad="md">
+        <div className="mb-5 flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-ok/30 bg-ok-soft text-ok"><FileSpreadsheet aria-hidden="true" className="h-5 w-5" /></div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Revisión de temporadas</h2>
+            <p className="mt-1 text-sm text-ink-muted">Revisando exclusivamente: <strong className="text-ink">{seasonLabel}</strong>. Sus rangos no se mezclan con ninguna otra temporada.</p>
+          </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[180px_1fr_auto] gap-3">
-          <select value={seasonId} onChange={event => setSeasonId(event.target.value)} className="bg-surface-3 border border-line px-3 py-2 text-xs text-ink">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[200px_1fr_auto]">
+          <select aria-label="Temporada a revisar" value={seasonId} onChange={event => setSeasonId(event.target.value)} className={INPUT}>
             <option value="origins">Origins</option>
             {reviewSeasons.slice(1).map(season => <option key={season.id} value={season.id}>{season.label}</option>)}
           </select>
-          <input value={url} onChange={event => setUrl(event.target.value)} className="bg-surface-3 border border-line px-3 py-2 text-xs text-ink" placeholder="Enlace de Google Sheets" />
-          <button onClick={loadSpreadsheet} disabled={busy} className="inline-flex items-center justify-center gap-2 bg-brand px-4 py-2 text-xs font-black uppercase tracking-wider disabled:opacity-50">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />} Conectar en lectura</button>
+          <input aria-label="Enlace de Google Sheets" value={url} onChange={event => setUrl(event.target.value)} className={INPUT} placeholder="Enlace de Google Sheets" />
+          <Button variant="primary" onClick={loadSpreadsheet} loading={busy}>{!busy && <ShieldCheck aria-hidden="true" className="h-4 w-4" />} Conectar en lectura</Button>
         </div>
-        {message && <p className={`mt-3 text-xs ${message.startsWith("Error") ? "text-danger" : "text-ok"}`}>{message}</p>}
-        {sheets.length > 0 && <button onClick={seasonId === "origins" ? importOrigins : importTeamSplit} disabled={importing} className="mt-4 inline-flex items-center gap-2 border border-warn/40 px-4 py-2 text-xs font-black uppercase tracking-wider text-warn disabled:opacity-50"><Save className="w-4 h-4" />{importing ? "Validando e importando..." : `Cargar ${seasonId === "origins" ? "Origins" : seasonId === "split_1" ? "Split 1" : "Split 2"} en Firestore`}</button>}
-      </div>
+        {message && <Notice tone={message.startsWith("Error") ? "danger" : "ok"} className="mt-4">{message}</Notice>}
+        {sheets.length > 0 && (
+          <Button onClick={seasonId === "origins" ? importOrigins : importTeamSplit} loading={importing} className="mt-4 border-warn/50 text-warn">
+            {!importing && <Save aria-hidden="true" className="h-4 w-4" />}{importing ? "Validando e importando…" : `Cargar ${loadTarget} en Firestore`}
+          </Button>
+        )}
+      </Card>
 
-      {sheets.length > 0 && <div className="border border-line bg-surface-2 rounded-sm overflow-hidden">
-        <div className="flex gap-1 overflow-x-auto p-2 border-b border-line bg-surface-3">{sheets.map(sheet => <button key={sheet.properties.sheetId} onClick={() => selectSheet(sheet)} className={`shrink-0 px-3 py-2 text-xs uppercase font-black ${activeSheetId === sheet.properties.sheetId ? "bg-ok text-brand-ink" : "text-ink-muted hover:bg-surface-2"}`}>{sheet.properties.title}</button>)}</div>
-        <div className="p-3 border-b border-line flex flex-wrap items-center gap-2">
-          <MousePointer2 className="w-4 h-4 text-ok" />
-          <span className="text-xs uppercase tracking-wider text-ink-muted">{seasonId === "origins" ? "Selecciona un rango para:" : "Selecciona uno o varios rangos para:"}</span>
-          <select value={field} onChange={event => setField(event.target.value as typeof field)} className="bg-surface-3 border border-line px-2 py-1.5 text-xs text-ink">{visibleFieldOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+      {sheets.length > 0 && <Card pad="none" tone="solid" className="overflow-hidden">
+        <div role="tablist" aria-label="Hojas del documento" className="hide-scrollbar flex gap-1 overflow-x-auto border-b border-line bg-surface-2/70 p-2">{sheets.map(sheet => <button key={sheet.properties.sheetId} role="tab" aria-selected={activeSheetId === sheet.properties.sheetId} onClick={() => selectSheet(sheet)} className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-semibold transition-colors ${activeSheetId === sheet.properties.sheetId ? "bg-surface text-ink shadow-fluent-1" : "text-ink-muted hover:bg-info/10 hover:text-ink"}`}>{sheet.properties.title}</button>)}</div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-line p-3">
+          <MousePointer2 aria-hidden="true" className="h-4 w-4 text-info" />
+          <span className="text-sm text-ink-muted">{seasonId === "origins" ? "Selecciona un rango para:" : "Selecciona uno o varios rangos para:"}</span>
+          <select aria-label="Campo a mapear" value={field} onChange={event => setField(event.target.value as typeof field)} className={`${INPUT} max-w-full`}>{visibleFieldOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input
+            aria-label="Rango de celdas"
             value={rangeInput}
             onChange={event => setRangeInput(event.target.value)}
             onBlur={applyRangeInput}
             onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); applyRangeInput(); } }}
             placeholder="A51:F53"
             spellCheck={false}
-            className="w-28 bg-surface-3 border border-ok/30 px-2 py-1.5 text-xs font-mono uppercase text-ok outline-none focus:border-ok"
+            className={`${INPUT} w-32 font-mono uppercase`}
             title="Escribe el rango y pulsa Enter, o arrástralo sobre la cuadrícula"
           />
-          <span className="text-xs text-ink-muted">{selectedRange ? `${selectedRange.bottom - selectedRange.top + 1}×${selectedRange.right - selectedRange.left + 1}` : "sin selección"}</span>
-          <button onClick={saveSelection} disabled={!selectedRange} className="ml-auto inline-flex items-center gap-1.5 border border-ok/30 text-ok px-3 py-1.5 text-xs uppercase font-black disabled:opacity-30"><Save className="w-3.5 h-3.5" /> Añadir selección</button>
+          <span className="text-sm tabular-nums text-ink-muted">{selectedRange ? `${selectedRange.bottom - selectedRange.top + 1}×${selectedRange.right - selectedRange.left + 1}` : "sin selección"}</span>
+          <Button size="sm" onClick={saveSelection} disabled={!selectedRange} className="ml-auto"><Save aria-hidden="true" className="h-3.5 w-3.5" /> Añadir selección</Button>
         </div>
-        <div className="overflow-auto max-h-[620px]" onMouseUp={() => setDragging(false)}>
-          <table className="border-collapse text-[11px] font-mono"><thead className="sticky top-0 z-10 bg-surface-2"><tr><th className="sticky left-0 z-20 min-w-12 border border-line bg-surface-2" />{(grid[0] || []).map(cell => <th key={cell.column} className="min-w-24 border border-line px-2 py-1 text-ink-muted">{columnName(cell.column)}</th>)}</tr></thead><tbody>{grid.map((row, rowIndex) => <tr key={rowIndex}><th className="sticky left-0 z-10 border border-line bg-surface-2 px-2 text-ink-muted">{rowIndex + 1}</th>{row.map(cell => { const selected = selectedRange && cell.row >= selectedRange.top && cell.row <= selectedRange.bottom && cell.column >= selectedRange.left && cell.column <= selectedRange.right; return <td key={cell.column} onMouseDown={() => { setDragging(true); setSelection({ start: cell, end: cell }); }} onMouseEnter={() => { if (dragging) setSelection(current => current ? { ...current, end: cell } : null); }} className={`border border-line px-2 py-1.5 whitespace-nowrap cursor-crosshair ${selected ? "bg-ok/30 text-ink ring-1 ring-inset ring-ok" : "text-ink-muted hover:bg-surface-2"}`}>{cell.value}</td>; })}</tr>)}</tbody></table>
+        <div className="max-h-[620px] overflow-auto" onMouseUp={() => setDragging(false)}>
+          <table className="border-collapse text-[11px] font-mono"><thead className="sticky top-0 z-10 bg-surface-2"><tr><th className="sticky left-0 z-20 min-w-12 border border-line bg-surface-2" />{(grid[0] || []).map(cell => <th key={cell.column} className="min-w-24 border border-line px-2 py-1 text-ink-muted">{columnName(cell.column)}</th>)}</tr></thead><tbody>{grid.map((row, rowIndex) => <tr key={rowIndex}><th className="sticky left-0 z-10 border border-line bg-surface-2 px-2 text-ink-muted">{rowIndex + 1}</th>{row.map(cell => { const selected = selectedRange && cell.row >= selectedRange.top && cell.row <= selectedRange.bottom && cell.column >= selectedRange.left && cell.column <= selectedRange.right; return <td key={cell.column} onMouseDown={() => { setDragging(true); setSelection({ start: cell, end: cell }); }} onMouseEnter={() => { if (dragging) setSelection(current => current ? { ...current, end: cell } : null); }} className={`cursor-crosshair whitespace-nowrap border border-line px-2 py-1.5 ${selected ? "bg-info/25 text-ink ring-1 ring-inset ring-info" : "text-ink-2 hover:bg-info/10"}`}>{cell.value}</td>; })}</tr>)}</tbody></table>
         </div>
-      </div>}
+      </Card>}
 
-      {mappingSeasonId === seasonId && Object.keys(mappings).length > 0 && <div className="border border-line p-4"><h3 className="text-xs font-black uppercase tracking-wider mb-3">Mapeo guardado de {reviewSeasons.find(season => season.id === seasonId)?.label || seasonId}</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-2">{Object.entries(mappings).map(([key, values]) => <div key={key} className="bg-surface-2 px-3 py-2 text-xs"><div className="flex items-center justify-between mb-1"><span className="text-ink-muted">{FIELD_OPTIONS.find(item => item[0] === key)?.[1]}</span><span className="text-ink-muted">{values.length} rango{values.length === 1 ? "" : "s"}</span></div><div className="space-y-1">{values.map((value, index) => <div key={`${value.sheetId}-${value.range}`} className="flex items-center justify-between gap-2"><span className="font-mono text-ok">{value.range} <Check className="inline w-3 h-3" /></span><span className="text-ink-muted font-mono truncate">{value.preview.join(" / ") || "Rango vacío"}</span><button onClick={() => removeMapping(key, index)} className="shrink-0 text-ink-muted hover:text-danger" title="Eliminar rango"><X className="w-3.5 h-3.5" /></button></div>)}</div></div>)}</div></div>}
+      {mappingSeasonId === seasonId && Object.keys(mappings).length > 0 && (
+        <Card pad="md" tone="solid">
+          <h3 className="mb-3 text-base font-semibold">Mapeo guardado de {seasonLabel}</h3>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {Object.entries(mappings).map(([key, values]) => (
+              <div key={key} className="rounded-lg border border-line bg-surface-2/70 px-3 py-2 text-sm">
+                <div className="mb-1 flex items-center justify-between gap-2"><span className="font-semibold text-ink-2">{FIELD_OPTIONS.find(item => item[0] === key)?.[1]}</span><span className="shrink-0 text-xs text-ink-muted">{values.length} rango{values.length === 1 ? "" : "s"}</span></div>
+                <div className="space-y-1">
+                  {values.map((value, index) => (
+                    <div key={`${value.sheetId}-${value.range}`} className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1 font-mono text-ok">{value.range} <Check aria-hidden="true" className="h-3 w-3" /></span>
+                      <span className="truncate font-mono text-xs text-ink-muted">{value.preview.join(" / ") || "Rango vacío"}</span>
+                      <button onClick={() => removeMapping(key, index)} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-ink-muted hover:bg-danger-soft hover:text-danger" title="Eliminar rango" aria-label={`Eliminar rango ${value.range}`}><X aria-hidden="true" className="h-4 w-4" /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </section>
   );
 }

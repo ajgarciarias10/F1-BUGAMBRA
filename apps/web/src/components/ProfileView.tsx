@@ -5,7 +5,11 @@ import { db } from "../services/firebase";
 import { compressAndConvertImage } from "../utils/imageHelper";
 import { useSplits } from "../hooks/useData";
 import { StorageImageUpload } from "./StorageImageUpload";
-import { UploadCloud, Link as LinkIcon, Camera, User, BadgeAlert, CheckCircle, ImageIcon } from "lucide-react";
+import { UploadCloud, Link as LinkIcon, Camera, User, BadgeAlert, ImageIcon } from "lucide-react";
+import { Badge, Button, Card, EmptyState, Notice } from "./ui";
+
+const FIELD = "min-h-12 w-full rounded-lg border border-line-strong bg-surface/90 px-4 text-base text-ink shadow-fluent-1 transition-colors placeholder:text-ink-muted/80 hover:border-info/60 focus:border-info md:min-h-11 md:text-sm";
+const LABEL = "block text-sm font-semibold text-ink-2";
 import { useSingleFlight } from "../hooks/useSingleFlight";
 
 export function ProfileView() {
@@ -130,9 +134,7 @@ export function ProfileView() {
 
   if (!user || !userData) {
     return (
-      <div className="bg-surface-2 border border-line rounded-2xl p-8 text-center text-ink-muted uppercase font-mono text-xs tracking-wider">
-        Inicia sesión para ver tu perfil.
-      </div>
+      <EmptyState icon={User} title="Inicia sesión para ver tu perfil" description="Tu foto, nombre y trayectoria aparecen aquí cuando accedes." />
     );
   }
 
@@ -225,122 +227,106 @@ export function ProfileView() {
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-8">
-      {/* LEFT COLUMN: Visual Profile Card */}
+      {/* Columna izquierda: ficha visual */}
       <div className="lg:col-span-1">
-        <div className="relative flex flex-col items-center overflow-hidden rounded-2xl border border-line bg-gradient-to-b from-surface to-surface-2 p-5 text-center shadow-2xl md:p-6">
-          {/* Accent red outline */}
-          <div className="absolute top-0 left-0 right-0 h-[3px] bg-brand"></div>
-          
-          <div className="relative mt-4 mb-5 group">
+        <Card as="section" aria-label="Tu perfil" accent="var(--c-brand)" pad="lg" className="flex flex-col items-center text-center lg:sticky lg:top-24">
+          <div className="relative mb-5 mt-2">
             {fotoUrl ? (
               <img
                 src={fotoUrl}
                 alt={nombre}
                 referrerPolicy="no-referrer"
-                className="w-32 h-32 rounded-full object-cover border-2 border-brand shadow-card transition-all duration-300 group-hover:scale-105"
+                className="h-32 w-32 rounded-full border-2 border-brand object-cover shadow-fluent-2"
               />
             ) : (
-              <div className="w-32 h-32 rounded-full border border-line bg-surface-3 flex items-center justify-center text-ink-muted transition-all duration-300">
-                <User className="w-16 h-16" />
+              <div className="flex h-32 w-32 items-center justify-center rounded-full border border-line bg-surface-3 text-ink-muted">
+                <User aria-hidden="true" className="h-16 w-16" />
               </div>
             )}
-            <div className="absolute bottom-1 right-1 bg-brand p-1.5 rounded-full text-brand-ink shadow-lg cursor-pointer hover:bg-danger transition-colors" onClick={() => fileInputRef.current?.click()}>
-              <Camera className="w-4 h-4" />
-            </div>
+            <button
+              type="button"
+              aria-label="Cambiar foto de perfil"
+              onClick={() => fileInputRef.current?.click()}
+              className="fluent-press btn-primary-fluent absolute -bottom-1 -right-1 grid h-11 w-11 place-items-center rounded-full border-2 border-surface bg-brand text-brand-ink"
+            >
+              <Camera aria-hidden="true" className="h-4 w-4" />
+            </button>
           </div>
 
-          <span className="text-xs font-mono tracking-[0.08em] text-brand uppercase font-black bg-danger/10 px-3 py-1 rounded-full border border-danger/20 mb-2">
-            Sesión: {userData.rol}
-          </span>
-          <h2 className="text-xl font-bold italic tracking-tight">{nombre || "Usuario F1"}</h2>
-          <p className="text-xs text-ink-muted font-mono lowercase mt-1">{user.email}</p>
+          <Badge tone="brand" className="mb-2">Sesión: {userData.rol}</Badge>
+          <h2 className="text-xl font-semibold tracking-tight">{nombre || "Usuario F1"}</h2>
+          <p className="mt-1 max-w-full truncate text-sm text-ink-muted">{user.email}</p>
 
-          {/* Quick stats panel */}
-          <div className="w-full border-t border-line my-6 pt-5 grid grid-cols-2 gap-4">
-            <div className="bg-surface-2 border border-line rounded-xl p-3">
-               <span className="text-[11px] uppercase tracking-wider text-ink-muted font-mono block mb-1">Estado actual</span>
-               <span className="text-xs font-bold uppercase text-ink tracking-tight truncate max-w-full block">
-                  {userData.rol === "admin" && !pilotStatus ? "Administrador" : currentParticipation?.teamName || (pilotStatus?.isFormerPilot ? "Ex piloto F1" : "Espectador")}
+          <div className="my-6 grid w-full grid-cols-2 gap-3 border-t border-line pt-5 text-left">
+            <div className="min-w-0 rounded-lg border border-line bg-surface-2/70 p-3">
+              <span className="mb-1 block text-xs text-ink-muted">Estado actual</span>
+              <span className="block max-w-full truncate text-sm font-semibold text-ink">
+                {userData.rol === "admin" && !pilotStatus ? "Administrador" : currentParticipation?.teamName || (pilotStatus?.isFormerPilot ? "Ex piloto F1" : "Espectador")}
+              </span>
+              {pilotStatus?.isFormerPilot && (
+                <span className="mt-1 block text-xs text-ink-muted">
+                  No compite en {pilotStatus.activeSeasonName} · Última: {pilotStatus.lastSeasonName}
                 </span>
-                {pilotStatus?.isFormerPilot && (
-                  <span className="block mt-1 text-[11px] text-ink-muted font-mono uppercase tracking-wider">
-                    No compite en {pilotStatus.activeSeasonName} · Última: {pilotStatus.lastSeasonName}
-                  </span>
-                )}
+              )}
             </div>
-            <div className="bg-surface-2 border border-line rounded-xl p-3 flex flex-col justify-center">
-              <span className="text-[11px] uppercase tracking-wider text-ink-muted font-mono block mb-1">Id de Registro</span>
-              <span className="text-[11px] font-mono text-ink-muted truncate max-w-full block">{user.uid.substring(0, 10)}...</span>
+            <div className="flex min-w-0 flex-col justify-center rounded-lg border border-line bg-surface-2/70 p-3">
+              <span className="mb-1 block text-xs text-ink-muted">Id de registro</span>
+              <span className="block max-w-full truncate text-xs tabular-nums text-ink-2">{user.uid.substring(0, 10)}…</span>
             </div>
           </div>
 
-          <div className="bg-brand/10 border border-brand/20 rounded-xl p-3.5 text-left w-full text-xs flex gap-2.5">
-            <BadgeAlert className="w-4 h-4 text-brand shrink-0 mt-0.5" />
-            <p className="text-ink-2 leading-relaxed text-[11px]">
-              Tus fotos y datos de perfil se actualizan en todas las tablas de clasificación de la plataforma de manera inmediata.
-            </p>
-          </div>
-        </div>
+          <Notice tone="info" className="w-full text-left text-xs">
+            Tus fotos y datos de perfil se actualizan en todas las tablas de clasificación de la plataforma de manera inmediata.
+          </Notice>
+        </Card>
       </div>
 
-      {/* RIGHT COLUMN: Edit Settings Panel */}
-      <div className="lg:col-span-2">
-        <form onSubmit={handleSaveChanges} className="space-y-6 rounded-2xl border border-line bg-surface-2 p-4 shadow-2xl md:p-6 lg:p-8">
+      {/* Columna derecha: edición */}
+      <div className="space-y-6 lg:col-span-2">
+        <Card as="section" pad="lg">
+        <form onSubmit={handleSaveChanges} aria-busy={loading} className="space-y-6">
           <div className="border-b border-line pb-4">
-            <h3 className="text-lg font-bold uppercase tracking-tight flex items-center gap-2">
-              <span className="w-1.5 h-5 bg-brand inline-block" />
-              Editar tus Datos
+            <h3 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
+              <span aria-hidden="true" className="h-5 w-1 rounded-full bg-brand" />
+              Editar tus datos
             </h3>
-            <p className="text-xs text-ink-muted mt-1 font-mono uppercase tracking-wider">
-              Actualiza tu fotografía y/o álias en los marcadores de la liga
+            <p className="mt-1 text-sm text-ink-muted">
+              Actualiza tu fotografía o tu álias en los marcadores de la liga.
             </p>
           </div>
 
-          {/* Messages */}
-          {successMsg && (
-            <div className="p-3 bg-ok/10 border border-ok/30 rounded-xl text-ok text-xs font-mono flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 shrink-0" />
-              {successMsg}
-            </div>
-          )}
-          {errorMsg && (
-            <div className="p-3 bg-danger/10 border border-danger/30 rounded-xl text-danger text-xs font-mono flex items-center gap-2">
-              <BadgeAlert className="w-4 h-4 shrink-0" />
-              {errorMsg}
-            </div>
-          )}
+          {successMsg && <Notice tone="ok">{successMsg}</Notice>}
+          {errorMsg && <Notice tone="danger">{errorMsg}</Notice>}
 
-          {/* Form input: Nombre */}
           <div className="space-y-2">
-            <label className="text-xs font-mono uppercase tracking-widest text-ink-muted block font-bold">
-              Nombre o Álias Piloto/Jeque
-            </label>
+            <label htmlFor="profile-nombre" className={LABEL}>Nombre o álias piloto/jeque</label>
             <input
+              id="profile-nombre"
               type="text"
               required
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className="w-full bg-surface-3 border border-line rounded-xl px-4 py-3 text-ink font-medium focus:outline-none focus:border-brand transition-colors"
+              className={FIELD}
               placeholder="Ej: Marotez Al-Rafah"
             />
           </div>
 
-          {/* Drag & Drop Area */}
-            <div className="space-y-2">
-              <label className="text-xs font-mono uppercase tracking-widest text-ink-muted block font-bold">
-                Foto de Perfil Personalizada
-              </label>
-            
+          <div className="space-y-2">
+            <span className={LABEL}>Foto de perfil personalizada</span>
             <div
               onDragEnter={handleDrag}
               onDragOver={handleDrag}
               onDragLeave={handleDrag}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[160px] ${
+              role="button"
+              tabIndex={0}
+              aria-label="Subir imagen de perfil"
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
+              className={`flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
                 dragActive
-                  ? "border-brand bg-brand/5"
-                  : "border-line hover:border-line-strong bg-surface-3"
+                  ? "border-brand bg-brand-soft"
+                  : "border-line-strong bg-surface-2/60 hover:border-info/60 hover:bg-info/5"
               }`}
             >
               <input
@@ -350,124 +336,111 @@ export function ProfileView() {
                 accept="image/*"
                 className="hidden"
               />
-              <UploadCloud className={`w-10 h-10 mb-2 transition-transform duration-300 ${dragActive ? "text-brand scale-110" : "text-ink-muted"}`} />
-              <p className="text-xs font-bold text-ink uppercase tracking-tight">
+              <UploadCloud aria-hidden="true" className={`mb-2 h-10 w-10 ${dragActive ? "text-brand" : "text-ink-muted"}`} />
+              <p className="text-sm font-semibold text-ink">
                 Arrastra tu imagen aquí o haz clic para subir
               </p>
-              <p className="text-xs text-ink-muted mt-1 uppercase font-mono tracking-wider">
-                Sube la imagen que quieras. Se redimensiona automáticamente y se ve en toda la app.
+              <p className="mt-1 max-w-sm text-sm text-ink-muted">
+                Se redimensiona automáticamente y se ve en toda la app.
               </p>
             </div>
           </div>
 
-          {/* Paste URL Optional Input */}
           <div className="space-y-2 border-t border-line pt-5">
-            <label className="text-xs font-mono uppercase tracking-widest text-ink-muted block">
-              O introduce una dirección URL de imagen
-            </label>
+            <label htmlFor="profile-url" className={LABEL}>O introduce una dirección URL de imagen</label>
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <LinkIcon className="absolute left-3.5 top-3 w-4 h-4 text-ink-muted" />
+                <LinkIcon aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
                 <input
+                  id="profile-url"
                   type="url"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
-                  className="min-h-12 w-full rounded-xl border border-line bg-surface-3 py-2.5 pl-10 pr-4 text-ink transition-colors focus:border-brand focus:outline-none md:min-h-0 md:text-xs"
+                  className={`${FIELD} pl-10`}
                   placeholder="https://ejemplo.com/avatar.jpg"
                 />
               </div>
-              <button
-                type="button"
-                onClick={handleApplyUrl}
-                className="bg-surface-3 hover:bg-surface-3 text-xs px-4 rounded-xl border border-line font-mono uppercase tracking-wider font-bold transition-all text-ink shrink-0 active:scale-95"
-              >
+              <Button onClick={handleApplyUrl} className="min-h-12 shrink-0 md:min-h-11">
                 Aplicar URL
-              </button>
+              </Button>
             </div>
           </div>
 
-          <div className="border-t border-line pt-6 flex justify-end gap-3">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex min-h-13 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand px-8 text-sm font-extrabold uppercase tracking-wide text-brand-ink shadow-lg shadow-danger/20 transition-all hover:bg-danger active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto md:min-h-0 md:py-3.5 md:text-xs md:tracking-widest"
-            >
-              {loading ? "Guardando..." : "Guardar Perfil"}
-            </button>
+          <div className="flex justify-end gap-3 border-t border-line pt-6">
+            <Button type="submit" variant="primary" loading={loading} className="min-h-12 w-full px-8 sm:w-auto">
+              {loading ? "Guardando…" : "Guardar perfil"}
+            </Button>
           </div>
         </form>
+        </Card>
 
         {career.length > 0 && (
-          <section className="mt-6 border border-line bg-surface overflow-hidden">
-            <div className="p-5 md:p-6 border-b border-line">
-              <p className="text-[11px] font-mono uppercase tracking-[0.08em] text-brand">Archivo del piloto</p>
-              <h3 className="mt-1 text-xl font-black uppercase tracking-[-0.03em]">Trayectoria por temporadas</h3>
-              <p className="mt-1 text-xs text-ink-muted">Tus equipos y resultados se conservan aunque no participes en el split vigente.</p>
+          <Card as="section" pad="none" className="overflow-hidden">
+            <div className="border-b border-line p-5 md:p-6">
+              <p className="text-xs font-semibold text-brand">Archivo del piloto</p>
+              <h3 className="mt-1 text-xl font-semibold tracking-tight">Trayectoria por temporadas</h3>
+              <p className="mt-1 text-sm text-ink-muted">Tus equipos y resultados se conservan aunque no participes en el split vigente.</p>
               {careerPeak != null && (
-                <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">
-                  Techo de carrera <span className="text-warn font-black">{careerPeak} OVR</span>
-                  <span className="text-ink-muted"> · el overall se arrastra de un split al siguiente</span>
+                <p className="mt-2 text-sm text-ink-muted">
+                  Techo de carrera <span className="font-semibold text-warn">{careerPeak} OVR</span>
+                  <span> · el overall se arrastra de un split al siguiente</span>
                 </p>
               )}
             </div>
-            <div className="grid sm:grid-cols-2 gap-px bg-surface-2">
+            <ul className="grid gap-px bg-line sm:grid-cols-2">
               {careerWithProgress.map((season: any) => (
-                <div key={season.splitId} className="bg-surface p-4 flex items-center gap-4">
-                  <div className="w-12 h-12 shrink-0 border border-line bg-surface-2 p-1.5 flex items-center justify-center">
+                <li key={season.splitId} className="flex items-center gap-4 bg-surface p-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 p-1.5">
                     {season.teamLogo
-                      ? <img src={season.teamLogo} alt={season.teamName} className="w-full h-full object-contain" />
-                      : <span className="font-black text-xs text-ink-muted">{season.teamName.slice(0, 2).toUpperCase()}</span>}
+                      ? <img src={season.teamLogo} alt={season.teamName} className="h-full w-full object-contain" />
+                      : <span className="text-xs font-semibold text-ink-muted">{season.teamName.slice(0, 2).toUpperCase()}</span>}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-ink-muted">{season.splitName}</span>
-                      {season.rookie && <span className="text-[11px] font-black uppercase tracking-[0.08em] text-info">Rookie</span>}
+                      <span className="text-xs text-ink-muted">{season.splitName}</span>
+                      {season.rookie && <Badge tone="info">Rookie</Badge>}
                     </div>
-                    <p className="mt-1 font-black uppercase truncate">{season.teamName}</p>
-                    <span className="text-[11px] font-mono text-ink-muted">{season.points} PTS</span>
+                    <p className="mt-1 truncate font-semibold">{season.teamName}</p>
+                    <span className="text-xs tabular-nums text-ink-muted">{season.points} pts</span>
                   </div>
                   {season.rating != null && (
                     <div className="flex flex-col items-center gap-1">
-                      <div className="w-14 h-14 border border-brand/35 bg-brand/10 grid place-items-center text-center">
-                        <div><strong className="block text-xl leading-none">{season.rating}</strong><span className="text-[11px] tracking-[0.08em] text-ink-muted">OVR</span></div>
+                      <div className="grid h-14 w-14 place-items-center rounded-lg border border-brand/30 bg-brand-soft text-center">
+                        <div><strong className="block text-xl leading-none tabular-nums">{season.rating}</strong><span className="text-[11px] text-ink-muted">OVR</span></div>
                       </div>
                       {season.ratingChange != null && (
-                        <span className={`text-[11px] font-mono font-black tabular-nums ${
+                        <span className={`text-[11px] font-semibold tabular-nums ${
                           season.ratingChange > 0 ? "text-ok"
-                          : season.ratingChange < 0 ? "text-brand"
+                          : season.ratingChange < 0 ? "text-danger"
                           : "text-ink-muted"
                         }`}>
                           {season.ratingChange > 0 ? "▲" : season.ratingChange < 0 ? "▼" : "="}
                           {season.ratingChange !== 0 && Math.abs(season.ratingChange)}
-                          <span className="text-ink-muted font-normal"> de {season.ratingFrom}</span>
+                          <span className="font-normal text-ink-muted"> de {season.ratingFrom}</span>
                         </span>
                       )}
                     </div>
                   )}
-                </div>
+                </li>
               ))}
-            </div>
-          </section>
+            </ul>
+          </Card>
         )}
 
-        {/* Logo de equipo — solo para jeques */}
+        {/* Logo de equipo: solo para jeques */}
         {isJeque && escuderiaId && mySplits.length > 0 && (
-          <div className="mt-6 space-y-5 rounded-2xl border border-line bg-surface-2 p-4 md:p-6 lg:p-8">
-            <div className="border-b border-line pb-4 flex items-center gap-2">
-              <span className="w-1.5 h-5 bg-brand inline-block" />
+          <Card as="section" pad="lg" className="space-y-5">
+            <div className="flex items-center gap-2.5 border-b border-line pb-4">
+              <span aria-hidden="true" className="h-5 w-1 rounded-full bg-brand" />
               <div>
-                <h3 className="text-sm font-bold uppercase tracking-tight">Logo de tu Escudería</h3>
-                <p className="text-xs text-ink-muted font-mono uppercase tracking-wider mt-0.5">
+                <h3 className="text-base font-semibold tracking-tight">Logo de tu escudería</h3>
+                <p className="mt-0.5 text-sm text-ink-muted">
                   Sube el escudo de tu escudería por temporada
                 </p>
               </div>
             </div>
 
-            {logoMsg && (
-              <div className="p-2.5 bg-ok/10 border border-ok/30 rounded-lg text-ok text-xs font-mono">
-                {logoMsg}
-              </div>
-            )}
+            {logoMsg && <Notice tone={logoMsg.startsWith("Error") ? "danger" : "ok"}>{logoMsg}</Notice>}
 
             <div className="space-y-5">
               {mySplits.map((split: any) => {
@@ -475,19 +448,17 @@ export function ProfileView() {
                 const localUrl = logoUrlInputs[split.id] ?? currentLogo;
                 return (
                   <div key={split.id} className="space-y-3">
-                    <p className="text-xs font-mono uppercase tracking-[0.08em] text-ink-muted">
-                      Temporada — {split.nombre}
+                    <p className="text-sm font-semibold text-ink-2">
+                      Temporada · {split.nombre}
                     </p>
-                    <div className="flex items-center gap-3">
-                      {/* Preview */}
-                      <div className="w-14 h-14 bg-surface-2 border border-line rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-surface-2">
                         {currentLogo ? (
-                          <img src={currentLogo} className="w-full h-full object-contain p-1" />
+                          <img src={currentLogo} alt="" className="h-full w-full object-contain p-1" />
                         ) : (
-                          <ImageIcon className="w-5 h-5 text-ink-muted" />
+                          <ImageIcon aria-hidden="true" className="h-5 w-5 text-ink-muted" />
                         )}
                       </div>
-                      {/* Upload via Storage */}
                       <StorageImageUpload
                         storagePath={`logos/${split.id}/${escuderiaId}`}
                         currentUrl={currentLogo || undefined}
@@ -495,28 +466,29 @@ export function ProfileView() {
                         size="sm"
                         className="shrink-0"
                       />
-                      {/* URL alternativa */}
                       <input
                         type="url"
+                        aria-label={`URL del logo para ${split.nombre}`}
                         value={localUrl}
                         onChange={e => setLogoUrlInputs(prev => ({ ...prev, [split.id]: e.target.value }))}
                         placeholder="o pega URL aquí"
-                        className="min-h-11 w-full min-w-0 flex-1 rounded-lg border border-line bg-surface-3 px-3 text-ink transition-colors focus:border-brand focus:outline-none md:min-h-0 md:py-2 md:font-mono md:text-[11px]"
+                        className={`${FIELD} min-w-[12rem] flex-1`}
                       />
-                      <button
-                        type="button"
-                        disabled={savingLogo === split.id}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        loading={savingLogo === split.id}
                         onClick={() => saveTeamLogo(split.id, localUrl)}
-                        className="min-h-11 shrink-0 rounded-lg border border-brand/30 bg-brand/10 px-3 text-[13px] font-bold text-brand transition-colors hover:bg-brand/20 disabled:opacity-40 md:min-h-0 md:py-2 md:text-xs md:uppercase"
+                        className="shrink-0"
                       >
-                        {savingLogo === split.id ? "..." : "Guardar"}
-                      </button>
+                        Guardar
+                      </Button>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </Card>
         )}
       </div>
     </div>

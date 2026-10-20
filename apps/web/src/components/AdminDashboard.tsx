@@ -1692,12 +1692,12 @@ export function AdminDashboard() {
                        </td>
                        <td className="py-2.5 text-center">
                          <input type="checkbox" checked={results[p.pilotoId]?.isClean !== false} disabled={isActaCerrada} title="Desmarcar si el piloto fue sancionado"
-                           className="w-4 h-4 accent-emerald-500 disabled:opacity-40"
+                           className="w-4 h-4 accent-ok disabled:opacity-40"
                            onChange={e => handleUpdate(p.pilotoId, "isClean", e.target.checked)} />
                        </td>
                        <td className="py-2.5 text-center">
                          <input type="checkbox" checked={isPilotDnf} disabled={isActaCerrada} title="Marcar si el piloto no terminó la carrera (DNF)"
-                           className="w-4 h-4 accent-red-600 disabled:opacity-40"
+                           className="w-4 h-4 accent-brand disabled:opacity-40"
                            onChange={e => {
                              const dnf = e.target.checked;
                              setResults(prev => ({
@@ -1753,7 +1753,7 @@ export function AdminDashboard() {
         )}
 
         {confirmModal && confirmModal.isOpen && (
-          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-ink/60 z-50 flex items-center justify-center p-4">
             <div className="bg-surface border border-line p-4 max-w-sm w-full relative text-left">
               <h3 className="text-sm font-bold text-ink uppercase tracking-tight mb-2 flex items-center gap-2">
                 <span className="w-1 h-4 bg-brand" />

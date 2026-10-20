@@ -28,12 +28,12 @@ export function PilotCardF1({
 
   const isSm = size === "sm";
   const tier = rating >= 90
-    ? { accent: "#f5c451", label: "ELITE" }
+    ? { accent: "var(--c-warn)", label: "ELITE" }
     : rating >= 85
-      ? { accent: "#e10600", label: "PRO" }
+      ? { accent: "var(--c-brand)", label: "PRO" }
       : rating >= 80
-        ? { accent: "#38bdf8", label: "ADV" }
-        : { accent: "#a1a1aa", label: "CORE" };
+        ? { accent: "var(--c-info)", label: "ADV" }
+        : { accent: "var(--c-ink-muted)", label: "CORE" };
 
   return (
     <div className="flex flex-col">
@@ -44,7 +44,7 @@ export function PilotCardF1({
             ? "border border-line-strong shadow-xl shadow-ink/10"
             : "border border-line hover:border-line-strong transition-colors"
         }`}
-        style={{ aspectRatio: "2/3", boxShadow: featured ? `0 0 0 1px ${tier.accent}55` : undefined }}
+        style={{ aspectRatio: "2/3", boxShadow: featured ? `0 0 0 1px color-mix(in srgb, ${tier.accent} 33%, transparent)` : undefined }}
       >
         {/* Team logo — watermark fondo */}
         {team?.logo_url && (

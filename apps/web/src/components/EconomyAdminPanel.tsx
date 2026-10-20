@@ -1314,7 +1314,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
       {/* ── MODAL DE ALTA MANUAL ── */}
       {altaModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60">
           <div className="bg-surface border border-line w-full max-w-sm mx-4 shadow-2xl">
 
             <div className="flex items-center gap-3 px-5 py-4 border-b border-line">
@@ -1396,7 +1396,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
       {/* ── MODAL DE FICHAJE ── */}
       {fichajeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60">
           <div className="bg-surface border border-line w-full max-w-sm mx-4 shadow-2xl">
 
             {/* Header */}

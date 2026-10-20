@@ -290,51 +290,23 @@ h1, h2, h3 { letter-spacing: -0.015em; }
   color: inherit;
 }
 
-.broadcast-shell {
-  --broadcast-surface: rgba(255, 255, 255, 0.045);
-  --broadcast-border: rgba(255, 255, 255, 0.1);
-  background-image:
-    radial-gradient(circle at 82% 6%, rgba(225, 6, 0, 0.15), transparent 22rem),
-    linear-gradient(180deg, #101012 0, #080809 34rem, #050505 100%);
-}
-
-.broadcast-grid {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 3rem 3rem;
-  mask-image: linear-gradient(to bottom, black, transparent 90%);
-}
-
-.sport-panel {
-  background: var(--broadcast-surface, rgba(0, 0, 0, 0.035));
-  border: 1px solid var(--broadcast-border, rgba(0, 0, 0, 0.1));
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
-}
-
 .rail-title {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   color: var(--c-ink);
   font-size: 1rem;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
 .rail-title::before {
   width: 0.25rem;
   height: 1.35rem;
-  background: #e10600;
+  border-radius: 9999px;
+  background: var(--c-brand);
   content: "";
 }
-
-.dark .sport-panel {
-  --broadcast-surface: rgba(255, 255, 255, 0.045);
-  --broadcast-border: rgba(255, 255, 255, 0.1);
-}
-
 
 button,
 a,
@@ -354,27 +326,6 @@ a {
   outline: 3px solid var(--c-focus);
   outline-offset: 3px;
 }
-
-/* El formulario necesita etiquetas legibles, no microtexto editorial. */
-.auth-screen .auth-label {
-  color: #e4e4e7;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.auth-screen button:not([class*="bg-"]),
-.auth-screen a[href="/"],
-.auth-screen [class*="text-white/20"],
-.auth-screen [class*="text-white/30"],
-.auth-screen [class*="text-white/35"],
-.auth-screen [class*="text-white/40"] {
-  color: #a1a1aa;
-}
-
-.auth-screen button[aria-pressed="true"] { color: #fff; }
-.auth-screen button:disabled { cursor: wait; }
-.auth-screen form button[type="button"],
-.auth-screen a[href="/"] { font-size: 0.875rem; letter-spacing: normal; }
 
 /* ── MÓVIL ──────────────────────────────────────────────────────────────────── */
 
@@ -507,32 +458,14 @@ a {
   .tracking-widest {
     letter-spacing: 0.07em;
   }
-
-  /* Esquinas suaves en los contenedores principales: menos aspecto de tabla. */
-  .sport-panel {
-    border-radius: 1rem;
-    overflow: hidden;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
-  }
-
-  /* Los iframes de vídeo se salían del contenedor redondeado. */
-  .sport-panel iframe {
-    border-radius: 0;
-  }
 }
 
-/* Tarjeta táctil: redondea en móvil y vuelve a esquina viva en escritorio, para
-   suavizar la lectura sin romper el lenguaje visual de la liga. Solo toca el
-   radio: el color y el borde los pone cada componente con sus clases. */
+/* Contenedor de tarjeta heredado: mismo radio que el resto de superficies (--radius-card)
+   en todos los anchos. El color y el borde los pone cada componente con sus clases. */
 .m-card {
-  border-radius: 0.875rem;
+  border-radius: var(--radius-card);
   overflow: hidden;
-}
-
-@media (min-width: 768px) {
-  .m-card {
-    border-radius: 0;
-  }
+  box-shadow: var(--shadow-1);
 }
 
 /* Fila táctil: altura mínima cómoda para el pulgar (recomendación WCAG 2.5.5). */
@@ -565,12 +498,6 @@ a {
     padding-inline: 0;
     margin-inline: 0;
   }
-}
-
-/* Variante de rail-title para superficies oscuras que no cuelgan de .dark
-   (los dashboards de usuario tienen fondo negro sin la clase de tema). */
-.rail-title-on-dark {
-  color: #fff;
 }
 
 /* Despliegue de un panel dentro de una rejilla (los pilotos de un equipo).

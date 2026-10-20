@@ -4,7 +4,7 @@ import { db } from "../services/firebase";
 import { compressAndConvertImage } from "../utils/imageHelper";
 import { useUsuarios, useSplits } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { ShieldAlert, Award, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay, Crown } from "lucide-react";
+import { ShieldAlert, Award, Sparkles, UploadCloud, Camera, X, TrendingUp, MonitorPlay, Crown, Snowflake, Trophy, Loader2, Users } from "lucide-react";
 import { isSplitUnlocked } from "../utils/splitResolver";
 import { pointsForRaceResult } from "../utils/economyRules";
 import { PilotRivalryPanel } from "./RivalryPanels";
@@ -12,6 +12,20 @@ import { NextRaceWidget } from "./NextRaceWidget";
 import { PilotCardF1 } from "./PilotCardF1";
 import { TotalStandings } from "./TotalStandings";
 import { useSingleFlight } from "../hooks/useSingleFlight";
+import { Badge, Button, Card, EmptyState, Notice, buttonClass } from "./ui";
+
+const SECTION_TITLE = "mb-4 flex items-center gap-2.5 text-lg font-semibold tracking-tight text-ink md:text-xl";
+const SELECT_CLASS = "min-h-11 w-full rounded-lg border border-line-strong bg-surface/90 px-3 text-sm font-semibold text-ink shadow-fluent-1 transition-colors hover:border-info/60 focus:border-info";
+const SEG_TAB = "min-h-11 rounded-t-lg border-b-2 px-4 text-sm font-semibold transition-colors";
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className={SECTION_TITLE}>
+      <span aria-hidden="true" className="h-5 w-1 rounded-full bg-brand" />
+      {children}
+    </h2>
+  );
+}
 
 export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { canViewBudget: boolean, escuderiaId?: string, onOpenTv?: () => void }) {
   const { userData } = useAuth();
@@ -391,16 +405,16 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
   if (loadingSplits && splits.length === 0) {
     return (
-      <div className="space-y-6" aria-label="Cargando campeonato">
-        <div className="flex flex-wrap gap-2 border border-line p-2">
-          {[1, 2, 3, 4].map(item => <div key={item} className="h-9 w-24 bg-surface-2 animate-pulse" />)}
+      <div className="space-y-6" role="status" aria-label="Cargando campeonato">
+        <div className="flex flex-wrap gap-2">
+          {[1, 2, 3, 4].map(item => <div key={item} className="h-11 w-28 rounded-full bg-surface-3/70 motion-safe:animate-pulse" />)}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
           {[1, 2].map(item => (
-            <div key={item} className="border border-line bg-surface-2 p-5 space-y-4">
-              <div className="h-5 w-48 bg-surface-2 animate-pulse" />
-              {[1, 2, 3, 4, 5].map(row => <div key={row} className="h-12 bg-surface-2 animate-pulse" />)}
-            </div>
+            <Card key={item} tone="muted" className="space-y-3">
+              <div className="h-5 w-48 rounded bg-surface-3/70 motion-safe:animate-pulse" />
+              {[1, 2, 3, 4, 5].map(row => <div key={row} className="h-12 rounded-lg bg-surface-3/70 motion-safe:animate-pulse" />)}
+            </Card>
           ))}
         </div>
       </div>
@@ -412,12 +426,12 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
       {/* Barra de temporada y accesos rápidos. En móvil las temporadas son un
           carrusel y las dos acciones ocupan una fila propia a ancho completo:
           apiladas y en mayúsculas de 10px eran casi imposibles de pulsar. */}
-      <div className="space-y-3 md:flex md:flex-wrap md:items-center md:justify-between md:gap-y-3 md:space-y-0 w-full md:p-1.5 md:rounded-sm md:border md:border-line">
-        <div className="m-rail hide-scrollbar gap-2">
+      <div className="w-full space-y-3 md:flex md:flex-wrap md:items-center md:justify-between md:gap-x-4 md:gap-y-3 md:space-y-0">
+        <div className="m-rail hide-scrollbar gap-2" role="group" aria-label="Temporadas">
           <button
             onClick={() => setActiveSplitId("global")}
-            className={`min-h-11 rounded-full md:rounded-sm px-4 text-[12px] font-bold md:text-xs md:font-black md:uppercase md:tracking-widest transition-all ${
-              activeSplitId === "global" ? "bg-brand text-brand-ink" : "bg-surface-2 text-ink-muted border border-line hover:border-line-strong"
+            className={`fluent-press min-h-11 rounded-full px-4 text-sm font-semibold ${
+              activeSplitId === "global" ? "btn-primary-fluent bg-brand text-brand-ink shadow-fluent-1" : "border border-line bg-surface/80 text-ink-2 hover:border-info/50 hover:bg-surface"
             }`}
           >
             Mundial Global
@@ -426,8 +440,8 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
             <button
               key={s.id}
               onClick={() => setActiveSplitId(s.id)}
-              className={`min-h-11 rounded-full md:rounded-sm px-4 text-[12px] font-bold md:text-xs md:font-black md:uppercase md:tracking-widest transition-all ${
-                activeSplitId === s.id ? "bg-brand text-brand-ink" : "bg-surface-2 text-ink-muted border border-line hover:border-line-strong"
+              className={`fluent-press min-h-11 rounded-full px-4 text-sm font-semibold ${
+                activeSplitId === s.id ? "btn-primary-fluent bg-brand text-brand-ink shadow-fluent-1" : "border border-line bg-surface/80 text-ink-2 hover:border-info/50 hover:bg-surface"
               }`}
             >
               {s.nombre}
@@ -449,17 +463,17 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 else setComparePilotIdB(allPaddockPilots[0].id);
               }
             }}
-            className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-warn/45 px-3 text-[12px] font-bold text-warn transition-all hover:border-warn hover:text-ink active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-xs md:font-black md:uppercase md:tracking-wider"
+            className={buttonClass()}
           >
-            <TrendingUp className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
+            <TrendingUp aria-hidden="true" className="h-4 w-4 shrink-0 text-info" />
             <span className="truncate">Comparador</span>
           </button>
           {onOpenTv && (
             <button
               onClick={onOpenTv}
-              className="flex min-h-12 items-center justify-center gap-2 rounded-xl md:rounded-sm border border-brand/50 px-3 text-[12px] font-bold text-danger transition-all hover:border-brand hover:text-ink active:scale-95 md:min-h-0 md:px-4 md:py-2 md:text-xs md:font-black md:uppercase md:tracking-wider"
+              className={buttonClass()}
             >
-              <MonitorPlay className="w-4 h-4 shrink-0 md:w-3.5 md:h-3.5" />
+              <MonitorPlay aria-hidden="true" className="h-4 w-4 shrink-0 text-brand" />
               <span className="truncate">F1 Bugambra TV</span>
             </button>
           )}
@@ -467,123 +481,128 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
       </div>
 
       {activeSplitId !== "global" && currentSplit && currentSplit.circuitos?.some((c: any) => !c.completado) && (
-        <div className="mb-8"><NextRaceWidget currentSplit={currentSplit} /></div>
+        <div><NextRaceWidget currentSplit={currentSplit} /></div>
       )}
 
-      <div className="m-card bg-surface-2 border border-line p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <Card as="section" aria-label="Paddock Club, Hall of Fame" pad="sm" className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div className="flex items-center gap-3">
-          <Award className="w-8 h-8 text-warn shrink-0" />
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-warn/30 bg-warn-soft text-warn">
+            <Award aria-hidden="true" className="h-6 w-6" />
+          </span>
           <div className="min-w-0">
-            <span className="block text-[13px] font-black text-brand md:text-[11px] md:uppercase md:tracking-[0.08em]">Paddock Club · Hall of Fame</span>
-            <span className="text-[12px] text-ink-muted md:text-xs md:uppercase md:font-mono">Campeones oficiales de F1 Bugambra</span>
+            <h2 className="text-base font-semibold text-ink">Paddock Club · Hall of Fame</h2>
+            <p className="text-sm text-ink-muted">Campeones oficiales de F1 Bugambra</p>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto flex-wrap">
-          {championshipsTimeline.filter(t => t.completed).map((t: any) => (
-            <div key={t.splitId} className="flex flex-col sm:flex-row gap-2.5">
-              {/* Cada palmarés es etiqueta arriba / campeón abajo en móvil: en una
-                  sola línea el nombre se comprimía hasta ser ilegible. */}
-              <div className="rounded-xl md:rounded-sm border border-line bg-surface-2 px-4 py-2.5 sm:flex sm:items-center sm:justify-start sm:gap-4">
-                <span className="block text-[11px] text-warn/90 md:font-mono md:uppercase md:tracking-widest md:text-[11px]">🏆 {t.splitName} · Pilotos</span>
-                <span className="mt-0.5 block text-[13px] font-extrabold uppercase tracking-tight text-ink sm:mt-0 md:text-xs">{t.winnerPilot} [{t.winnerPilotTeam}]</span>
+        {championshipsTimeline.some(t => t.completed) ? (
+          <div className="flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap lg:w-auto">
+            {championshipsTimeline.filter(t => t.completed).map((t: any) => (
+              <div key={t.splitId} className="flex flex-col gap-2.5 sm:flex-row">
+                {/* Etiqueta arriba / campeón abajo: en una sola línea el nombre se comprimía. */}
+                <div className="rounded-lg border border-line bg-surface-2/70 px-4 py-2.5">
+                  <span className="block text-xs text-warn">{t.splitName} · Pilotos</span>
+                  <span className="mt-0.5 block text-sm font-semibold text-ink">{t.winnerPilot}{t.winnerPilotTeam ? ` · ${t.winnerPilotTeam}` : ""}</span>
+                </div>
+                <div className="rounded-lg border border-line bg-surface-2/70 px-4 py-2.5">
+                  <span className="block text-xs text-brand">{t.splitName} · Escuderías</span>
+                  <span className="mt-0.5 block text-sm font-semibold text-ink">{t.winnerTeam}</span>
+                </div>
               </div>
-              <div className="rounded-xl md:rounded-sm border border-line bg-surface-2 px-4 py-2.5 sm:flex sm:items-center sm:justify-start sm:gap-4">
-                <span className="block text-[11px] text-brand/90 md:font-mono md:uppercase md:tracking-widest md:text-[11px]">🏎️ {t.splitName} · Escuderías</span>
-                <span className="mt-0.5 block text-[13px] font-extrabold uppercase tracking-tight text-ink sm:mt-0 md:text-xs">{t.winnerTeam}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-ink-muted">Aún no hay campeonatos cerrados.</p>
+        )}
+      </Card>
 
       {activeSplitId === "global" && (
         <TotalStandings splits={splits} getPilotPhoto={getPilotPhoto} />
       )}
 
       {activeSplitId !== "global" && currentSplit?.tipo !== "individual" && miEscuderia && (
-        <section className="bg-surface-2 border border-line-strong  p-6 relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-32 h-32 bg-brand/10 rounded-full pointer-events-none"></div>
+        <Card as="section" aria-label="Tu escudería" accent="var(--c-brand)" pad="lg" className="relative overflow-hidden bg-[image:var(--grad-info)]">
           {miEscuderia ? (
-            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="relative z-10 flex flex-col items-stretch justify-between gap-6 md:flex-row md:items-center">
             <div className="flex items-center gap-5 w-full md:w-auto">
               {canViewBudget ? (
                 <div
                   onDragEnter={handleLogoDrag} onDragOver={handleLogoDrag} onDragLeave={handleLogoDrag} onDrop={handleLogoDrop} onClick={() => teamLogoInputRef.current?.click()}
-                  className={`relative w-20 h-20 rounded-sm overflow-hidden border-2 cursor-pointer transition-all shrink-0 flex items-center justify-center group ${logoDragActive ? "border-brand bg-brand/15" : "border-line hover:border-brand bg-surface-2"}`}
+                  role="button" tabIndex={0} aria-label="Subir o cambiar el logo de la escudería"
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); teamLogoInputRef.current?.click(); } }}
+                  className={`group relative flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed transition-colors ${logoDragActive ? "border-brand bg-brand-soft" : "border-line-strong bg-surface-2 hover:border-brand"}`}
                 >
                   <input type="file" ref={teamLogoInputRef} onChange={(e) => { if (e.target.files && e.target.files[0]) handleUpdateTeamLogo(e.target.files[0]); }} accept="image/*" className="hidden" />
                   {(miEscuderia as any).logo_url ? (
                     <img src={(miEscuderia as any).logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:opacity-40 transition-opacity" />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center p-2">
-                      <UploadCloud className="w-6 h-6 text-ink-muted group-hover:text-ink-2 transition-colors" />
-                      <span className="text-[11px] font-mono text-ink-muted uppercase tracking-tighter mt-1 group-hover:text-ink-muted">SUBIR LOGO</span>
+                      <UploadCloud aria-hidden="true" className="h-6 w-6 text-ink-muted transition-colors group-hover:text-ink-2" />
+                      <span className="mt-1 text-xs text-ink-muted">Subir logo</span>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-surface-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-ink text-[11px] font-mono uppercase tracking-widest gap-1 select-none">
-                    <Camera className="w-4 h-4 text-brand" /><span>EDITAR LOGO</span>
+                  <div className="absolute inset-0 flex select-none flex-col items-center justify-center gap-1 bg-surface/85 text-xs font-semibold text-ink opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                    <Camera aria-hidden="true" className="h-4 w-4 text-brand" /><span>Editar logo</span>
                   </div>
-                  {updatingLogo && <div className="absolute inset-0 bg-bg flex items-center justify-center text-xs font-mono text-ink">Cargando...</div>}
+                  {updatingLogo && <div role="status" className="absolute inset-0 flex items-center justify-center gap-1.5 bg-surface/90 text-xs text-ink"><Loader2 aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" />Subiendo…</div>}
                 </div>
               ) : (
-                <div className="w-20 h-20 rounded-sm overflow-hidden border border-line bg-surface-2 shrink-0 flex items-center justify-center">
-                  {(miEscuderia as any).logo_url ? <img src={(miEscuderia as any).logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs font-black uppercase text-ink-muted font-mono">{miEscuderia.nombre ? miEscuderia.nombre.substring(0, 2).toUpperCase() : 'EQ'}</div>}
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-2">
+                  {(miEscuderia as any).logo_url ? <img src={(miEscuderia as any).logo_url} alt={miEscuderia.nombre} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-lg font-semibold uppercase text-ink-muted">{miEscuderia.nombre ? miEscuderia.nombre.substring(0, 2).toUpperCase() : 'EQ'}</div>}
                 </div>
               )}
               <div>
-                <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-brand font-black block mb-1">{canViewBudget ? "ESCUDERÍA OFICIAL DEL JEQUE" : "TU EQUIPO PARA ESTE SPLIT"}</span>
-                <h3 className="text-2xl font-black italic text-ink uppercase tracking-tight">{miEscuderia.nombre}</h3>
-                <p className="text-xs text-ink-muted uppercase font-mono mt-0.5">Visualizando logo oficial del {currentSplit?.nombre || activeSplitId}</p>
+                <span className="mb-1 block text-xs font-semibold text-brand">{canViewBudget ? "Escudería oficial del jeque" : "Tu equipo para este split"}</span>
+                <h3 className="text-2xl font-semibold tracking-tight text-ink">{miEscuderia.nombre}</h3>
+                <p className="mt-0.5 text-sm text-ink-muted">{currentSplit?.nombre || activeSplitId}</p>
                 {logoError && (
-                  <p role="alert" className="mt-1.5 max-w-xs text-xs leading-relaxed text-brand">{logoError}</p>
+                  <p role="alert" className="mt-1.5 max-w-xs text-sm leading-relaxed text-danger">{logoError}</p>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-line pt-4 md:pt-0">
+            <div className="flex w-full items-center justify-between gap-8 border-t border-line pt-4 md:w-auto md:justify-end md:border-t-0 md:pt-0">
               {canViewBudget && (
                 <div>
-                  <h4 className="text-[11px] uppercase font-bold tracking-[0.08em] text-brand mb-1">Presupuesto Disponible</h4>
+                  <h4 className="mb-1 text-xs font-semibold text-ink-muted">Presupuesto disponible</h4>
                   <div className="flex items-baseline gap-0.5">
-                    <span className="text-4xl font-extrabold italic text-ink leading-none">{miEscuderia.presupuesto == null ? "—" : miEscuderia.presupuesto.toFixed(1)}</span><span className="text-xl font-bold text-ink-muted">M</span>
+                    <span className="money text-4xl font-semibold leading-none text-ink">{miEscuderia.presupuesto == null ? "—" : miEscuderia.presupuesto.toFixed(1)}</span><span className="text-xl font-semibold text-ink-muted">M</span>
                   </div>
                 </div>
               )}
               <div className="text-right">
-                <p className="text-[11px] text-brand uppercase font-bold tracking-[0.08em] mb-1">Valor Total de Plantilla</p>
+                <p className="mb-1 text-xs font-semibold text-ink-muted">Valor total de plantilla</p>
                 <div className="flex items-baseline justify-end gap-0.5">
-                  <span className="text-2xl font-black italic text-ink leading-none">{miEscuderia.valor_total.toFixed(1)}</span><span className="text-sm font-bold text-ink-muted">M</span>
+                  <span className="money text-2xl font-semibold leading-none text-ink">{miEscuderia.valor_total.toFixed(1)}</span><span className="text-sm font-semibold text-ink-muted">M</span>
                 </div>
               </div>
             </div>
           </div>
           ) : null}
-        </section>
+        </Card>
       )}
 
       {activeSplitId !== "global" && currentSplit?.tipo !== "individual" && (miEscuderia || soyAgenteLibre) && (
         <section>
-          <div className="flex justify-between items-center mb-4 border-b border-line pb-2">
-            <h2 className="text-xl font-bold italic tracking-tight lowercase flex items-center gap-2"><span className="w-1 h-5 bg-brand" />mi equipo</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <SectionTitle>Mi equipo</SectionTitle>
             {currentSplit?.fichajes_abiertos && (
-              <span className="bg-ok/20 border border-ok/30 text-ok font-bold font-mono text-xs uppercase px-2.5 py-1 rounded-full animate-pulse tracking-wide flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" /> VENTANA DE FICHAJES ABIERTA (MERCADO ACTIVO)
-              </span>
+              <Badge tone="ok" dot className="mb-4">
+                <Sparkles aria-hidden="true" className="h-3.5 w-3.5" /> Ventana de fichajes abierta
+              </Badge>
             )}
           </div>
           
           {soyAgenteLibre && !miEscuderia ? (
-            <div className="bg-warn/5 border border-warn/20  p-6 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div className="absolute right-0 top-0 w-32 h-32 bg-warn/5 rounded-full "></div>
+            <Card tone="muted" className="flex flex-col items-start justify-between gap-6 border-warn/40 bg-warn-soft/60 md:flex-row md:items-center">
               <div>
-                <div className="flex items-center gap-2 text-warn font-black text-xs uppercase tracking-widest mb-2"><ShieldAlert className="w-4 h-4 animate-bounce" /> Agencia Libre / Estado Independiente</div>
-                <h3 className="text-xl font-extrabold text-ink uppercase tracking-tight">Actualmente estás SIN EQUIPO en {currentSplit?.nombre || "este Split"}</h3>
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-warn"><ShieldAlert aria-hidden="true" className="h-4 w-4" /> Agencia libre · estado independiente</div>
+                <h3 className="text-xl font-semibold tracking-tight text-ink">Actualmente estás sin equipo en {currentSplit?.nombre || "este Split"}</h3>
                 <p className="text-sm text-ink-muted mt-1 max-w-xl">Tu perfil está disponible en el mercado para este Split. Las escuderías con presupuesto te pueden incorporar mediante la sección de "Agentes Libres Bolsa", o el Administrador puede asignarte de forma manual a una escudería desde el Panel de Control.</p>
               </div>
-              <div className="bg-warn/10 border border-warn/20 rounded-sm p-3 text-center w-full md:w-auto shrink-0">
-                <span className="text-xs block text-warn font-mono tracking-wider uppercase font-extrabold mb-1">VALOR DE COMPRA</span>
-                <span className="text-2xl font-black font-mono text-ink">10M</span>
+              <div className="w-full shrink-0 rounded-lg border border-warn/30 bg-surface/70 p-3 text-center md:w-auto">
+                <span className="mb-1 block text-xs font-semibold text-warn">Valor de compra</span>
+                <span className="money text-2xl font-semibold text-ink">10M</span>
               </div>
-            </div>
+            </Card>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {misPilotos.map((p: any, i: number) => {
@@ -591,7 +610,7 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 return (
                   <div
                     key={`mis-pilotos-${p.pilotoId}-${i}`}
-                    className={canOpenPilotProfile ? "cursor-pointer" : ""}
+                    className={canOpenPilotProfile ? "cursor-pointer rounded-lg fluent-press" : ""}
                     onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(p.pilotoId); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
                     title={canOpenPilotProfile ? "Clic para ver estadísticas" : undefined}
                   >
@@ -602,16 +621,16 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                       size="sm"
                       showPrice={canViewBudget && !p.congelado}
                       footer={canViewBudget ? (
-                        <div className="bg-surface-2 border border-t-0 border-line px-2.5 py-2 space-y-1.5">
+                        <div className="space-y-1.5 rounded-b-lg border border-t-0 border-line bg-surface-2/80 px-2.5 py-2">
                           {p.congelado ? (
-                            <div className="flex justify-between text-[11px] font-mono text-ink-muted">
+                            <div className="flex justify-between text-xs text-ink-muted">
                               <span>Estado</span>
-                              <span className="text-info font-bold">❄ Congelado</span>
+                              <span className="inline-flex items-center gap-1 font-semibold text-info"><Snowflake aria-hidden="true" className="h-3 w-3" />Congelado</span>
                             </div>
                           ) : (
-                            <div className="flex justify-between text-[11px] font-mono text-ink-muted">
+                            <div className="flex justify-between text-xs text-ink-muted">
                               <span>Cláusula</span>
-                              <span className="text-brand font-bold">{p.clausula_actual || 0}M</span>
+                              <span className="font-semibold tabular-nums text-ink">{p.clausula_actual || 0}M</span>
                             </div>
                           )}
                         </div>
@@ -621,102 +640,106 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 );
               })}
               {misPilotos.length === 0 && (
-                <div className="col-span-full text-ink-muted italic text-xs uppercase tracking-widest font-mono p-4 border border-line">
-                  Sin pilotos contratados.
-                </div>
+                <EmptyState className="col-span-full py-8" icon={Users} title="Sin pilotos contratados" description="Cuando ficheres a un piloto aparecerá aquí." />
               )}
             </div>
           )}
         </section>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
         <section>
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-line pb-2 lowercase flex items-center gap-2">
-            <span className="w-1 h-5 bg-brand" />
-            {activeSplitId === "global" ? "PALMARÉS HISTÓRICO PILOTOS" : `MUNDIAL ${currentSplit?.nombre || 'PILOTOS'}`}
-          </h2>
-          <div className="m-card bg-surface-2 border border-line overflow-hidden p-2 md:p-4">
-            <table className="w-full text-sm text-left">
+          <SectionTitle>{activeSplitId === "global" ? "Palmarés histórico de pilotos" : `Mundial de pilotos${currentSplit?.nombre ? ` · ${currentSplit.nombre}` : ""}`}</SectionTitle>
+          <Card pad="sm" className="overflow-hidden">
+            {standings.length === 0 ? (
+              <EmptyState icon={Users} title="Sin clasificación todavía" description="Los puntos aparecerán cuando se cierre la primera carrera." className="border-0 bg-transparent py-8" />
+            ) : (
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">{activeSplitId === "global" ? "Títulos de pilotos por temporada" : "Clasificación de pilotos"}</caption>
               <thead>
-                <tr className="text-xs text-ink-muted uppercase tracking-wider border-b border-line">
-                  <th className="pb-3 pl-2">Pos</th>
-                  <th className="pb-3">Piloto</th>
-                  <th className="pb-3 text-right pr-2">{activeSplitId === "global" ? "Títulos" : "Pts"}</th>
+                <tr className="border-b border-line text-xs font-semibold text-ink-muted">
+                  <th scope="col" className="w-10 pb-2.5 pl-2 font-semibold">Pos</th>
+                  <th scope="col" className="pb-2.5 font-semibold">Piloto</th>
+                  <th scope="col" className="pb-2.5 pr-2 text-right font-semibold">{activeSplitId === "global" ? "Títulos" : "Pts"}</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
                 {standings.map((p: any, i: number) => {
                   const pilotPhoto = getPilotPhoto(p.id);
+                  const tone = i === 0 ? "text-warn" : "text-ink";
                   return (
-                    <tr 
-                      key={`standings-${p.id || p.name}-${i}`} 
-                       onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
-                       className={`border-b border-line last:border-0 transition-all group ${canOpenPilotProfile ? "hover:bg-brand/10 cursor-pointer" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística del piloto" : undefined}
+                    <tr
+                      key={`standings-${p.id || p.name}-${i}`}
+                      onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(p.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
+                      className={`border-b border-line last:border-0 transition-colors ${canOpenPilotProfile ? "cursor-pointer hover:bg-info/10" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística del piloto" : undefined}
                     >
-                      <td className={`py-3 pl-2 font-black italic text-lg w-8 ${i === 0 ? "text-warn" : i === 1 ? "text-ink-muted" : i === 2 ? "text-warn" : "text-ink-muted"}`}>{i + 1}</td>
-                      <td className="py-3.5 font-bold">
-                        <div className="flex items-center gap-3">
+                      <td className={`w-10 py-2.5 pl-2 text-base font-semibold tabular-nums ${i < 3 ? "text-warn" : "text-ink-muted"}`}>{i + 1}</td>
+                      <td className="min-h-11 py-2.5 font-semibold">
+                        <div className="flex min-w-0 items-center gap-3">
                           {pilotPhoto ? (
-                            <img src={pilotPhoto} alt={p.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full object-cover border border-brand/40" />
+                            <img src={pilotPhoto} alt="" referrerPolicy="no-referrer" className="h-9 w-9 shrink-0 rounded-full border border-line-strong object-cover" />
                           ) : (
-                            <div className="w-8 h-8 rounded-full border border-line bg-surface flex items-center justify-center font-bold text-xs text-ink-muted uppercase font-mono">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-xs font-semibold uppercase text-ink-muted">
                               {p.name ? p.name.substring(0, 2).toUpperCase() : '??'}
                             </div>
                           )}
-                          <div className="flex flex-col">
-                            <span className={i === 0 ? "text-warn" : i === 1 ? "text-ink-muted" : i === 2 ? "text-warn" : "text-ink"}>{p.name}</span>
-                            <span className="text-xs text-ink-muted font-mono uppercase">{p.escuderia}</span>
+                          <div className="flex min-w-0 flex-col">
+                            <span className={`truncate ${tone}`}>{p.name}</span>
+                            <span className="truncate text-xs font-normal text-ink-muted">{p.escuderia}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3.5 text-right pr-2 font-bold tabular-nums">
+                      <td className="py-2.5 pr-2 text-right font-semibold tabular-nums">
                         {activeSplitId === "global"
-                          ? <span className="text-warn text-base font-black">{p.points} 🏆</span>
-                           : <span className={i === 0 ? "text-warn" : i === 1 ? "text-ink-muted" : i === 2 ? "text-warn" : "text-ink"}>{p.points}</span>}
+                          ? <span className="inline-flex items-center gap-1 text-warn"><Trophy aria-hidden="true" className="h-4 w-4" />{p.points}</span>
+                          : <span className={tone}>{p.points}</span>}
                       </td>
-                  </tr>
-                );
-              })}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
+            )}
+          </Card>
         </section>
 
         <section>
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-line pb-2 lowercase flex items-center gap-2">
-            <span className="w-1 h-5 bg-brand" />
-            {activeSplitId === "global" ? "PALMARÉS HISTÓRICO ESCUDERÍAS" : currentSplit?.tipo === "individual" ? "MUNDIAL DÚOS" : "MUNDIAL ESCUDERÍAS"}
-          </h2>
-          <div className="m-card bg-surface-2 border border-line overflow-hidden p-2 md:p-4">
-            <table className="w-full text-sm text-left">
+          <SectionTitle>{activeSplitId === "global" ? "Palmarés histórico de escuderías" : currentSplit?.tipo === "individual" ? "Mundial de dúos" : "Mundial de escuderías"}</SectionTitle>
+          <Card pad="sm" className="overflow-hidden">
+            {teamStandings.length === 0 ? (
+              <EmptyState icon={Users} title="Sin clasificación todavía" description="Los puntos aparecerán cuando se cierre la primera carrera." className="border-0 bg-transparent py-8" />
+            ) : (
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">{activeSplitId === "global" ? "Títulos de escuderías por temporada" : "Clasificación de escuderías"}</caption>
               <thead>
-                <tr className="text-xs text-ink-muted uppercase tracking-wider border-b border-line">
-                  <th className="pb-3 pl-2">Pos</th>
-                  <th className="pb-3">Escudería</th>
-                  <th className="pb-3 text-right pr-2">{activeSplitId === "global" ? "Títulos" : "Pts"}</th>
+                <tr className="border-b border-line text-xs font-semibold text-ink-muted">
+                  <th scope="col" className="w-10 pb-2.5 pl-2 font-semibold">Pos</th>
+                  <th scope="col" className="pb-2.5 font-semibold">Escudería</th>
+                  <th scope="col" className="pb-2.5 pr-2 text-right font-semibold">{activeSplitId === "global" ? "Títulos" : "Pts"}</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
                 {teamStandings.map((t: any, i: number) => {
                   const logo = getTeamLogo(t.id);
                   return (
-                    <tr key={t.id} className="border-b border-line last:border-0 hover:bg-surface-2 transition-colors">
-                      <td className="py-3 pl-2 font-black italic text-ink-muted text-lg w-8">{i + 1}</td>
-                      <td className="py-3.5 font-bold flex items-center gap-3">
-                        {logo ? (
-                          <img src={logo} alt={t.nombre} referrerPolicy="no-referrer" className="w-8 h-8 rounded-sm object-cover border border-line" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-sm border border-line bg-surface flex items-center justify-center font-bold text-xs text-ink-muted uppercase font-mono">
-                            {t.nombre ? t.nombre.substring(0, 2).toUpperCase() : '??'}
-                          </div>
-                        )}
-                         <span className="uppercase tracking-tighter">{t.nombre}</span>
-                         {i === 0 && <Crown className="w-4 h-4 text-warn shrink-0" />}
+                    <tr key={t.id} className="border-b border-line transition-colors last:border-0 hover:bg-info/5">
+                      <td className={`w-10 py-2.5 pl-2 text-base font-semibold tabular-nums ${i < 3 ? "text-warn" : "text-ink-muted"}`}>{i + 1}</td>
+                      <td className="py-2.5 font-semibold">
+                        <div className="flex min-w-0 items-center gap-3">
+                          {logo ? (
+                            <img src={logo} alt="" referrerPolicy="no-referrer" className="h-9 w-9 shrink-0 rounded-lg border border-line object-cover" />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-xs font-semibold uppercase text-ink-muted">
+                              {t.nombre ? t.nombre.substring(0, 2).toUpperCase() : '??'}
+                            </div>
+                          )}
+                          <span className="truncate">{t.nombre}</span>
+                          {i === 0 && <Crown aria-label="Líder" className="h-4 w-4 shrink-0 text-warn" />}
+                        </div>
                       </td>
-                      <td className="py-3.5 text-right pr-2 font-bold tabular-nums">
+                      <td className="py-2.5 pr-2 text-right font-semibold tabular-nums">
                         {activeSplitId === "global"
-                          ? <span className="text-warn text-base font-black">{t.puntos} 🏆</span>
+                          ? <span className="inline-flex items-center gap-1 text-warn"><Trophy aria-hidden="true" className="h-4 w-4" />{t.puntos}</span>
                           : t.puntos}
                       </td>
                     </tr>
@@ -724,50 +747,46 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                 })}
               </tbody>
             </table>
-          </div>
+            )}
+          </Card>
         </section>
       </div>
 
       {activeSplitId === "global" && championshipsTimeline && championshipsTimeline.length > 0 && (
-        <section className="mt-8">
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-line pb-2 lowercase flex items-center gap-2">
-            <span className="w-1.5 h-5 bg-brand block" /> Palmarés Histórico por Splits (Historial de Campeones)
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {championshipsTimeline.map((item, idx) => (
-              <div key={item.splitId} className={`border  p-5 relative overflow-hidden transition-all duration-300 ${item.completed ? "bg-bg border-warn/30 hover:border-warn/50  shadow-warn/20" : "bg-surface-2 border-line opacity-60"}`}>
-                {item.completed ? (
-                  <div className="absolute top-3 right-3 bg-warn/10 text-warn border border-warn/25 rounded-full px-2 py-0.5 text-[11px] font-black uppercase tracking-wider font-mono">Oficial 🏆</div>
-                ) : (
-                  <div className="absolute top-3 right-3 bg-surface-2 text-ink-muted border border-line rounded-full px-2 py-0.5 text-[11px] font-mono tracking-wider uppercase">Próximo 🏁</div>
-                )}
-                <div className="text-xs uppercase font-mono tracking-widest text-brand mb-4 font-black">{item.splitName}</div>
-                
+        <section>
+          <SectionTitle>Palmarés histórico por splits</SectionTitle>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {championshipsTimeline.map((item) => (
+              <Card key={item.splitId} tone={item.completed ? "solid" : "muted"} accent={item.completed ? "var(--c-warn)" : undefined} className={`reveal relative ${item.completed ? "" : "opacity-80"}`}>
+                <div className="mb-4 flex items-start justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-ink">{item.splitName}</h3>
+                  {item.completed ? <Badge tone="warn">Oficial</Badge> : <Badge>Próximo</Badge>}
+                </div>
                 <div className="space-y-4">
                   <div>
-                    <div className="text-[11px] text-ink-muted uppercase font-mono mb-1">Campeón de Pilotos:</div>
+                    <div className="mb-1 text-xs text-ink-muted">Campeón de pilotos</div>
                     {item.completed ? (
                       <div>
-                        <p className="font-extrabold text-brand text-sm tracking-tight">{item.winnerPilot}</p>
-                        <p className="text-xs text-ink-muted font-mono mt-0.5 uppercase">{item.winnerPilotTeam} ({item.winnerPilotPoints} pts)</p>
+                        <p className="text-sm font-semibold text-ink">{item.winnerPilot}</p>
+                        <p className="mt-0.5 text-xs text-ink-muted">{item.winnerPilotTeam} ({item.winnerPilotPoints} pts)</p>
                       </div>
                     ) : (
-                      <p className="text-xs text-ink-muted italic font-mono uppercase">Pendiente de inicio</p>
+                      <p className="text-sm text-ink-muted">Pendiente de inicio</p>
                     )}
                   </div>
                   <div className="border-t border-line pt-3">
-                    <div className="text-[11px] text-ink-muted uppercase font-mono mb-1">Campeón de Escuderías:</div>
+                    <div className="mb-1 text-xs text-ink-muted">Campeón de escuderías</div>
                     {item.completed ? (
                       <div>
-                        <p className="font-extrabold text-ink text-sm tracking-tight uppercase">{item.winnerTeam}</p>
-                        <p className="text-xs text-ink-muted font-mono mt-0.5 uppercase">({item.winnerTeamPoints} pts)</p>
+                        <p className="text-sm font-semibold text-ink">{item.winnerTeam}</p>
+                        <p className="mt-0.5 text-xs text-ink-muted">({item.winnerTeamPoints} pts)</p>
                       </div>
                     ) : (
-                      <p className="text-xs text-ink-muted italic font-mono uppercase">Pendiente de inicio</p>
+                      <p className="text-sm text-ink-muted">Pendiente de inicio</p>
                     )}
                   </div>
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         </section>
@@ -775,32 +794,27 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
       {activeSplitId !== "global" && raceResults.length > 0 && (
         <section>
-          <h2 className="text-xl font-bold italic tracking-tight mb-4 border-b border-line pb-2 lowercase flex items-center gap-2">
-            <span className="w-1 h-5 bg-brand" /> puntos por carrera
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <SectionTitle>Puntos por carrera</SectionTitle>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-6">
             {raceResults.map((gp, i) => (
-              <div key={i} className="bg-surface-2 border border-line  p-4 overflow-hidden relative group">
-                <div className="absolute right-0 top-0 text-[40px] font-black italic text-ink-muted pointer-events-none group-hover:text-brand/10 transition-colors uppercase">GP</div>
-                <h3 className="text-xs font-mono uppercase tracking-[0.08em] text-brand mb-4 border-b border-line pb-2">{gp.circuitName}</h3>
-                <div className="space-y-3">
+              <Card key={i} as="article" tone="solid" pad="sm" className="overflow-hidden">
+                <h3 className="mb-3 border-b border-line pb-2 text-sm font-semibold text-brand">{gp.circuitName}</h3>
+                <ul className="space-y-1">
                   {gp.pilots.sort((a: any, b: any) => b.pts - a.pts).map((rp: any, idx: number) => (
-                    <div 
-                      key={idx} 
+                    <li
+                      key={idx}
                       onClick={canOpenPilotProfile ? () => { setSelectedPilotForProfileId(rp.id); setActiveProfileTab("profile"); setIsCompareViewOpen(true); } : undefined}
-                      className={`flex justify-between items-center text-xs p-1 rounded transition-colors group/row ${canOpenPilotProfile ? "cursor-pointer hover:bg-surface-2" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística detallada de este piloto" : undefined}
+                      className={`flex min-h-11 items-center justify-between gap-3 rounded-lg px-2 py-1 text-sm transition-colors ${canOpenPilotProfile ? "cursor-pointer hover:bg-info/10" : ""}`} title={canOpenPilotProfile ? "Haz clic para ver la ficha estadística detallada de este piloto" : undefined}
                     >
-                      <div className="flex flex-col">
-                        <span className="font-bold flex items-center gap-2 text-ink group-hover/row:text-brand transition-colors">
-                           <span className="w-1.5 h-1.5 bg-surface-3 rounded-full group-hover/row:bg-brand/80" /> {rp.name}
-                        </span>
-                        <span className="text-[11px] text-ink-muted uppercase font-mono ml-3.5">{rp.team.replace('_', ' ')}</span>
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate font-semibold text-ink">{rp.name}</span>
+                        <span className="truncate text-xs text-ink-muted">{rp.team.replace('_', ' ')}</span>
                       </div>
-                      <span className="font-black text-ink tabular-nums group-hover/row:text-brand transition-colors">{rp.pts} <span className="text-[11px] text-ink-muted font-normal">pts</span></span>
-                    </div>
+                      <span className="shrink-0 font-semibold tabular-nums text-ink">{rp.pts} <span className="text-xs font-normal text-ink-muted">pts</span></span>
+                    </li>
                   ))}
-                </div>
-              </div>
+                </ul>
+              </Card>
             ))}
           </div>
         </section>
@@ -812,13 +826,13 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
 
       {confirmModal && confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-surface z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
-          <div className="relative w-full max-w-sm rounded-t-2xl border border-line bg-bg p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-left sm:rounded-none sm:p-6 sm:pb-6">
-            <h3 className="text-lg font-black text-ink uppercase tracking-tight mb-2 flex items-center gap-2"><span className="w-1.5 h-4 bg-brand" /> {confirmModal.title}</h3>
-            <p className="text-[13px] text-ink-muted leading-relaxed mb-6">{confirmModal.message}</p>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-0 sm:items-center sm:p-4">
+          <div role="alertdialog" aria-modal="true" aria-label={confirmModal.title} className="acrylic relative w-full max-w-sm rounded-t-2xl bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-left shadow-fluent-3 sm:rounded-card sm:p-6 sm:pb-6">
+            <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold tracking-tight text-ink"><span aria-hidden="true" className="h-4 w-1 rounded-full bg-brand" /> {confirmModal.title}</h3>
+            <p className="mb-6 text-sm leading-relaxed text-ink-muted">{confirmModal.message}</p>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-              {confirmModal.showCancel !== false && (<button onClick={() => setConfirmModal(null)} className="min-h-12 rounded-xl border border-line bg-surface-2 px-4 text-sm font-bold text-ink transition-colors hover:bg-surface-2 sm:min-h-0 sm:rounded-sm sm:py-2.5 sm:text-xs sm:uppercase sm:tracking-wider">Cancelar</button>)}
-              <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} className="min-h-12 rounded-xl bg-brand px-4 text-sm font-bold text-brand-ink transition-colors hover:bg-danger sm:min-h-0 sm:rounded-sm sm:py-2.5 sm:text-xs sm:uppercase sm:tracking-wider">Confirmar</button>
+              {confirmModal.showCancel !== false && (<Button onClick={() => setConfirmModal(null)}>Cancelar</Button>)}
+              <Button variant="primary" onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
             </div>
           </div>
         </div>
@@ -826,83 +840,83 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
       {isCompareViewOpen && (
         <div
-          className="fixed inset-0 bg-ink/75 z-50 overflow-y-auto overscroll-contain p-0 md:p-6 text-left backdrop-blur-sm"
+          className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-ink/60 p-0 text-left md:p-6"
           onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }}
         >
-          <div className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl border-line bg-surface p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 -mx-4 mb-5 flex items-start justify-between gap-3 border-b border-brand/20 bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:static md:mx-0 md:mb-6 md:px-0 md:pt-0 md:pb-4">
+          <div role="dialog" aria-modal="true" aria-label="Rivalidad y rendimiento" className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl bg-surface p-4 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-fluent-3 md:my-4 md:min-h-0 md:rounded-card md:border md:border-line md:p-6" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 -mx-4 mb-5 flex items-start justify-between gap-3 border-b border-line bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:static md:mx-0 md:mb-6 md:px-0 md:pt-0 md:pb-4">
               <div className="min-w-0">
-                <span className="block text-[11px] font-black text-brand md:font-mono md:text-xs md:uppercase md:tracking-[0.08em]">Central de telemetría GP</span>
-                <h2 className="mt-0.5 flex items-center gap-2 text-lg font-black uppercase italic tracking-tight text-ink md:text-2xl"><TrendingUp className="w-5 h-5 shrink-0 text-warn md:w-6 md:h-6" /> <span className="truncate">Rivalidad & rendimiento</span></h2>
+                <span className="block text-xs font-semibold text-brand">Central de telemetría GP</span>
+                <h2 className="mt-0.5 flex items-center gap-2 text-lg font-semibold tracking-tight text-ink md:text-2xl"><TrendingUp aria-hidden="true" className="h-5 w-5 shrink-0 text-info md:h-6 md:w-6" /> <span className="truncate">Rivalidad & rendimiento</span></h2>
               </div>
-              <button aria-label="Cerrar" onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line text-ink-muted transition-all hover:bg-surface-2 hover:text-ink md:rounded-sm"><X className="w-5 h-5" /></button>
+              <button aria-label="Cerrar" onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="fluent-press grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line text-ink-muted hover:bg-info/10 hover:text-ink"><X aria-hidden="true" className="h-5 w-5" /></button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 border-b border-line mb-5 md:flex md:mb-6">
-              <button onClick={() => { setActiveProfileTab("profile"); if (!selectedPilotForProfileId && allPaddockPilots.length > 0) setSelectedPilotForProfileId(allPaddockPilots[0].id); }} className={`min-h-12 px-3 md:px-6 md:py-3 font-black text-[12px] md:text-xs md:uppercase tracking-tight md:tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "profile" ? "border-brand text-ink bg-surface-2" : "border-transparent text-ink-muted hover:text-ink hover:bg-surface-2"}`}><span className="md:hidden">👤 Ficha</span><span className="hidden md:inline">👤 Ficha Individual de Piloto</span></button>
-              <button onClick={() => { setActiveProfileTab("compare"); if (!comparePilotIdA && allPaddockPilots.length > 0) setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id); if (!comparePilotIdB && allPaddockPilots.length > 0) { const firstId = selectedPilotForProfileId || allPaddockPilots[0].id; const other = allPaddockPilots.filter(p => p.id !== firstId)[0]; setComparePilotIdB(other?.id || firstId); } }} className={`min-h-12 px-3 md:px-6 md:py-3 font-black text-[12px] md:text-xs md:uppercase tracking-tight md:tracking-wider border-b-2 transition-all cursor-pointer ${activeProfileTab === "compare" ? "border-brand text-ink bg-surface-2" : "border-transparent text-ink-muted hover:text-ink hover:bg-surface-2"}`}><span className="md:hidden">⚔️ Comparar</span><span className="hidden md:inline">⚔️ Comparador Cara a Cara</span></button>
+            <div role="tablist" className="mb-5 grid grid-cols-2 gap-2 border-b border-line md:mb-6 md:flex">
+              <button onClick={() => { setActiveProfileTab("profile"); if (!selectedPilotForProfileId && allPaddockPilots.length > 0) setSelectedPilotForProfileId(allPaddockPilots[0].id); }} role="tab" aria-selected={activeProfileTab === "profile"} className={`${SEG_TAB} md:px-6 ${activeProfileTab === "profile" ? "border-brand bg-info/5 text-ink" : "border-transparent text-ink-muted hover:bg-info/10 hover:text-ink"}`}><span className="md:hidden">Ficha</span><span className="hidden md:inline">Ficha individual de piloto</span></button>
+              <button onClick={() => { setActiveProfileTab("compare"); if (!comparePilotIdA && allPaddockPilots.length > 0) setComparePilotIdA(selectedPilotForProfileId || allPaddockPilots[0].id); if (!comparePilotIdB && allPaddockPilots.length > 0) { const firstId = selectedPilotForProfileId || allPaddockPilots[0].id; const other = allPaddockPilots.filter(p => p.id !== firstId)[0]; setComparePilotIdB(other?.id || firstId); } }} role="tab" aria-selected={activeProfileTab === "compare"} className={`${SEG_TAB} md:px-6 ${activeProfileTab === "compare" ? "border-brand bg-info/5 text-ink" : "border-transparent text-ink-muted hover:bg-info/10 hover:text-ink"}`}><span className="md:hidden">Comparar</span><span className="hidden md:inline">Comparador cara a cara</span></button>
             </div>
 
             {activeProfileTab === "profile" && currentSplit?.id !== "origins" && (
               <div className="space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface-2 border border-line p-4 rounded-sm">
+                <Card tone="muted" pad="sm" className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
                   <div>
-                    <label className="text-xs text-ink-muted uppercase font-mono tracking-wider mb-1.5 block">Explorar Ficha de Piloto</label>
-                    <select value={selectedPilotForProfileId || ""} onChange={(e) => setSelectedPilotForProfileId(e.target.value)} className="bg-surface border border-line rounded-sm text-xs px-3 py-2 text-ink font-bold w-full md:w-64 focus:border-danger hover:border-line-strong transition-all cursor-pointer">
-                      <option value="" disabled>-- Selecciona un piloto --</option>
+                    <label htmlFor="sd-profile-pilot" className="mb-1.5 block text-sm font-semibold text-ink-2">Explorar ficha de piloto</label>
+                    <select id="sd-profile-pilot" value={selectedPilotForProfileId || ""} onChange={(e) => setSelectedPilotForProfileId(e.target.value)} className={`${SELECT_CLASS} md:w-72`}>
+                      <option value="" disabled>Selecciona un piloto</option>
                       {allPaddockPilots.map((p) => (<option key={p.id} value={p.id}>{p.name} ({p.team})</option>))}
                     </select>
                   </div>
                   {selectedPilotForProfileId && (
-                    <button onClick={() => { setComparePilotIdA(selectedPilotForProfileId); const other = allPaddockPilots.filter(p => p.id !== selectedPilotForProfileId)[0]; if (other) setComparePilotIdB(other.id); setActiveProfileTab("compare"); }} className="bg-warn/10 hover:bg-warn/20 text-warn border border-warn/30 font-extrabold uppercase text-xs tracking-wider px-4 py-2.5 rounded-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95">
-                      <TrendingUp className="w-4 h-4" /> Comparar este piloto ⚔️
+                    <button onClick={() => { setComparePilotIdA(selectedPilotForProfileId); const other = allPaddockPilots.filter(p => p.id !== selectedPilotForProfileId)[0]; if (other) setComparePilotIdB(other.id); setActiveProfileTab("compare"); }} className={buttonClass()}>
+                      <TrendingUp aria-hidden="true" className="h-4 w-4 text-info" /> Comparar este piloto
                     </button>
                   )}
-                </div>
+                </Card>
 
                 {pilotProfileStats ? (
                   <div className="space-y-6">
                     <div className="flex flex-col lg:flex-row gap-6">
                       {activeSplitId !== "global" && currentSplit?.id === "origins" ? (
-                        <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 min-h-[360px] bg-surface-2 border border-line overflow-hidden flex flex-col justify-end p-6">
+                        <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 min-h-[360px] overflow-hidden rounded-card border border-line bg-surface-2 flex flex-col justify-end p-6 shadow-fluent-2">
                           <div className="absolute inset-x-0 top-0 h-1.5 bg-brand" />
                           <div className="absolute inset-0 flex items-center justify-center opacity-90">
                             {pilotProfileStats.fotoUrl ? (
                               <img src={pilotProfileStats.fotoUrl} alt={pilotProfileStats.name} className="max-w-[80%] max-h-[70%] object-contain" />
                             ) : (
-                              <span className="text-7xl font-black text-ink-muted">{pilotProfileStats.name?.substring(0, 2).toUpperCase()}</span>
+                              <span className="text-7xl font-semibold text-ink-muted">{pilotProfileStats.name?.substring(0, 2).toUpperCase()}</span>
                             )}
                           </div>
                           <div className="relative z-10 bg-gradient-to-t from-surface via-surface/90 to-transparent -mx-6 -mb-6 px-6 pb-6 pt-20">
-                            <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-brand">Origins</span>
-                            <h3 className="mt-1 text-2xl font-black italic uppercase text-ink">{pilotProfileStats.name}</h3>
-                            <p className="mt-3 text-sm font-mono text-ink-muted">{pilotProfileStats.totalPoints} puntos · {pilotProfileStats.participaciones} carreras</p>
+                            <span className="text-xs font-semibold text-brand">Origins</span>
+                            <h3 className="mt-1 text-2xl font-semibold text-ink">{pilotProfileStats.name}</h3>
+                            <p className="mt-3 text-sm text-ink-muted">{pilotProfileStats.totalPoints} puntos · {pilotProfileStats.participaciones} carreras</p>
                           </div>
                         </div>
                       ) : (
-                      <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 h-[440px] bg-surface-2 border border-line shadow-card overflow-hidden group">
+                      <div className="relative w-full max-w-[288px] mx-auto lg:mx-0 shrink-0 h-[440px] overflow-hidden rounded-card border border-line bg-surface-2 shadow-fluent-2 group">
                         <div className="absolute top-0 left-0 w-full h-1.5 bg-brand"></div>
-                        <div className="absolute -top-20 -right-20 w-48 h-48 bg-brand/20 rounded-full pointer-events-none group-hover:bg-brand/30 transition-all duration-500"></div>
+                        <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-brand/15"></div>
                         <div className="absolute top-5 left-5 flex flex-col items-center z-20 drop-shadow-md">
-                          <span className="text-[42px] font-black italic text-ink leading-none tracking-tighter">{pilotProfileStats.rating}</span>
-                          <span className="text-xs font-bold text-ink-2 uppercase tracking-widest mt-1">OVR</span>
-                          <div className="w-8 h-[2px] bg-surface-3 my-2.5"></div>
-                          <div className="text-[11px] font-black text-ink-muted uppercase tracking-widest" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{pilotProfileStats.escuderiaName ? pilotProfileStats.escuderiaName.substring(0, 16) : 'EQ'}</div>
+                          <span className="text-[42px] font-semibold leading-none tracking-tight text-ink">{pilotProfileStats.rating}</span>
+                          <span className="mt-1 text-xs font-semibold text-ink-2">OVR</span>
+                          <div className="my-2.5 h-[2px] w-8 bg-line-strong"></div>
+                          <div className="text-[11px] font-semibold text-ink-muted" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{pilotProfileStats.escuderiaName ? pilotProfileStats.escuderiaName.substring(0, 16) : 'EQ'}</div>
                         </div>
-                        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 w-[220px] h-[220px] z-10 flex items-end justify-center transition-transform duration-500 group-hover:scale-105">
+                        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 w-[220px] h-[220px] z-10 flex items-end justify-center ">
                           {pilotProfileStats.fotoUrl ? (
                             <img src={pilotProfileStats.fotoUrl} alt={pilotProfileStats.name} className="max-w-full max-h-full object-contain drop-shadow-card" />
                           ) : (
-                            <div className="w-32 h-32 rounded-full bg-surface border border-line flex items-center justify-center font-black text-5xl text-ink-muted mb-6 drop-">{pilotProfileStats.name ? pilotProfileStats.name.substring(0, 2).toUpperCase() : '??'}</div>
+                            <div className="w-32 h-32 rounded-full bg-surface border border-line flex items-center justify-center font-semibold text-5xl text-ink-muted mb-6">{pilotProfileStats.name ? pilotProfileStats.name.substring(0, 2).toUpperCase() : '??'}</div>
                           )}
                         </div>
                         <div className="absolute bottom-0 w-full bg-gradient-to-t from-surface to-transparent pt-16 pb-6 px-6 z-20">
-                          <h3 className="text-2xl font-black italic text-ink uppercase tracking-tighter text-center whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-md">{pilotProfileStats.name}</h3>
-                          <div className="w-full h-[1px] bg-surface-2 my-3.5"></div>
+                          <h3 className="overflow-hidden text-ellipsis whitespace-nowrap text-center text-2xl font-semibold tracking-tight text-ink">{pilotProfileStats.name}</h3>
+                          <div className="my-3.5 h-px w-full bg-line"></div>
                            <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-1">
-                             <div className="flex flex-col items-center"><span className="text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-0.5">PTS</span><span className="text-base leading-none font-black text-ink">{pilotProfileStats.totalPoints}</span></div>
-                             <div className="flex flex-col items-center"><span className="text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-0.5">POLE</span><span className="text-base leading-none font-black text-ink">{pilotProfileStats.poles}</span></div>
-                             <div className="flex flex-col items-center"><span className="text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-0.5">DOTD</span><span className="text-base leading-none font-black text-warn">{pilotProfileStats.dotds}</span></div>
+                             <div className="flex flex-col items-center"><span className="mb-0.5 text-[11px] font-semibold text-ink-muted">PTS</span><span className="text-base font-semibold leading-none tabular-nums text-ink">{pilotProfileStats.totalPoints}</span></div>
+                             <div className="flex flex-col items-center"><span className="mb-0.5 text-[11px] font-semibold text-ink-muted">POLE</span><span className="text-base font-semibold leading-none tabular-nums text-ink">{pilotProfileStats.poles}</span></div>
+                             <div className="flex flex-col items-center"><span className="mb-0.5 text-[11px] font-semibold text-ink-muted">DOTD</span><span className="text-base font-semibold leading-none tabular-nums text-warn">{pilotProfileStats.dotds}</span></div>
                           </div>
                         </div>
                       </div>
@@ -911,46 +925,46 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                       <div className="flex-1 flex flex-col gap-4">
                         {activeSplitId !== "global" && currentSplit?.id === "origins" ? (
                           <div className="grid grid-cols-2 gap-3 flex-1">
-                            <div className="bg-surface-2 border border-line p-6 flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Media de puntos</span><span className="text-4xl font-black text-ink font-mono mt-4 tabular-nums">{pilotProfileStats.avgPoints}</span></div>
-                            <div className="bg-surface-2 border border-line p-6 flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Carreras disputadas</span><span className="text-4xl font-black text-ink font-mono mt-4 tabular-nums">{pilotProfileStats.participaciones}</span></div>
-                            <div className="col-span-2 border border-line bg-surface-2 p-6 text-sm leading-relaxed text-ink-muted">
+                            <Card tone="muted" className="flex flex-col justify-between"><span className="text-sm text-ink-muted">Media de puntos</span><span className="mt-4 text-4xl font-semibold tabular-nums text-ink">{pilotProfileStats.avgPoints}</span></Card>
+                            <Card tone="muted" className="flex flex-col justify-between"><span className="text-sm text-ink-muted">Carreras disputadas</span><span className="mt-4 text-4xl font-semibold tabular-nums text-ink">{pilotProfileStats.participaciones}</span></Card>
+                            <Card tone="muted" className="col-span-2 text-sm leading-relaxed text-ink-muted">
                               Origins conserva únicamente los puntos históricos por carrera y por dúo. No se muestran posiciones, rating ni datos de mercado que no figuran en el archivo original.
-                            </div>
+                            </Card>
                           </div>
                         ) : (
                         <>
-                        <div className="bg-surface-2 border border-line p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+                        <Card tone="muted" className="flex flex-col items-center justify-between gap-6 sm:flex-row">
                           <div className="w-full sm:flex-1">
                             <div className="flex justify-between items-end mb-2">
-                              <span className="text-xs text-ink-muted font-mono uppercase tracking-wider">Desarrollo de Rating</span>
-                              <span className="text-xs font-black text-ink font-mono">{pilotProfileStats.rating.toFixed(0)} / 99</span>
+                              <span className="text-sm text-ink-muted">Desarrollo de rating</span>
+                              <span className="text-sm font-semibold tabular-nums text-ink">{pilotProfileStats.rating.toFixed(0)} / 99</span>
                             </div>
-                            <div className="w-full bg-surface-2 h-2 overflow-hidden">
-                              <div className="bg-brand h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(99, pilotProfileStats.rating)}%` }}></div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+                              <div className="h-full rounded-full bg-info" style={{ width: `${Math.min(99, pilotProfileStats.rating)}%` }}></div>
                             </div>
                           </div>
                           {!pilotProfileStats.congelado && (
                             <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-line pt-4 sm:pt-0 sm:pl-6 shrink-0">
-                              <span className="text-xs text-ink-muted font-mono uppercase tracking-wider block mb-1">Cláusula de Mercado</span>
+                              <span className="mb-1 block text-sm text-ink-muted">Cláusula de mercado</span>
                               <div className="flex items-baseline gap-1 sm:justify-end">
-                                <span className="text-3xl font-black font-mono text-ok">{pilotProfileStats.clause.toFixed(1)}</span>
-                                <span className="text-sm font-bold text-ok font-mono">M</span>
+                                <span className="money text-3xl font-semibold text-ok">{pilotProfileStats.clause.toFixed(1)}</span>
+                                <span className="text-sm font-semibold text-ok">M</span>
                               </div>
                             </div>
                           )}
                           {pilotProfileStats.congelado && (
                             <div className="w-full sm:w-auto text-left sm:text-right border-t sm:border-t-0 sm:border-l border-line pt-4 sm:pt-0 sm:pl-6 shrink-0">
-                              <span className="text-xs text-ink-muted font-mono uppercase tracking-wider block mb-1">Estado</span>
-                              <span className="text-xl font-black text-info">❄ Congelado</span>
+                              <span className="mb-1 block text-sm text-ink-muted">Estado</span>
+                              <span className="inline-flex items-center gap-1.5 text-xl font-semibold text-info"><Snowflake aria-hidden="true" className="h-5 w-5" />Congelado</span>
                             </div>
                           )}
-                        </div>
+                        </Card>
 
                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
-                           <div className="bg-surface-2 border border-line p-4 rounded-sm flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Puntos</span><span className="text-2xl font-black text-ink font-mono mt-1 tabular-nums">{pilotProfileStats.totalPoints}</span></div>
-                           <div className="bg-surface-2 border border-line p-4 rounded-sm flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Mejor carrera</span><span className="text-2xl font-black text-ink font-mono mt-1 tabular-nums">{pilotProfileStats.bestRace ? `P${pilotProfileStats.bestRace}` : "-"}</span></div>
-                           <div className="bg-surface-2 border border-line p-4 rounded-sm flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Poles</span><span className="text-2xl font-black text-ink font-mono mt-1 tabular-nums">{pilotProfileStats.poles}</span></div>
-                           <div className="bg-surface-2 border border-line p-4 rounded-sm flex flex-col justify-between"><span className="text-xs text-ink-muted uppercase font-mono tracking-wider">Driver of the Day</span><span className="text-2xl font-black text-warn font-mono mt-1 tabular-nums">{pilotProfileStats.dotds}</span></div>
+                           <Card tone="muted" pad="sm" className="flex flex-col justify-between"><span className="text-sm text-ink-muted">Puntos</span><span className="mt-1 text-2xl font-semibold tabular-nums text-ink">{pilotProfileStats.totalPoints}</span></Card>
+                           <Card tone="muted" pad="sm" className="flex flex-col justify-between"><span className="text-sm text-ink-muted">Mejor carrera</span><span className="mt-1 text-2xl font-semibold tabular-nums text-ink">{pilotProfileStats.bestRace ? `P${pilotProfileStats.bestRace}` : "-"}</span></Card>
+                           <Card tone="muted" pad="sm" className="flex flex-col justify-between"><span className="text-sm text-ink-muted">Poles</span><span className="mt-1 text-2xl font-semibold tabular-nums text-ink">{pilotProfileStats.poles}</span></Card>
+                           <Card tone="muted" pad="sm" className="flex flex-col justify-between"><span className="text-sm text-ink-muted">Driver of the Day</span><span className="mt-1 text-2xl font-semibold tabular-nums text-warn">{pilotProfileStats.dotds}</span></Card>
                         </div>
                         </>
                         )}
@@ -958,100 +972,121 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
                     </div>
 
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-brand font-mono mb-3 block">HISTORIAL CRONOLÓGICO DE CARRERAS</h4>
+                      <h4 className="mb-3 text-sm font-semibold text-ink">Historial cronológico de carreras</h4>
                       {pilotProfileStats.history && pilotProfileStats.history.length > 0 ? (
-                        <div className="bg-surface border border-line rounded-sm overflow-hidden overflow-x-auto">
-                          <table className="w-full text-xs font-mono text-left text-ink-muted">
+                        <>
+                        {/* Móvil: una tarjeta por carrera. Escritorio: tabla. */}
+                        <ul className="space-y-2 md:hidden">
+                          {pilotProfileStats.history.map((h: any, idx: number) => {
+                            const esDnf = h.splitTipo !== "individual" && h.isDnf === true;
+                            const indiv = h.splitTipo === "individual";
+                            return (
+                              <li key={`gp-card-${h.splitId}-${h.circuitId}-${idx}`} className={`rounded-lg border bg-surface-2/60 p-3 ${esDnf ? "border-danger/40" : "border-line"}`}>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-ink">{h.circuitName}</p>
+                                    <p className="text-xs text-brand">{h.splitName}</p>
+                                  </div>
+                                  <span className="shrink-0 text-base font-semibold tabular-nums text-ink">{h.points} <span className="text-xs font-normal text-ink-muted">pts</span></span>
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                  {indiv ? <Badge>Posición N/D</Badge> : esDnf ? <Badge tone="danger">DNF</Badge> : <Badge tone={h.racePos === 1 ? "warn" : "neutral"}>{h.racePos === 99 ? "Pos. —" : `P${h.racePos}`}</Badge>}
+                                  {!indiv && h.qualyPos === 1 && <Badge tone="info">Pole</Badge>}
+                                  {h.isDotd && <Badge tone="warn">Piloto del día</Badge>}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                        <Card pad="none" className="hidden overflow-hidden md:block">
+                          <div className="table-scroll">
+                          <table className="w-full text-left text-sm text-ink-muted">
                             <thead>
-                              <tr className="bg-surface-2 text-ink-muted uppercase text-[11px] tracking-wider border-b border-line">
-                                 <th className="p-3">Split</th><th className="p-3">Gran Premio / Circuito</th><th className="p-3 text-center">Pole</th><th className="p-3 text-center">Pos. Carrera</th><th className="p-3 text-center">Puntos GP</th><th className="p-3 text-center">Driver of the Day</th>
+                              <tr className="border-b border-line bg-surface-2/70 text-xs font-semibold text-ink-muted">
+                                 <th scope="col" className="p-3 font-semibold">Split</th><th scope="col" className="p-3 font-semibold">Gran Premio / circuito</th><th scope="col" className="p-3 text-center font-semibold">Pole</th><th scope="col" className="p-3 text-center font-semibold">Pos. carrera</th><th scope="col" className="p-3 text-center font-semibold">Puntos GP</th><th scope="col" className="p-3 text-center font-semibold">Piloto del día</th>
                               </tr>
                             </thead>
                             <tbody>
                               {pilotProfileStats.history.map((h: any, idx: number) => {
                                 const esDnf = h.splitTipo !== "individual" && h.isDnf === true;
                                 return (
-                                <tr key={`gp-hist-${h.splitId}-${h.circuitId}-${idx}`} className={`border-b border-line last:border-0 transition-colors ${esDnf ? "bg-danger/6 hover:bg-danger/10" : "hover:bg-surface-2"}`}>
-                                  <td className={`p-3 text-brand font-bold ${esDnf ? "border-l-2 border-danger/70" : ""}`}>{h.splitName}</td>
-                                  <td className={`p-3 font-bold ${esDnf ? "text-ink-muted" : "text-ink"}`}>{h.circuitName}</td>
-                                    <td className="p-3 text-center">{h.splitTipo === "individual" ? "N/D" : h.qualyPos === 1 ? "Sí" : "-"}</td>
-                                   <td className={`p-3 text-center font-bold ${h.splitTipo === "individual" ? "text-ink-muted" : esDnf ? "" : h.racePos === 1 ? 'text-warn' : h.racePos <= 3 ? 'text-ink-2' : 'text-ink'}`}>
-                                     {h.splitTipo === "individual" ? "N/D" : esDnf ? (
-                                       <span title="No terminó la carrera" className="inline-block rounded-sm border border-danger/60 bg-danger/20 px-2 py-0.5 text-xs font-black tracking-wider text-danger">DNF</span>
-                                     ) : h.racePos === 99 ? "—" : `P${h.racePos}`}
+                                <tr key={`gp-hist-${h.splitId}-${h.circuitId}-${idx}`} className={`border-b border-line transition-colors last:border-0 ${esDnf ? "bg-danger-soft/60 hover:bg-danger-soft" : "hover:bg-info/5"}`}>
+                                  <td className={`p-3 font-semibold text-brand ${esDnf ? "border-l-2 border-danger/70" : ""}`}>{h.splitName}</td>
+                                  <td className={`p-3 font-semibold ${esDnf ? "text-ink-muted" : "text-ink"}`}>{h.circuitName}</td>
+                                  <td className="p-3 text-center">{h.splitTipo === "individual" ? "N/D" : h.qualyPos === 1 ? "Sí" : "-"}</td>
+                                  <td className={`p-3 text-center font-semibold ${h.splitTipo === "individual" ? "text-ink-muted" : esDnf ? "" : h.racePos === 1 ? 'text-warn' : 'text-ink'}`}>
+                                    {h.splitTipo === "individual" ? "N/D" : esDnf ? (
+                                      <Badge tone="danger" title="No terminó la carrera">DNF</Badge>
+                                    ) : h.racePos === 99 ? "—" : `P${h.racePos}`}
                                   </td>
-                                  <td className={`p-3 text-center font-bold text-sm bg-surface-2 tabular-nums ${esDnf ? "text-ink-muted" : "text-ink"}`}>{h.points} pts</td>
-                                  <td className="p-3">
-                                     <div className="flex justify-center items-center">{h.isDotd ? <span className="bg-warn/15 text-warn px-1.5 py-0.5 rounded text-[11px] font-bold">Sí</span> : <span className="text-ink-muted italic">-</span>}</div>
-                                  </td>
+                                  <td className={`p-3 text-center font-semibold tabular-nums ${esDnf ? "text-ink-muted" : "text-ink"}`}>{h.points} pts</td>
+                                  <td className="p-3 text-center">{h.isDotd ? <Badge tone="warn">Sí</Badge> : <span className="text-ink-muted">-</span>}</td>
                                 </tr>
                                 );
                               })}
                             </tbody>
                           </table>
-                        </div>
+                          </div>
+                        </Card>
+                        </>
                       ) : (
-                        <div className="bg-surface border border-line rounded-sm p-8 text-center text-ink-muted italic text-xs">
-                          Sin registros de carreras completadas en las bases de datos de este split.
-                        </div>
+                        <EmptyState title="Sin carreras registradas" description="Aún no hay carreras completadas para este piloto en este split." className="py-8" />
                       )}
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-surface border border-line  p-16 text-center text-ink-muted italic">
-                    Selecciona un piloto para explorar su telemetría e historial de rendimiento.
-                  </div>
+                  <EmptyState icon={Users} title="Selecciona un piloto" description="Explora su telemetría e historial de rendimiento." />
                 )}
               </div>
             )}
 
             {activeProfileTab === "compare" && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-11 items-center gap-4 bg-surface-2 border border-line p-5 ">
+                <Card tone="muted" className="grid grid-cols-1 items-end gap-4 md:grid-cols-11">
                   <div className="md:col-span-5 flex flex-col">
-                    <label className="text-xs text-warn font-mono tracking-wider mb-1 uppercase font-bold">Piloto A (Derecha / Izquierda)</label>
-                    <select value={comparePilotIdA} onChange={(e) => setComparePilotIdA(e.target.value)} className="bg-surface border border-line rounded-sm text-xs px-3 py-2 text-ink font-bold focus:border-warn hover:border-line-strong transition-all cursor-pointer">
-                      <option value="" disabled>-- Elige el primer piloto --</option>
+                    <label htmlFor="sd-cmp-a" className="mb-1.5 text-sm font-semibold text-warn">Piloto A</label>
+                    <select id="sd-cmp-a" value={comparePilotIdA} onChange={(e) => setComparePilotIdA(e.target.value)} className={SELECT_CLASS}>
+                      <option value="" disabled>Elige el primer piloto</option>
                       {allPaddockPilots.map((p) => (<option key={p.id} value={p.id} disabled={p.id === comparePilotIdB}>{p.name} ({p.team})</option>))}
                     </select>
                   </div>
-                  <div className="md:col-span-1 text-center font-black italic text-brand font-mono text-sm py-2">VS</div>
+                  <div aria-hidden="true" className="py-2 text-center text-sm font-semibold text-ink-muted md:col-span-1 md:pb-3">VS</div>
                   <div className="md:col-span-5 flex flex-col">
-                    <label className="text-xs text-danger font-mono tracking-wider mb-1 uppercase font-bold">Piloto B (Contendiente)</label>
-                    <select value={comparePilotIdB} onChange={(e) => setComparePilotIdB(e.target.value)} className="bg-surface border border-line rounded-sm text-xs px-3 py-2 text-ink font-bold focus:border-danger hover:border-line-strong transition-all cursor-pointer">
-                      <option value="" disabled>-- Elige el segundo piloto --</option>
+                    <label htmlFor="sd-cmp-b" className="mb-1.5 text-sm font-semibold text-brand">Piloto B</label>
+                    <select id="sd-cmp-b" value={comparePilotIdB} onChange={(e) => setComparePilotIdB(e.target.value)} className={SELECT_CLASS}>
+                      <option value="" disabled>Elige el segundo piloto</option>
                       {allPaddockPilots.map((p) => (<option key={p.id} value={p.id} disabled={p.id === comparePilotIdA}>{p.name} ({p.team})</option>))}
                     </select>
                   </div>
-                </div>
+                </Card>
 
                 {statsA && statsB ? (
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-surface-2 border border-warn/20 p-4 flex items-center gap-4">
+                      <Card tone="muted" pad="sm" className="flex items-center gap-4 border-warn/40">
                         {statsA.fotoUrl ? (
-                          <img src={statsA.fotoUrl} alt={statsA.name} className="w-16 h-16 rounded-sm object-cover border border-warn/40" />
+                          <img src={statsA.fotoUrl} alt={statsA.name} className="h-16 w-16 rounded-lg object-cover border border-warn/40" />
                         ) : (
-                          <div className="w-16 h-16 rounded-sm bg-surface border border-line flex items-center justify-center font-bold text-lg text-ink-muted uppercase">{statsA.name ? statsA.name.substring(0, 2).toUpperCase() : '??'}</div>
+                          <div className="h-16 w-16 rounded-lg bg-surface border border-line flex items-center justify-center font-semibold text-lg text-ink-muted uppercase">{statsA.name ? statsA.name.substring(0, 2).toUpperCase() : '??'}</div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className="text-[11px] bg-warn/10 text-warn font-bold px-1.5 py-0.5 rounded uppercase font-mono">{statsA.escuderiaName}</span>
-                          <h4 className="font-extrabold text-brand text-lg uppercase truncate mt-0.5">{statsA.name}</h4>
-                          <p className="text-xs text-ink-muted font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-ink">{statsA.rating.toFixed(0)}</span> | Cláusula: <span className="text-ink">{statsA.clause.toFixed(1)}M</span></p>
+                          <Badge tone="warn">{statsA.escuderiaName}</Badge>
+                          <h4 className="mt-1 truncate text-lg font-semibold text-ink">{statsA.name}</h4>
+                          <p className="mt-0.5 text-sm text-ink-muted">Rating: <span className="text-ink">{statsA.rating.toFixed(0)}</span> · Cláusula: <span className="text-ink">{statsA.clause.toFixed(1)}M</span></p>
                         </div>
-                      </div>
-                      <div className="bg-surface-2 border border-danger/20  p-4 flex items-center gap-4">
+                      </Card>
+                      <Card tone="muted" pad="sm" className="flex items-center gap-4 border-brand/40">
                         {statsB.fotoUrl ? (
-                          <img src={statsB.fotoUrl} alt={statsB.name} className="w-16 h-16 rounded-sm object-cover border border-danger/40" />
+                          <img src={statsB.fotoUrl} alt={statsB.name} className="h-16 w-16 rounded-lg object-cover border border-brand/40" />
                         ) : (
-                          <div className="w-16 h-16 rounded-sm bg-surface border border-line flex items-center justify-center font-bold text-lg text-ink-muted uppercase">{statsB.name ? statsB.name.substring(0, 2).toUpperCase() : '??'}</div>
+                          <div className="h-16 w-16 rounded-lg bg-surface border border-line flex items-center justify-center font-semibold text-lg text-ink-muted uppercase">{statsB.name ? statsB.name.substring(0, 2).toUpperCase() : '??'}</div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className="text-[11px] bg-danger/10 text-danger font-bold px-1.5 py-0.5 rounded uppercase font-mono">{statsB.escuderiaName}</span>
-                          <h4 className="font-extrabold text-brand text-lg uppercase truncate mt-0.5">{statsB.name}</h4>
-                          <p className="text-xs text-ink-muted font-mono uppercase mt-0.5 font-bold">Rating: <span className="text-ink">{statsB.rating.toFixed(0)}</span> | Cláusula: <span className="text-ink">{statsB.clause.toFixed(1)}M</span></p>
+                          <Badge tone="brand">{statsB.escuderiaName}</Badge>
+                          <h4 className="mt-1 truncate text-lg font-semibold text-ink">{statsB.name}</h4>
+                          <p className="mt-0.5 text-sm text-ink-muted">Rating: <span className="text-ink">{statsB.rating.toFixed(0)}</span> · Cláusula: <span className="text-ink">{statsB.clause.toFixed(1)}M</span></p>
                         </div>
-                      </div>
+                      </Card>
                     </div>
 
                     {(() => {
@@ -1073,81 +1108,81 @@ export function SharedDashboardView({ canViewBudget, escuderiaId, onOpenTv }: { 
 
                       if (commonRaces > 0) {
                         return (
-                          <div className="bg-surface-2 border border-line  p-5 text-center">
-                            <span className="text-[11px] font-black tracking-[0.08em] text-brand uppercase font-mono block">MÉTRICAS CARA A CARA EN COEXISTENCIA</span>
-                            <h4 className="text-sm font-bold text-ink uppercase italic tracking-tight mt-1 mb-4">Se han disputado la pista en <span className="text-warn font-mono">{commonRaces} GPs</span> directos</h4>
+                          <Card tone="muted" className="text-center">
+                            <span className="block text-xs font-semibold text-brand">Cara a cara en coexistencia</span>
+                            <h4 className="mb-4 mt-1 text-sm font-semibold text-ink">Se han disputado la pista en <span className="text-warn tabular-nums">{commonRaces} GPs</span> directos</h4>
                             <div className="space-y-4 max-w-xl mx-auto">
                               <div>
-                                <div className="flex justify-between text-xs font-mono mb-1.5">
-                                  <span className="font-extrabold text-warn">{statsA.name}: {aheadA} veces</span><span className="text-ink-muted">Acabó por delante</span><span className="font-extrabold text-danger">{aheadB} veces: {statsB.name}</span>
+                                <div className="mb-1.5 flex flex-wrap justify-between gap-x-3 text-xs">
+                                  <span className="font-semibold text-warn">{statsA.name}: {aheadA} veces</span><span className="text-ink-muted">Acabó por delante</span><span className="font-semibold text-brand">{aheadB} veces: {statsB.name}</span>
                                 </div>
-                                <div className="w-full bg-surface-2 rounded-full h-3 overflow-hidden flex font-mono font-bold text-[11px] text-ink">
-                                  <div className="bg-warn h-full flex items-center justify-center transition-all" style={{ width: `${(aheadA / commonRaces) * 100}%` }}>{aheadA > 0 && `${((aheadA / commonRaces) * 100).toFixed(0)}%`}</div>
+                                <div className="h-4 w-full overflow-hidden rounded-full bg-surface-3 flex text-[11px] font-semibold text-brand-ink">
+                                  <div className="bg-warn h-full flex items-center justify-center text-ink" style={{ width: `${(aheadA / commonRaces) * 100}%` }}>{aheadA > 0 && `${((aheadA / commonRaces) * 100).toFixed(0)}%`}</div>
                                   <div className="bg-brand h-full flex items-center justify-center transition-all" style={{ width: `${(aheadB / commonRaces) * 100}%` }}>{aheadB > 0 && `${((aheadB / commonRaces) * 100).toFixed(0)}%`}</div>
                                 </div>
                               </div>
                               <div>
-                                <div className="flex justify-between text-xs font-mono mb-1.5">
-                                  <span className="font-extrabold text-warn">{qualyA} veces</span><span className="text-ink-muted font-sans">Mejor Posición de Clasificación</span><span className="font-extrabold text-danger">{qualyB} veces</span>
+                                <div className="mb-1.5 flex flex-wrap justify-between gap-x-3 text-xs">
+                                  <span className="font-semibold text-warn">{qualyA} veces</span><span className="text-ink-muted">Mejor posición de clasificación</span><span className="font-semibold text-brand">{qualyB} veces</span>
                                 </div>
-                                <div className="w-full bg-surface-2 rounded-full h-3 overflow-hidden flex font-mono font-bold text-[11px] text-ink">
-                                  <div className="bg-warn h-full flex items-center justify-center transition-all" style={{ width: `${((qualyA) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyA > 0 && `${((qualyA / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
+                                <div className="h-4 w-full overflow-hidden rounded-full bg-surface-3 flex text-[11px] font-semibold text-brand-ink">
+                                  <div className="bg-warn h-full flex items-center justify-center text-ink" style={{ width: `${((qualyA) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyA > 0 && `${((qualyA / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
                                   <div className="bg-brand h-full flex items-center justify-center transition-all" style={{ width: `${((qualyB) / ((qualyA + qualyB) || 1)) * 100}%` }}>{qualyB > 0 && `${((qualyB / ((qualyA + qualyB) || 1)) * 100).toFixed(0)}%`}</div>
                                 </div>
                               </div>
                             </div>
-                          </div>
+                          </Card>
                         );
                       } else {
-                        return <div className="bg-surface border border-line  p-4 text-center text-xs text-ink-muted italic font-mono">No constan GPs cerrados disputados de forma simultánea en la temporada de este split.</div>;
+                        return <Notice tone="info">No constan GPs cerrados disputados de forma simultánea en la temporada de este split.</Notice>;
                       }
                     })()}
 
-                    <div className="bg-surface border border-line  p-4 space-y-4">
-                      <span className="text-xs font-black tracking-widest text-brand font-mono mb-2 block">ANÁLISIS COMPARATIVO DE TELEMETRÍA MUNDIAL</span>
+                    <Card pad="sm" className="space-y-4">
+                      <h4 className="mb-2 block text-sm font-semibold text-ink">Análisis comparativo de telemetría mundial</h4>
                       {[
-                        { label: "VALORACIÓN GENERAL (RATING)", valA: statsA.rating, valB: statsB.rating, format: (v: number) => v.toFixed(0), higherIsBetter: true },
-                        { label: "PUNTOS GLOBALES SUMADOS", valA: statsA.totalPoints, valB: statsB.totalPoints, format: (v: number) => `${v} pts`, higherIsBetter: true },
-                        { label: "MEDIA DE PUNTOS POR GP", valA: statsA.avgPoints, valB: statsB.avgPoints, format: (v: number) => `${v.toFixed(1)} pts`, higherIsBetter: true },
-                        { label: "VICTORIAS EN CARRERA", valA: statsA.victorias, valB: statsB.victorias, format: (v: number) => `${v} 🏆`, higherIsBetter: true },
-                        { label: "PODIOS OBTENIDOS", valA: statsA.podiums, valB: statsB.podiums, format: (v: number) => `${v}`, higherIsBetter: true },
-                        { label: "POLE POSITIONS GRABADAS", valA: statsA.poles, valB: statsB.poles, format: (v: number) => `${v}`, higherIsBetter: true },
-                        { label: "MEDIA DE CLASIFICACIÓN (QUALY)", valA: statsA.avgQualy, valB: statsB.avgQualy, format: (v: number) => v > 0 ? `P${v}` : "N/D", higherIsBetter: false },
-                        { label: "MEDIA DE INTEGRACIÓN EN CARRERA", valA: statsA.avgRace, valB: statsB.avgRace, format: (v: number) => v > 0 ? `P${v}` : "N/D", higherIsBetter: false },
-                        { label: "CARRERAS LIMPIAS (SIN INCIDENTES)", valA: statsA.cleanRaces, valB: statsB.cleanRaces, format: (v: number) => `${v}`, higherIsBetter: true },
-                        { label: "VUELTAS RÁPIDAS (FASTEST LAPS)", valA: statsA.fastestLaps, valB: statsB.fastestLaps, format: (v: number) => `${v}`, higherIsBetter: true },
-                        { label: "INCIDENTES / ABANDONOS (DNF)", valA: statsA.dnfs, valB: statsB.dnfs, format: (v: number) => `${v} 💥`, higherIsBetter: false }
+                        { label: "Valoración general (rating)", valA: statsA.rating, valB: statsB.rating, format: (v: number) => v.toFixed(0), higherIsBetter: true },
+                        { label: "Puntos globales sumados", valA: statsA.totalPoints, valB: statsB.totalPoints, format: (v: number) => `${v} pts`, higherIsBetter: true },
+                        { label: "Media de puntos por GP", valA: statsA.avgPoints, valB: statsB.avgPoints, format: (v: number) => `${v.toFixed(1)} pts`, higherIsBetter: true },
+                        { label: "Victorias en carrera", valA: statsA.victorias, valB: statsB.victorias, format: (v: number) => `${v}`, higherIsBetter: true },
+                        { label: "Podios obtenidos", valA: statsA.podiums, valB: statsB.podiums, format: (v: number) => `${v}`, higherIsBetter: true },
+                        { label: "Pole positions", valA: statsA.poles, valB: statsB.poles, format: (v: number) => `${v}`, higherIsBetter: true },
+                        { label: "Media de clasificación (qualy)", valA: statsA.avgQualy, valB: statsB.avgQualy, format: (v: number) => v > 0 ? `P${v}` : "N/D", higherIsBetter: false },
+                        { label: "Media de posición en carrera", valA: statsA.avgRace, valB: statsB.avgRace, format: (v: number) => v > 0 ? `P${v}` : "N/D", higherIsBetter: false },
+                        { label: "Carreras limpias (sin incidentes)", valA: statsA.cleanRaces, valB: statsB.cleanRaces, format: (v: number) => `${v}`, higherIsBetter: true },
+                        { label: "Vueltas rápidas", valA: statsA.fastestLaps, valB: statsB.fastestLaps, format: (v: number) => `${v}`, higherIsBetter: true },
+                        { label: "Abandonos (DNF)", valA: statsA.dnfs, valB: statsB.dnfs, format: (v: number) => `${v}`, higherIsBetter: false }
                       ].map((metric, mIdx) => {
                         const isABetter = metric.higherIsBetter ? metric.valA > metric.valB : metric.valA < metric.valB && metric.valA > 0;
                         const isBBetter = metric.higherIsBetter ? metric.valB > metric.valA : metric.valB < metric.valA && metric.valB > 0;
                         return (
                           <div key={`comp-metric-${mIdx}`} className="border-b border-line last:border-0 pb-3 last:pb-0">
-                            <div className="flex justify-between items-center text-xs font-semibold uppercase font-mono tracking-tight text-ink-muted mb-1">
-                              <span className={isABetter ? "text-warn font-extrabold" : "text-ink-muted"}>{metric.format(metric.valA)}</span>
-                              <span className="text-xs text-center">{metric.label}</span>
-                              <span className={isBBetter ? "text-danger font-extrabold" : "text-ink-muted"}>{metric.format(metric.valB)}</span>
+                            <div className="mb-1 flex items-center justify-between gap-2 text-sm tabular-nums text-ink-muted">
+                              <span className={isABetter ? "font-semibold text-warn" : "text-ink-muted"}>{metric.format(metric.valA)}</span>
+                              <span className="text-center text-xs">{metric.label}</span>
+                              <span className={isBBetter ? "font-semibold text-brand" : "text-ink-muted"}>{metric.format(metric.valB)}</span>
                             </div>
-                            <div className="grid grid-cols-2 gap-1 bg-surface-2 p-0.5 rounded-sm">
-                              <div className="flex justify-end bg-surface-2 rounded-l h-2 overflow-hidden relative">
-                                <div className={`h-full rounded-l transition-all duration-500 bg-warn`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valA / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valA / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
+                            <div className="grid grid-cols-2 gap-1 rounded-full bg-surface-3/60 p-0.5">
+                              <div className="relative flex h-2 justify-end overflow-hidden rounded-l-full bg-surface-3">
+                                <div className={`h-full rounded-l-full bg-warn`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valA / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valA / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
                               </div>
-                              <div className="flex justify-start bg-surface-2 rounded-r h-2 overflow-hidden relative">
-                                <div className={`h-full rounded-r transition-all duration-500 bg-brand`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valB / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valB / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
+                              <div className="relative flex h-2 justify-start overflow-hidden rounded-r-full bg-surface-3">
+                                <div className={`h-full rounded-r-full bg-brand`} style={{ width: `${metric.higherIsBetter ? (metric.valA || 0) + (metric.valB || 0) > 0 ? (metric.valB / (metric.valA + metric.valB || 1)) * 100 : 0 : (metric.valA || 0) + (metric.valB || 0) > 0 ? (1 - (metric.valB / (metric.valA + metric.valB || 1))) * 100 : 0}%` }}></div>
                               </div>
                             </div>
                           </div>
                         );
                       })}
-                    </div>
+                    </Card>
                   </div>
                 ) : (
-                  <div className="bg-surface border border-line  p-16 text-center text-ink-muted italic">Configura ambos pilotos rivales de la lista del paddock arriba para iniciar la simulación analítica de rivalidad.</div>
+                  <EmptyState icon={TrendingUp} title="Elige a los dos pilotos" description="Configura ambos rivales en los selectores de arriba para ver la comparación." />
                 )}
               </div>
             )}
 
             <div className="border-t border-line pt-4 mt-6 flex justify-end">
-              <button onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }} className="px-5 py-2.5 bg-surface-2 hover:bg-surface-2 text-ink rounded-sm text-xs uppercase tracking-wider font-extrabold border border-line cursor-pointer active:scale-95 transition-all">Cerrar Telemetría</button>
+              <Button onClick={() => { setIsCompareViewOpen(false); setSelectedPilotForProfileId(null); }}>Cerrar telemetría</Button>
             </div>
           </div>
         </div>
