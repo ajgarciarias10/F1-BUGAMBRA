@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+<defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#c9c9c8"/><stop offset="1" stop-color="#efe9d9"/></linearGradient></defs>
+<rect width="960" height="540" fill="url(#sky)"/><circle cx="760" cy="105" r="45" fill="#f9ecc8"/>
+<path d="M0 260L130 210L240 247L380 190L500 234L650 190L770 230L960 167V410H0Z" fill="#868686"/>
+<path d="M0 324L960 280V540H0Z" fill="#68686a"/><path d="M530 298L617 298L960 540H0Z" fill="#454d48"/>
+<path d="M530 298L545 298L105 540H0Z" fill="#f2e6cc"/><path d="M617 298L628 298L960 500V540Z" fill="#f2e6cc"/>
+<path d="M556 306L564 306L328 540H294Z" fill="#c30a26"/><path d="M573 326L581 326L553 366L539 366ZM520 396L539 396L485 481L451 481" fill="#e9e7d9"/>
+<path d="M0 441Q236 397 363 462L597 462Q724 397 960 441V540H0Z" fill="#1c1c20"/>
+<path d="M370 540L395 451Q406 432 432 435H528Q554 432 565 451L590 540" fill="#cf102e"/>
+<rect x="395" y="421" width="170" height="17" rx="4" fill="#142923"/><path d="M480 438V540" stroke="#132a24" stroke-width="15"/>
+<text x="36" y="52" fill="#202023" font-family="sans-serif" font-size="15" letter-spacing="3">ONBOARD / ILUSTRACIÓN DE MUESTRA</text>
+<rect x="36" y="83" width="207" height="52" rx="4" fill="#1a1a1d"/><text x="55" y="117" fill="#fff9e9" font-family="monospace" font-size="28">01:24.608</text>
+</svg>
