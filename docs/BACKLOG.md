@@ -25,7 +25,10 @@ What is open right now. Details per feature go in `docs/trabajo/<slug>/`. Remove
 
 ## Telemetry
 
-- [ ] Answer the open questions (game version, platforms, what to show), then write the plan: per-driver opt-in capture over UDP, summaries per lap, no scraping of EA Racenet
+- [x] Plan written: `docs/trabajo/telemetria/plan.md` (F1 25 all platforms; laps, sectors and racing line; opt-in UDP recorder, no Racenet scraping)
+- [ ] Phase 0: capture one real session from one driver and verify the packets (needs the owner and a driver)
+- [ ] Telemetry phase 1: best lap per track from Racenet Time Trial, manual entry form, comparison screens (plan update 2); UDP sectors and racing line later
+- [ ] Ask each console player what device they have at home on the console's network; check whether F1Laps export is enough before building our own recorder
 - [ ] Ask EA about official Racenet API access for a private league, if wanted
 
 ## Tooling
