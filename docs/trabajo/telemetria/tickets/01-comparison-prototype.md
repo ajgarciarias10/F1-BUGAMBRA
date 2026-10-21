@@ -2,7 +2,7 @@
 
 - **Branch from:** `feature/stitch-redesign`
 - **Work branch:** `feature/telemetria-prototype`
-- **Owned files:** `docs/trabajo/telemetria/prototype/**`
+- **Owned files:** `docs/trabajo/telemetria/prototype/**`, `docs/trabajo/telemetria/tickets/**`, `docs/trabajo/telemetria/task-analysis.md`, `docs/trabajo/telemetria/evaluation/**`
 - **Do not touch:** `apps/**`, `AGENTS.md`, `tool/**`, `.github/**`, `docs/redesign/**`, `docs/trabajo/telemetria/plan.md`, `firestore.rules`
 - **Agent and model:** Codex, `gpt-6-sol`, medium reasoning (ADR 0003)
 - **Done when:** `docs/trabajo/telemetria/prototype/index.html` opens offline and shows the three screens below at 390px and 1440px in light and dark, with fictional data shaped like the plan's findings; a `README.md` in that folder explains how to open it and what is fictional; a `check.cjs` verifies the files, the sample data shape and that no network call exists.
