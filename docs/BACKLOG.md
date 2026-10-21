@@ -25,6 +25,8 @@ What is open right now. Details per feature go in `docs/trabajo/<slug>/`. Remove
 
 ## Telemetry
 
+**Parked by the owner on 2026-10-21; the full-web prototype goes first.** Idea to resume: ephemeral data per race. The admin loads only the next race's circuit times (one click from the owner's Racenet session via a bookmarklet, or by hand), each document carries `expireAt` = race day and Firestore TTL deletes it, nothing is kept after the race. Pilots only accept the owner's EA friend request once and agree in the group chat. Telemetry prototype (branch `feature/telemetria-prototype`, commit `b337fe5`), export script (`feature/telemetria-export`) and research on FUTBIN-style imports (`feature/telemetria-research`, `85f1ad6`) are kept as they are; EA terms for Racenet are unchecked.
+
 - [x] Plan written: `docs/trabajo/telemetria/plan.md` (F1 25 all platforms; laps, sectors and racing line; opt-in UDP recorder, no Racenet scraping)
 - [ ] Phase 0: capture one real session from one driver and verify the packets (needs the owner and a driver)
 - [ ] Telemetry phase 1: best lap per track from Racenet Time Trial, manual entry form, comparison screens (plan update 2); UDP sectors and racing line later
