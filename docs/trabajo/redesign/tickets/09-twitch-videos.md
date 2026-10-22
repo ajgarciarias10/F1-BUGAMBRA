@@ -13,7 +13,7 @@ Owner decision of 2026-10-22. The prototype reads Twitch from the browser throug
 
 ## What to do
 
-Add a cached read-only route that returns, per configured channel, the live state, the latest videos and the 2026 clips. Keep the channel list in config, not in code constants per pilot. Match videos to GPs only when unambiguous (see `tv-block.js` in the prototype build). Ask the owner for the Twitch app credentials; do not invent them. New dependency or service: stop and ask first (AGENTS.md rule 6).
+Add a cached read-only route that returns, per configured channel, the live state, the latest videos and the 2026 clips. Keep the channel list in config, not in code constants per pilot. Match videos to GPs only when unambiguous (see `docs/redesign/prototipo-gemini/generador/tv-block.js`). Ask the owner for the Twitch app credentials; do not invent them. New dependency or service: stop and ask first (AGENTS.md rule 6).
 
 ## Report
 
