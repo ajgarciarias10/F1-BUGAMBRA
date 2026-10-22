@@ -174,7 +174,6 @@ export type LedgerSource =
   | "points" | "pole" | "fastestLap" | "participation" | "cleanTeam" | "rivalry"
   | "seasonPrize" | "transfer" | "priceAdjustment" | "manualAdjustment" | "other";
 
-export type VotingStatus = "open" | "closed" | "unavailable";
 
 // ─── RESULTADOS DE CARRERA ────────────────────────────────────────────────────
 
