@@ -1,48 +1,41 @@
 export const widgetStyles = {
-  // Contenedores Base
-  wrapper: "acrylic overflow-hidden rounded-card",
-  innerBase: "p-5 lg:p-6 relative overflow-hidden transition-all duration-300",
-  neonStrip: "absolute right-0 top-0 w-0.5 h-full bg-gradient-to-b from-brand to-transparent opacity-70 pointer-events-none",
-  grid: "grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch relative z-10",
+  wrapper: "overflow-hidden rounded-card bg-surface",
+  innerBase: "relative overflow-hidden p-5 lg:p-6",
+  neonStrip: "pointer-events-none absolute right-0 top-0 h-full w-0.5 bg-brand opacity-70",
+  grid: "relative z-10 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12",
 
-  // Columnas
-  colLeft: "lg:col-span-4 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-line pb-5 lg:pb-0 lg:pr-6",
+  colLeft: "flex flex-col justify-between border-b border-line pb-5 lg:col-span-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6",
 
-  // Headers y Títulos
-  tagRed: "text-[9px] uppercase tracking-[0.35em] font-mono font-bold text-brand",
-  circuitName: "text-2xl font-black tracking-tight text-ink uppercase mt-1",
-  sectionTitle: "text-[10px] font-mono uppercase text-ink-muted tracking-[0.3em] mb-3 flex items-center gap-1.5 justify-between",
+  tagRed: "text-xs font-bold uppercase tracking-[0.12em] text-brand",
+  circuitName: "mt-1 text-2xl font-bold tracking-tight text-ink",
+  sectionTitle: "mb-3 flex items-center justify-between gap-1.5 text-xs font-bold uppercase tracking-[0.08em] text-ink-muted",
 
-  // Temporizador Cajas
   timerGrid: "grid grid-cols-4 gap-2 text-center",
-  timerBox: "border border-line bg-surface-2/70 rounded-md p-2",
-  timerVal: "text-xl font-black text-ink tabular-nums",
-  timerLabel: "text-[8px] font-mono uppercase text-ink-muted",
+  timerBox: "rounded-md p-2",
+  timerVal: "tabular-nums text-2xl font-bold text-ink",
+  timerLabel: "text-xs uppercase text-ink-muted",
 
-  // Panel de Neumáticos
-  aiPanel: "border border-line bg-surface-2/70 rounded-md p-4",
-  aiHeader: "font-bold text-brand text-[10px] uppercase block font-mono tracking-[0.25em] flex items-center gap-1.5",
-  aiGrid: "grid grid-cols-2 gap-2 mb-3",
-  aiBox: "border border-line bg-surface-3/70 rounded-md p-2.5 flex flex-col justify-center items-center text-center",
-  aiBoxLabel: "text-[8px] uppercase tracking-wider text-ink-muted font-mono mb-1",
-  aiBoxVal: "font-bold text-[10px] text-ink tracking-tight leading-tight",
-  aiTextWrapper: "text-ink-muted leading-relaxed text-[10px]",
-  aiTextHighlight: "text-ink-2 font-bold",
+  aiPanel: "border-t border-line py-4",
+  aiHeader: "flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.08em] text-brand",
+  aiGrid: "mb-3 grid grid-cols-2 gap-2",
+  aiBox: "flex flex-col items-center justify-center rounded-md bg-surface-2 p-2.5 text-center",
+  aiBoxLabel: "mb-1 text-xs uppercase text-ink-muted",
+  aiBoxVal: "text-sm font-bold leading-tight text-ink",
+  aiTextWrapper: "text-sm leading-relaxed text-ink-muted",
+  aiTextHighlight: "font-bold text-ink",
 
-  // Technical Grid
-  techGrid: "grid grid-cols-3 gap-2 mb-3 mt-3",
-  techBox: "border border-line bg-surface-2/70 rounded-md p-2 text-center flex flex-col justify-center",
-  techLabel: "text-[8px] uppercase tracking-wider text-brand/70 mb-0.5 font-mono",
-  techVal: "font-black text-[9px] text-ink tabular-nums tracking-tighter",
+  techGrid: "mb-3 mt-3 grid grid-cols-3 gap-2",
+  techBox: "flex flex-col justify-center rounded-md bg-surface-2 p-2 text-center",
+  techLabel: "mb-0.5 text-xs uppercase text-ink-muted",
+  techVal: "tabular-nums text-sm font-bold text-ink",
 
-  // Forecast
-  forecastList: "space-y-2 font-sans",
-  forecastItemBase: "flex items-center justify-between p-2.5 border transition-all",
-  forecastItemActive: "bg-brand/5 border-brand/30",
-  forecastItemInactive: "bg-transparent border-line",
-  forecastIconBox: "p-1.5 border border-line",
-  forecastDayTitle: "font-bold text-[11px] text-ink",
-  forecastEventTitle: "text-[9px] text-ink-muted font-mono block leading-tight truncate max-w-[150px] uppercase",
-  forecastTemp: "font-black text-ink text-[10px]",
-  forecastRain: "text-[8px] text-ink-muted text-[10px]",
+  forecastList: "space-y-2",
+  forecastItemBase: "flex items-center justify-between border-b border-line p-2.5",
+  forecastItemActive: "text-brand",
+  forecastItemInactive: "text-ink",
+  forecastIconBox: "p-1.5",
+  forecastDayTitle: "text-sm font-bold text-ink",
+  forecastEventTitle: "block max-w-[150px] truncate text-xs leading-tight text-ink-muted",
+  forecastTemp: "text-sm font-bold text-ink",
+  forecastRain: "text-xs text-ink-muted",
 };

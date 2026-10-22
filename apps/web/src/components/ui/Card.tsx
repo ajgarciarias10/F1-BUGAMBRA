@@ -8,7 +8,7 @@ export interface CardProps extends HTMLAttributes<HTMLElement> {
   pad?: "none" | "sm" | "md" | "lg";
   /** Franja superior de color: cualquier color CSS (p. ej. el de un equipo). */
   accent?: string;
-  /** `muted` = fondo secundario, sin sombra. `solid` = superficie opaca con sombra, sin desenfoque (listas repetidas). */
+  /** `muted` = fondo secundario. `solid` = superficie opaca. */
   tone?: "default" | "muted" | "solid";
 }
 
@@ -21,7 +21,7 @@ export function Card({ as: Tag = "div", pad = "md", accent, tone = "default", cl
       style={accent ? { ...style, borderTopColor: accent, borderTopWidth: 3 } : style}
       className={cn(
         "rounded-card text-ink",
-        tone === "muted" ? "border border-line bg-surface-2/70" : tone === "solid" ? "border border-line bg-surface shadow-fluent-2" : "acrylic",
+        tone === "muted" ? "border-0 bg-surface-2" : tone === "solid" ? "border-0 bg-surface" : "acrylic",
         PAD[pad],
         className,
       )}
