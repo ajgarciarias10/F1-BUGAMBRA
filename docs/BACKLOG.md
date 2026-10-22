@@ -7,7 +7,9 @@ What is open right now. Details per feature go in `docs/trabajo/<slug>/`. Remove
 The owner approved `docs/redesign/prototipo-gemini/` on 2026-10-22 and wants it to become the real app. Decisions: `docs/redesign/prototipo-gemini/decisiones.md`.
 
 - Work happens on `feature/rediseno-app` (redesign + `main` merged on 2026-10-22); Vercel publishes it as a preview. `main` and production stay as they are until the owner decides.
-- [ ] 08 Retire Paddock and driver-of-the-day vote (behaviour, owner decision; before 04 and 05)
+- [ ] 08 Retire Paddock and driver-of-the-day vote: done in `feature/retirar-paddock-votacion`, pending merge into `feature/rediseno-app`
+- [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes (TV, race page) or retire it
+- [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
 - [ ] 03 Foundation: tokens, primitives, shell (Codex mid-tier; merges before 04 and 05)
 - [ ] 04 User and public screens (Claude; after 03 and 08)
 - [ ] 05 Admin screens (Claude, economy paths untouched; after 03 and 08)

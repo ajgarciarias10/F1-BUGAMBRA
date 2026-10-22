@@ -6,7 +6,6 @@ import { auth } from "./auth";
 import { economyRules, pointsForRaceResult } from "../utils/economyRules";
 import { evolucionOVRSplit, mediaPuntosCarrera, OVR_DEBUT } from "../utils/splitResolver";
 import { buildHistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
-import { getPilotDayCandidates, pilotDayCloseError, pilotDayOpenError, pilotDayVoteError } from "../utils/pilotDayVoting";
 import type { RaceResult, RosterEntry } from "../types";
 
 
@@ -310,110 +309,6 @@ async function saveRaceResults(
   }
 }
 
-// ─── PILOTO DEL DÍA ───────────────────────────────────────────────────────────
-// Vota cualquier cuenta de la liga, un voto por persona. El recuento se guarda como un
-// mapa uid → pilotoId (no arrays por candidato): cambiar de voto es sobreescribir la
-// propia entrada, y el dedupe es automático porque solo puede haber una por uid.
-
-export async function votarPilotoDelDia(
-  splitId: string,
-  circuitoId: string,
-  uid: string,
-  pilotoId: string,
-): Promise<{ ok: boolean; message: string }> {
-  try {
-    const registeredUid = auth.currentUser?.uid;
-    if (!registeredUid || registeredUid !== uid) return { ok: false, message: "Debes votar con tu cuenta registrada." };
-    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
-    const snap = await getDoc(circuitoRef);
-    if (!snap.exists()) return { ok: false, message: "Circuito no encontrado." };
-    const data = snap.data() as any;
-    const validationError = pilotDayVoteError({ registeredUid, requestedUid: uid, completed: data.completado, open: data.piloto_dia_abierta, closed: data.piloto_dia_cerrado, candidates: data.piloto_dia_candidatos || getPilotDayCandidates(data.resultados), pilotId: pilotoId });
-    if (validationError) return { ok: false, message: validationError };
-
-    await updateDoc(circuitoRef, { [`piloto_dia_votantes.${uid}`]: pilotoId });
-    return { ok: true, message: "Voto registrado." };
-  } catch (error: any) {
-    return { ok: false, message: `Error al votar: ${error.message}` };
-  }
-}
-
-/** Abre una votación histórica y deja una auditoría inmutable de quién y cuándo la abrió. */
-export async function abrirVotacionPilotoDelDia(
-  splitId: string,
-  circuitoId: string,
-): Promise<{ ok: boolean; message: string }> {
-  try {
-    const actorUid = auth.currentUser?.uid;
-    if (!actorUid) return { ok: false, message: "Inicia sesión como administrador." };
-    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
-    const auditRef = doc(collection(circuitoRef, "votacion_audit"));
-    await runTransaction(db, async transaction => {
-      const snap = await transaction.get(circuitoRef);
-      if (!snap.exists()) throw new Error("Circuito no encontrado.");
-      const data = snap.data();
-      const candidatos = getPilotDayCandidates(data.resultados);
-      const validationError = pilotDayOpenError({ completed: data.completado, closed: data.piloto_dia_cerrado, open: data.piloto_dia_abierta, candidates: candidatos });
-      if (validationError) throw new Error(validationError);
-      transaction.update(circuitoRef, {
-        piloto_dia_abierta: true,
-        piloto_dia_abierta_por: actorUid,
-        piloto_dia_abierta_en: serverTimestamp(),
-        piloto_dia_candidatos: candidatos,
-      });
-      transaction.set(auditRef, {
-        accion: "abierta",
-        actorUid,
-        estadoAnterior: data.piloto_dia_abierta === true,
-        estadoNuevo: true,
-        fecha: serverTimestamp(),
-      });
-    });
-    return { ok: true, message: "Votación abierta para las cuentas registradas." };
-  } catch (error: any) {
-    return { ok: false, message: error.message || "No se pudo abrir la votación." };
-  }
-}
-
-// Recuento y cierre a cargo del admin. Propone el más votado (con la primera posición del
-// desempate por id) pero deja fijar el ganador a mano, por si hace falta corregirlo.
-export async function cerrarVotacionPilotoDelDia(
-  splitId: string,
-  circuitoId: string,
-  pilotoIdGanador: string,
-): Promise<{ ok: boolean; message: string }> {
-  try {
-    const actorUid = auth.currentUser?.uid;
-    if (!actorUid) return { ok: false, message: "Inicia sesión como administrador." };
-    const circuitoRef = doc(db, `splits/${splitId}/circuitos`, circuitoId);
-    const auditRef = doc(collection(circuitoRef, "votacion_audit"));
-    await runTransaction(db, async transaction => {
-      const snap = await transaction.get(circuitoRef);
-      if (!snap.exists()) throw new Error("Circuito no encontrado.");
-      const data = snap.data();
-      const validationError = pilotDayCloseError({ open: data.piloto_dia_abierta, closed: data.piloto_dia_cerrado, candidates: data.piloto_dia_candidatos || getPilotDayCandidates(data.resultados), winnerId: pilotoIdGanador });
-      if (validationError) throw new Error(validationError);
-      transaction.update(circuitoRef, {
-        piloto_dia_abierta: false,
-        piloto_dia_cerrado: true,
-        piloto_dia_ganador: pilotoIdGanador,
-        piloto_dia_cerrada_por: actorUid,
-        piloto_dia_cerrada_en: serverTimestamp(),
-      });
-      transaction.set(auditRef, {
-        accion: "cerrada",
-        actorUid,
-        estadoAnterior: { abierta: true, cerrada: false },
-        estadoNuevo: { abierta: false, cerrada: true, ganadorPilotoId: pilotoIdGanador },
-        fecha: serverTimestamp(),
-      });
-    });
-    return { ok: true, message: "Piloto del día fijado. El bonus se aplicará en la siguiente carrera." };
-  } catch (error: any) {
-    return { ok: false, message: `Error al cerrar la votación: ${error.message}` };
-  }
-}
-
 // ─── RECALCULAR EL OVR ───────────────────────────────────────────────────────
 // El overall es la carrera entera de un piloto, no la foto de un bloque. Empieza en 70 el
 // día que debuta —que para unos es Origins y para otros un split posterior— y a partir de
@@ -481,7 +376,8 @@ function bloqueDeCircuitos(circuits: Array<{ id: string; [key: string]: any }>, 
         scoringRules,
         media: mediaPuntosCarrera(resultados.map(res => ({ puntos: puntosDelResultado(res, scoringRules) }))),
         porPiloto: new Map(resultados.map(res => [res.pilotoId, res])),
-        // Piloto del día ya cerrado en este circuito: su bonus se aplica en el SIGUIENTE.
+        // Piloto del día cerrado en este circuito (la votación ya no existe, pero los ganadores
+        // guardados siguen contando): su bonus se aplica en el SIGUIENTE.
         pilotoDiaGanador: circuito.piloto_dia_cerrado ? (circuito.piloto_dia_ganador ?? null) : null,
       };
     });

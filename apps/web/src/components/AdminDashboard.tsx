@@ -27,21 +27,19 @@ import { slug } from "../services/splitBuilder";
 import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 import { SplitIntroPanel } from "./SplitIntroPanel";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
-import { PaddockAdminPanel } from "./PaddockAdminPanel";
 import { RaceWinnersImagePanel } from "./RaceWinnersImagePanel";
 import { buildHistoricalRaceCorrectionPlan, HistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
 
 import { useSingleFlight } from "../hooks/useSingleFlight";
 const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
 
-type AdminTab = "results" | "economy" | "rivalries" | "roster" | "paddock" | "production" | "suggestions" | "tools";
+type AdminTab = "results" | "economy" | "rivalries" | "roster" | "production" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; description: string }> = [
   { id: "results", label: "Carreras", description: "Programa la carrera, introduce los resultados y cierra el acta para liquidar su economía. Tras cerrarla, aquí puedes generar y descargar con Gemini un borrador de imagen del podio." },
   { id: "economy", label: "Economía y fichajes", description: "Gestiona los traspasos, contratos y presupuestos de cada split." },
   { id: "rivalries", label: "Rivalidades", description: "Define los grupos de pilotos que compiten por los premios de rivalidad." },
   { id: "roster", label: "Equipos y usuarios", description: "Gestiona las escuderías, las cuentas y sus roles." },
-  { id: "paddock", label: "Paddock", description: "Revisa el OK completo y publica las bienvenidas oficiales con una foto." },
   { id: "production", label: "Vídeos", description: "Publica o cambia el vídeo de presentación de cada split." },
   { id: "suggestions", label: "Sugerencias", description: "Revisa las propuestas de la comunidad y actualiza su estado." },
   { id: "tools", label: "Datos y mantenimiento", description: "Controla el split destacado, los fichajes, la subasta y el inicio de temporada." },
@@ -1204,8 +1202,6 @@ export function AdminDashboard() {
             )}
 
           </div>
-        ) : adminTab === "paddock" ? (
-          <PaddockAdminPanel splits={splits} />
         ) : adminTab === "production" ? (
           <SplitIntroPanel splits={splits} />
         ) : adminTab === "suggestions" ? (
@@ -1813,7 +1809,6 @@ export function AdminDashboard() {
 
 
 
-        {/* Paddock */}
 
           </>
         )}

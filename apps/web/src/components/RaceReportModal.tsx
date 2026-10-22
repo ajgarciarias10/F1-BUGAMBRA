@@ -460,9 +460,6 @@ export function RaceReportModal({
                       </td>
                       <td className="p-1.5 font-bold text-zinc-950">
                         {pName}
-                        {circuito.piloto_dia_ganador === r.pilotoId && (
-                          <span className="ml-1 text-[9px] px-1 py-0.2 bg-amber-100 border border-amber-300 text-amber-900 rounded font-black">DOTD</span>
-                        )}
                       </td>
                       <td className="p-1.5 text-zinc-700">{tName}</td>
                       <td className="p-1.5 text-center font-mono">

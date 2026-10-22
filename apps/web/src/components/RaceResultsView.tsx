@@ -1,17 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../services/firebase";
-import { useAuth } from "../contexts/AuthContext";
-import { votarPilotoDelDia, abrirVotacionPilotoDelDia, cerrarVotacionPilotoDelDia } from "../services/raceProcessor";
 import type { Circuito } from "../types";
 import { buildRaceShareUrl } from "../utils/raceShareUrl";
-import { buildRaceReport, buildVotingShareUrl, votingStatusOf, type RaceReportRow } from "../services/readModels";
-import { Trophy, Crown, Loader2, Users, FileText, Flag, Share2, Scale, CalendarDays } from "lucide-react";
+import { buildRaceReport, type RaceReportRow } from "../services/readModels";
+import { Trophy, Crown, FileText, Flag, Scale, CalendarDays } from "lucide-react";
 import { RaceReportModal } from "./RaceReportModal";
-import { Badge, Button, Card, EmptyState, Notice, StatusPill, cn } from "./ui";
-import { useSingleFlight } from "../hooks/useSingleFlight";
+import { Badge, Card, EmptyState, Notice, StatusPill, cn } from "./ui";
 
 interface RaceResultsViewProps {
   validSplits: any[];
@@ -27,11 +24,8 @@ function nombreDe(currentSplit: any, pilotoId: string): string {
 }
 
 export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, currentSplit, getPilotPhoto }: RaceResultsViewProps) {
-  const { user, userData } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [openId, setOpenId] = useState<string | null>(() => searchParams.get("carrera"));
-  const isAdmin = userData?.rol === "admin";
-  const isRegistered = Boolean(user && userData);
 
   const circuitos: Circuito[] = ([...(currentSplit?.circuitos || [])] as Circuito[])
     .filter(c => c.completado)
@@ -65,9 +59,6 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
       return next;
     });
   };
-  // El bonus del circuito anterior es lo que se refleja en este: buscamos su ganador cerrado.
-  const indiceAbierto = abierto ? circuitos.findIndex(c => c.id === abierto.id) : -1;
-  const anterior = indiceAbierto > 0 ? circuitos[indiceAbierto - 1] : null;
 
   const proximos = ([...(currentSplit?.circuitos || [])] as Circuito[])
     .filter(c => !c.completado)
@@ -125,7 +116,6 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
               const podio = [...(circuito.resultados || [])]
                 .filter(r => r.racePos >= 1 && r.racePos <= 3 && r.isDnf !== true)
                 .sort((a, b) => a.racePos - b.racePos);
-              const voting = votingStatusOf(circuito);
               return (
                 <button
                   key={circuito.id}
@@ -135,8 +125,6 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
                 >
                   <span className="flex items-start justify-between gap-2">
                     <span className="text-base font-bold text-ink">GP de {circuito.nombre}</span>
-                    {voting === "open" && <Badge tone="ok">Votación abierta</Badge>}
-                    {voting === "closed" && <Badge tone="neutral">Votación cerrada</Badge>}
                   </span>
                   <span className="mt-1 block text-xs text-ink-muted">{circuito.acta_cerrada ? "Acta publicada" : "Acta pendiente de cierre"}</span>
                   <span className="mt-3 block space-y-1">
@@ -148,11 +136,6 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
                     ))}
                     {podio.length === 0 && <span className="block text-xs text-ink-muted">Podio no registrado</span>}
                   </span>
-                  {circuito.piloto_dia_cerrado && circuito.piloto_dia_ganador && (
-                    <span className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-warn">
-                      <Crown aria-hidden="true" className="h-3.5 w-3.5" /> Piloto del día: {nombreDe(currentSplit, circuito.piloto_dia_ganador)}
-                    </span>
-                  )}
                 </button>
               );
             })}
@@ -164,13 +147,8 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
         <RaceDetailModal
           splitId={currentSplitId}
           circuitoBase={abierto}
-          anteriorGanador={anterior?.piloto_dia_cerrado ? (anterior.piloto_dia_ganador ?? null) : null}
-          anteriorNombre={anterior?.nombre}
           currentSplit={currentSplit}
           getPilotPhoto={getPilotPhoto}
-          uid={user?.uid}
-          isAdmin={isAdmin}
-          isRegistered={isRegistered}
           onClose={closeCircuit}
         />
       )}
@@ -179,27 +157,15 @@ export function RaceResultsView({ validSplits, currentSplitId, onSelectSplit, cu
 }
 
 function RaceDetailModal({
-  splitId, circuitoBase, anteriorGanador, anteriorNombre, currentSplit, getPilotPhoto, uid, isAdmin, isRegistered, onClose,
+  splitId, circuitoBase, currentSplit, getPilotPhoto, onClose,
 }: {
   splitId: string;
   circuitoBase: Circuito;
-  anteriorGanador: string | null;
-  anteriorNombre?: string;
   currentSplit: any;
   getPilotPhoto: (pilotId: string) => string;
-  uid?: string;
-  isAdmin: boolean;
-  isRegistered: boolean;
   onClose: () => void;
 }) {
   const [circuito, setCircuito] = useState<Circuito>(circuitoBase);
-  const [votando, setVotando] = useState<string | null>(null);
-  const [cerrando, setCerrando] = useState(false);
-  const [abriendo, setAbriendo] = useState(false);
-  const [copiandoEnlace, setCopiandoEnlace] = useState(false);
-  const [ganadorElegido, setGanadorElegido] = useState("");
-  const [actionError, setActionError] = useState("");
-  const [actionMessage, setActionMessage] = useState("");
   const [showReport, setShowReport] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -214,7 +180,7 @@ function RaceDetailModal({
     };
   }, []);
 
-  // Vivo, directo al doc: así cada voto se ve al instante sin releer todo el split.
+  // Vivo, directo al doc: así una corrección del acta se ve al instante sin releer todo el split.
   useEffect(() => {
     const ref = doc(db, `splits/${splitId}/circuitos`, circuitoBase.id);
     return onSnapshot(ref, snap => {
@@ -225,89 +191,6 @@ function RaceDetailModal({
   const podio = [...(circuito.resultados || [])]
     .filter(r => r.racePos >= 1 && r.racePos <= 3 && r.isDnf !== true)
     .sort((a, b) => a.racePos - b.racePos);
-  const votingStatus = votingStatusOf(circuito);
-
-  const candidatos = [...(circuito.resultados || [])].filter(r => r.isDnf !== true);
-  const votantes = circuito.piloto_dia_votantes || {};
-  const conteos: Record<string, number> = {};
-  Object.values(votantes).forEach(pid => { conteos[pid] = (conteos[pid] || 0) + 1; });
-  const totalVotos = Object.keys(votantes).length;
-  const miVoto = uid ? votantes[uid] : undefined;
-  const propuesto = Object.entries(conteos).sort((a, b) => b[1] - a[1])[0]?.[0];
-
-  const { run: runOnce } = useSingleFlight();
-  const votar = async (pilotoId: string) => {
-    return runOnce(async () => {
-    if (!uid || votando || cerrando) return;
-    setActionError(""); setActionMessage("");
-    setVotando(pilotoId);
-    try {
-      const result = await votarPilotoDelDia(splitId, circuitoBase.id, uid, pilotoId);
-      if (!result.ok) throw new Error(result.message);
-      setActionMessage(result.message);
-    } catch {
-      setActionError("No se ha podido guardar tu voto. Comprueba tu conexión y vuelve a intentarlo.");
-    } finally {
-      setVotando(null);
-    }
-    });
-  };
-
-  const abrirVotacion = async () => {
-    return runOnce(async () => {
-    if (abriendo || cerrando || votando) return;
-    setActionError(""); setActionMessage(""); setAbriendo(true);
-    try {
-      const result = await abrirVotacionPilotoDelDia(splitId, circuitoBase.id);
-      if (!result.ok) throw new Error(result.message);
-      setActionMessage(result.message);
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "No se pudo abrir la votación.");
-    } finally { setAbriendo(false); }
-    });
-  };
-
-  const copiarEnlace = async () => {
-    if (copiandoEnlace) return;
-    setActionError(""); setActionMessage(""); setCopiandoEnlace(true);
-    try {
-      const url = buildRaceShareUrl(window.location.origin, splitId, circuitoBase.id);
-      await navigator.clipboard.writeText(url);
-      setActionMessage("Enlace de esta carrera copiado. Cualquiera puede consultar; solo las cuentas registradas pueden votar.");
-    } catch {
-      setActionError("No se pudo copiar el enlace. Comprueba que el navegador permite acceder al portapapeles.");
-    } finally { setCopiandoEnlace(false); }
-  };
-
-  const compartirVotacion = async () => {
-    if (copiandoEnlace) return;
-    setActionError(""); setActionMessage(""); setCopiandoEnlace(true);
-    try {
-      await navigator.clipboard.writeText(buildVotingShareUrl(window.location.origin, splitId, circuitoBase.id));
-      setActionMessage("Enlace de la votación copiado. Cualquiera puede consultarla; solo las cuentas registradas pueden votar.");
-    } catch {
-      setActionError("No se pudo copiar el enlace. Comprueba que el navegador permite acceder al portapapeles.");
-    } finally { setCopiandoEnlace(false); }
-  };
-
-  const cerrarVotacion = async () => {
-    return runOnce(async () => {
-    const ganador = ganadorElegido || propuesto;
-    if (!ganador || cerrando || votando) return;
-    setActionError(""); setActionMessage("");
-    setCerrando(true);
-    try {
-      const result = await cerrarVotacionPilotoDelDia(splitId, circuitoBase.id, ganador);
-      if (!result.ok) throw new Error(result.message);
-      setActionMessage(result.message);
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "No se ha podido cerrar la votación. Comprueba la conexión y tus permisos antes de volver a intentarlo.");
-    } finally {
-      setCerrando(false);
-    }
-    });
-  };
-
   return createPortal(
     <dialog ref={dialogRef} aria-labelledby="race-detail-title" onCancel={event => { event.preventDefault(); onClose(); }} className="fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-ink/75 overflow-y-auto overscroll-contain p-0 md:p-6 text-left backdrop:bg-ink/70" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="relative mx-auto my-0 min-h-[100dvh] max-w-5xl border-line bg-surface p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:my-4 md:min-h-0 md:border md:p-6" onClick={e => e.stopPropagation()}>
@@ -382,124 +265,6 @@ function RaceDetailModal({
 
         <ActaSection circuito={circuito} currentSplit={currentSplit} />
         <FiaDecisionsSection circuito={circuito} currentSplit={currentSplit} />
-
-        {/* ── Piloto del día ── */}
-        <div className="mt-6 border-t border-line pt-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Crown className="w-4 h-4 text-warn" />
-            <span className="text-sm font-semibold text-ink-2">Piloto del día</span>
-            <StatusPill tone={votingStatus === "open" ? "ok" : votingStatus === "closed" ? "neutral" : "warn"}>
-              {votingStatus === "open" ? "Votación abierta" : votingStatus === "closed" ? "Votación cerrada" : "Votación no disponible"}
-            </StatusPill>
-            {votingStatus !== "unavailable" && (
-              <Button size="sm" variant="secondary" className="ml-auto" onClick={compartirVotacion} loading={copiandoEnlace}>
-                <Share2 aria-hidden="true" className="h-4 w-4" /> Compartir votación
-              </Button>
-            )}
-          </div>
-          {votingStatus === "open" && miVoto && <p className="mb-3 text-sm font-semibold text-ok">Ya has votado. Puedes cambiar tu voto mientras siga abierta.</p>}
-
-      {circuito.piloto_dia_cerrado && circuito.piloto_dia_ganador ? (
-            <div className="m-card winner-glow flex items-center gap-3 border border-warn/40 bg-gradient-to-r from-warn/14 to-warn/3 p-4">
-              {/* La foto es el ancla del "+2": la insignia sale justo de ella. */}
-              <div className="relative shrink-0">
-                <div className="h-14 w-14 overflow-hidden rounded-full border-2 border-warn/60 bg-surface-2 sm:rounded-none sm:border">
-                  {getPilotPhoto(circuito.piloto_dia_ganador)
-                    ? <img src={getPilotPhoto(circuito.piloto_dia_ganador)} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full grid place-items-center text-ink-muted font-black">{nombreDe(currentSplit, circuito.piloto_dia_ganador).slice(0, 2).toUpperCase()}</div>}
-                </div>
-                <span
-                  aria-hidden="true"
-                  className="bonus-plus2 pointer-events-none absolute -right-2 -top-2 rounded-full bg-warn px-2 py-0.5 text-[12px] font-black tabular-nums text-brand-ink shadow-card"
-                >
-                  +2
-                </span>
-              </div>
-              <div className="min-w-0">
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-warn">
-                  <Crown className="crown-pop h-3.5 w-3.5" /> Piloto del día
-                </span>
-                <p className="truncate text-base font-black uppercase text-ink">{nombreDe(currentSplit, circuito.piloto_dia_ganador)}</p>
-                <p className="text-[12px] text-warn/80 sm:font-mono sm:text-[11px] sm:uppercase sm:tracking-[0.08em]">
-                  +2 OVR en la próxima carrera · {totalVotos} voto(s)
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-          {circuito.piloto_dia_abierta !== true ? (
-            <div className="rounded-xl border border-line bg-surface-2 p-4 text-sm text-ink-2">
-              <p>{isAdmin ? "Esta votación aún no se ha compartido." : "La votación de esta carrera todavía no está abierta."}</p>
-              {actionError && <p role="alert" className="mt-3 text-sm text-danger">{actionError}</p>}
-              {actionMessage && <p role="status" className="mt-3 text-sm text-ok">{actionMessage}</p>}
-              {isAdmin && <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={abrirVotacion} disabled={abriendo || cerrando || !!votando} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-warn px-4 text-xs font-black uppercase tracking-wide text-brand-ink disabled:opacity-50">{abriendo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Abrir votación</button><button type="button" onClick={copiarEnlace} disabled={copiandoEnlace} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-line-strong px-4 text-xs font-bold text-ink disabled:opacity-50">{copiandoEnlace && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Copiar enlace de carrera</button></div>}
-            </div>
-          ) : <>
-          <p className="mb-3 text-xs text-ok/80">Votación abierta · solo cuentas registradas · {totalVotos} voto(s)</p>
-          {isAdmin && <button type="button" onClick={copiarEnlace} disabled={copiandoEnlace} className="mb-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-line-strong px-4 text-xs font-bold text-ink disabled:opacity-50">{copiandoEnlace && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Copiar enlace para compartir esta votación</button>}
-          {!isRegistered && <p className="mb-4 text-sm text-ink-2"><Link to="/login" className="font-semibold text-warn underline underline-offset-4">Inicia sesión o regístrate para votar</Link>. Puedes consultar la carrera sin entrar.</p>}
-              {actionError && <p role="alert" className="mb-4 rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{actionError}</p>}
-              {actionMessage && <p role="status" className="mb-4 text-sm text-ok">{actionMessage}</p>}
-              <div className="grid gap-2 sm:grid-cols-2">
-                {candidatos.map(r => {
-                  const seleccionado = miVoto === r.pilotoId;
-                  return (
-                    <button
-                      key={r.pilotoId}
-                      disabled={!isRegistered || !!votando || cerrando}
-                      aria-pressed={seleccionado}
-                      onClick={() => votar(r.pilotoId)}
-                      className={`m-row flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-default md:rounded-none ${
-                        seleccionado ? "border-warn/50 bg-warn/8" : "border-line bg-surface-2 hover:border-warn/30 active:bg-surface-2"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        {votando === r.pilotoId ? <Loader2 className="w-3.5 h-3.5 animate-spin text-ink-muted shrink-0" /> : <Users className="w-3.5 h-3.5 text-ink-muted shrink-0" />}
-                        <span className="truncate text-sm font-bold uppercase tracking-tight text-ink">{nombreDe(currentSplit, r.pilotoId)}</span>
-                      </span>
-                      <span className="text-xs text-ink-2 shrink-0">{conteos[r.pilotoId] || 0} votos</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {isAdmin && (
-                <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4 sm:flex-row sm:flex-wrap sm:items-center">
-                  <select
-                    aria-label="Ganador de la votación"
-                    value={ganadorElegido}
-                    onChange={e => setGanadorElegido(e.target.value)}
-                    className="min-h-12 w-full rounded-xl border border-line bg-surface-3 px-3 text-sm text-ink outline-none focus:border-warn sm:min-h-0 sm:w-auto sm:rounded-none sm:py-2 sm:text-xs"
-                  >
-                    <option value="">{propuesto ? `Más votado: ${nombreDe(currentSplit, propuesto)}` : "Elegir piloto..."}</option>
-                    {candidatos.map(r => (
-                      <option key={r.pilotoId} value={r.pilotoId}>{nombreDe(currentSplit, r.pilotoId)} ({conteos[r.pilotoId] || 0})</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={cerrarVotacion}
-                    disabled={cerrando || !!votando || (!ganadorElegido && !propuesto)}
-                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-warn px-4 text-sm font-bold text-brand-ink disabled:opacity-40 sm:min-h-0 sm:rounded-none sm:py-2 sm:text-xs sm:font-black sm:uppercase sm:tracking-wider"
-                  >
-                    {cerrando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Cerrar votación y fijar ganador
-                  </button>
-                </div>
-              )}
-          </>}
-            </>
-          )}
-        </div>
-
-        {/* ── Bonus heredado del circuito anterior ── */}
-        {anteriorGanador && (
-          <div className="mt-6 border-t border-line pt-4">
-            <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-[0.08em] text-info">
-              <Trophy className="w-3.5 h-3.5" />
-              {nombreDe(currentSplit, anteriorGanador)} corre con +2 OVR · piloto del día en {anteriorNombre}
-            </div>
-          </div>
-        )}
 
         {showReport && (
           <RaceReportModal
