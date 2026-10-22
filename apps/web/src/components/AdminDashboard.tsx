@@ -19,6 +19,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { AdminUsersPanel } from "./AdminUsersPanel";
 import { AdminTeamManager } from "./AdminTeamManager";
 import { StatusBanner } from "./Feedback";
+import { runAuditedAdminMutation } from "../services/adminMutationService";
+import { slug } from "../services/splitBuilder";
 import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 import { SplitIntroPanel } from "./SplitIntroPanel";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
@@ -223,6 +225,9 @@ export function AdminDashboard() {
   const [horaVal, setHoraVal] = useState("");
   const [hotlapUrl, setHotlapUrl] = useState("");
   const [numeroCarrera, setNumeroCarrera] = useState<number>(1);
+  const [nombreCircuito, setNombreCircuito] = useState("");
+  const [nuevaCarrera, setNuevaCarrera] = useState("");
+  const [isAddingRace, setIsAddingRace] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [showRaceReport, setShowRaceReport] = useState(false);
 
@@ -326,6 +331,7 @@ export function AdminDashboard() {
       setHoraVal(circuito?.hora || "");
       setHotlapUrl(circuito?.hotlap_url || "");
       setNumeroCarrera(circuito?.numero_carrera ?? 1);
+      setNombreCircuito(circuito?.nombre || "");
       
       if (circuito?.completado && circuito.resultados) {
         setIsEditingFinished(true);
@@ -352,13 +358,50 @@ export function AdminDashboard() {
     }
   }, [selectedSplitId, selectedCircuitoId, splits]);
 
+  // Añade una carrera al calendario del split elegido. Numera seguido: tras la última del split o,
+  // si aún no tiene ninguna, tras la última de los splits anteriores de la liga.
+  const handleAddRace = async () => {
+    if (isAddingRace) return;
+    const nombre = nuevaCarrera.trim();
+    const split = splits.find(s => s.id === selectedSplitId);
+    if (!split || !nombre) return;
+    const numeros = (lista: any[]) => lista.map((c: any) => Number(c.numero_carrera)).filter(Number.isFinite);
+    const previos = splits.filter(s => s.tipo !== "individual" && Number(s.orden ?? 0) < Number(split.orden ?? 0)).flatMap(s => s.circuitos);
+    const numero = Math.max(0, ...numeros(split.circuitos.length ? split.circuitos : previos)) + 1;
+    const id = slug(nombre);
+    if (!id) { setMsg("Escribe un nombre de carrera válido."); return; }
+    setIsAddingRace(true);
+    setMsg("");
+    try {
+      await runAuditedAdminMutation({
+        ref: doc(db, `splits/${split.id}/circuitos`, id),
+        action: "race_add",
+        summary: `Añadir ${nombre} al calendario de ${split.nombre}`,
+        apply: current => {
+          if (current) throw new Error(`${split.nombre} ya tiene una carrera «${current.nombre || id}». Usa otro nombre, por ejemplo el del circuito.`);
+          return { nombre, numero_carrera: numero, completado: false, acta_cerrada: false, economia_procesada: false, resultados: [] };
+        },
+      });
+      setNuevaCarrera("");
+      setMsg(`${nombre} añadida a ${split.nombre} como GP ${numero}.`);
+    } catch (err: any) {
+      setMsg("Error añadiendo la carrera: " + err.message + " (no se aplicó ningún cambio)");
+    } finally {
+      setIsAddingRace(false);
+    }
+  };
+
   const handleSaveSchedule = async () => {
     if (!selectedSplitId || !selectedCircuitoId) return;
+    const nombre = nombreCircuito.trim();
+    if (!nombre) { setMsg("Escribe el nombre del circuito. No se aplicó ningún cambio."); return; }
     setIsSavingSchedule(true);
     setMsg("");
     try {
       const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
+      // El nombre se puede corregir; el identificador del documento no cambia, así no se pierden referencias.
       await updateDoc(ref, {
+        nombre,
         fecha: fechaVal,
         hora: horaVal,
         hotlap_url: hotlapUrl.trim() || null,
@@ -1240,6 +1283,25 @@ export function AdminDashboard() {
           </div>
         </div>
 
+        {/* AÑADIR CARRERA AL CALENDARIO (p. ej. un split creado al pactar, que nace sin calendario) */}
+        {selectedSplitId && (
+          <div className="bg-white/[0.03] border border-white/10 rounded-sm p-3 mb-4">
+            <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">
+              Añadir carrera a {splits.find(s => s.id === selectedSplitId)?.nombre ?? selectedSplitId}
+            </label>
+            <div className="flex gap-2 max-w-2xl">
+              <input type="text" value={nuevaCarrera} onChange={(e) => setNuevaCarrera(e.target.value)} placeholder="Nombre del circuito"
+                className="flex-1 bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors"
+              />
+              <button type="button" onClick={handleAddRace} disabled={!nuevaCarrera.trim() || isAddingRace} aria-busy={isAddingRace || undefined}
+                className="border border-white/10 text-white/80 min-h-11 rounded-lg px-3 text-[12px] font-bold md:min-h-0 md:rounded-sm md:py-1.5 md:text-[9px] md:uppercase md:tracking-wider transition-all flex items-center justify-center gap-1.5 hover:bg-white/[0.06] cursor-pointer disabled:opacity-40"
+              >
+                {isAddingRace ? <Loader2 className="w-3 h-3 animate-spin" /> : "Añadir"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* PROGRAMACIÓN DEL CIRCUITO */}
         <div className="bg-white/[0.03] border border-white/10 rounded-sm p-3 mb-4">
           <div className="flex items-center gap-2 mb-3 border-b border-white/5 pb-2">
@@ -1247,6 +1309,12 @@ export function AdminDashboard() {
             <h3 className="font-bold text-[10px] uppercase tracking-wider text-white">Programación — {getCircuitName()}</h3>
           </div>
           <div className="grid grid-cols-1 max-w-2xl gap-3">
+            <div>
+              <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Nombre del circuito</label>
+              <input type="text" value={nombreCircuito} onChange={(e) => setNombreCircuito(e.target.value)}
+                className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div>
                 <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Nº carrera</label>

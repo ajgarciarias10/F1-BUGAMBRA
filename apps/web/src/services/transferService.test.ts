@@ -464,3 +464,38 @@ test("un piloto que disputa su rivalidad por incomparecencia de su rival cobra e
   // Qualy P1 (1M) + Race P1 (2M) = +3M
   assert.equal(budget("s1", "a"), 103);
 });
+
+test("pactar sin split siguiente lo crea vacío; el pacto y su anulación cuadran en los dos splits", async () => {
+  for (const key of [...state.docs.keys()]) if (key.startsWith("splits/s2")) state.docs.delete(key);
+  state.docs.set("splits/s1", { nombre: "Split 3", orden: 3, temporadaId: "temporada_1" });
+  const creado = await services.asegurarSplitSiguiente("s1");
+  assert.deepEqual(creado, { id: "split_4", nombre: "Split 4", creado: true });
+  const split4 = state.docs.get("splits/split_4");
+  assert.equal(split4.orden, 4);
+  assert.equal(split4.temporadaId, "temporada_1");
+  assert.equal(split4.activo, false);
+  assert.equal(budget("split_4", "b"), 100);
+  assert.equal(state.docs.get("splits/split_4/equipos/b").presupuesto_origen_splitId, "s1");
+  assert.equal(state.docs.has("splits/split_4/equipos/agente_libre"), true);
+  assert.equal([...state.docs.keys()].some(key => key.startsWith("splits/split_4/circuitos")), false);
+
+  await services.guardarPacto({ ...pacto, nextSplitId: "split_4" });
+  assert.equal(budget("s1", "b"), 80);
+  assert.equal(budget("split_4", "b"), 80);
+  assert.equal(state.docs.get(path("split_4", "b")).nombre, "Piloto");
+
+  const antes = structuredClone([...state.docs]);
+  assert.deepEqual(await services.asegurarSplitSiguiente("s1"), { id: "split_4", nombre: "Split 4", creado: false });
+  assert.deepEqual([...state.docs], antes);
+
+  await services.anularPacto("s1", "a", "p", "split_4");
+  assert.equal(budget("s1", "b"), 100);
+  assert.equal(budget("split_4", "b"), 100);
+  assert.equal(state.docs.has(path("split_4", "b")), false);
+});
+
+test("sin orden en el split de origen no se crea ningún split siguiente", async () => {
+  const antes = structuredClone([...state.docs]);
+  await assert.rejects(services.asegurarSplitSiguiente("s1"), /no tiene orden/);
+  assert.deepEqual([...state.docs], antes);
+});
