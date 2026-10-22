@@ -1,6 +1,6 @@
 # 10. Race act: positions 1 to 20, qualifying "did not run", position after a penalty
 
-- **Branch from:** `feature/stitch-redesign`
+- **Branch from:** `feature/rediseno-app`
 - **Work branch:** `feature/acta-posiciones`
 - **Owned files:** the results-entry part of `apps/web/src/components/AdminDashboard.tsx`, `apps/web/src/types/index.ts` (result fields only), `apps/web/src/utils/economyRules.ts` and `apps/web/src/services/economyService.ts` only if the penalty position must feed points, their tests
 - **Do not touch:** other admin sections, transfer and split services

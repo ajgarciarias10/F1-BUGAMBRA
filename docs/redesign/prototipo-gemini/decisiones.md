@@ -1,6 +1,6 @@
 # Decisiones del dueño sobre el prototipo (22-10-2026)
 
-El dueño aprobó el prototipo de `docs/redesign/prototipo-gemini/` («me ha gustado mucho») y pidió que se convierta en la aplicación real. Este documento recoge lo que decidió durante la revisión para que no dependa del chat. Los tickets 03 a 12 de `docs/trabajo/redesign/` lo aplican.
+El dueño aprobó el prototipo de `docs/redesign/prototipo-gemini/` («me ha gustado mucho») y pidió que se convierta en la aplicación real. Este documento recoge lo que decidió durante la revisión para que no dependa del chat. Los tickets 03 a 12 de `docs/trabajo/redesign/` lo aplican sobre la rama `feature/rediseno-app`, que Vercel publica como preview; `main` y producción no se tocan hasta que el dueño lo decida.
 
 ## Aprobado tal cual
 
@@ -15,7 +15,7 @@ El dueño aprobó el prototipo de `docs/redesign/prototipo-gemini/` («me ha gus
 - Temporada 1 = Split 1 + Split 2 + Split 3, con numeración de GP seguida (1–18) y una vista total. En Equipos, la Temporada 1 muestra todos los pilotos que han pasado por cada escudería.
 - Cada split se puede ver por separado en Clasificación y en Equipos, con sus plantillas, puntos y saldos.
 - Las cartas de un split antiguo son las de entonces (escudería y valoración de ese split), también de pilotos que ya no corren.
-- Pendiente de confirmar por el dueño: si la clasificación de la temporada es la suma de puntos de los splits o sigue otra regla.
+- La clasificación de la temporada es la suma de los puntos de todos sus splits (confirmado el 22-10-2026).
 
 ## Calendario y datos
 
@@ -44,5 +44,5 @@ El dueño aprobó el prototipo de `docs/redesign/prototipo-gemini/` («me ha gus
 
 ## Avisos para la implementación
 
-- El prototipo deduce posiciones de Origins a partir de los puntos estándar, a petición del dueño. `AGENTS.md` prohíbe inferir posiciones de los puntos en datos reales: en la app hay que guardarlas como dato (importadas del Excel con su referencia) o mostrarlas como «estimadas».
+- Posiciones de Origins: el dueño aprobó deducirlas como en el prototipo (puntos de la carrera menos los extra = puntos estándar; 12 = P1, 10 = P2, 9 = P3… 2 = P10; 1 punto = entre P11 y P20; 0 sin terminar = DNF). Es una excepción a la regla de `AGENTS.md` solo para Origins, que únicamente guardó puntos. En Canadá, Jota y Fabi tienen 10 puntos estándar los dos: se muestran ambos como P2 hasta que la liga diga quién ganó.
 - El prototipo lee Twitch con el endpoint público de la web de Twitch. En la app debe hacerse con la API oficial desde `apps/api`, con la clave en el servidor.

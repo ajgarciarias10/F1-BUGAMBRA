@@ -1,6 +1,6 @@
 # 12. Seasons: Origins, Temporada 1 and every split
 
-- **Branch from:** `feature/stitch-redesign` (after 04 is merged: it restyles the same three screens)
+- **Branch from:** `feature/rediseno-app` (after 04 is merged: it restyles the same three screens)
 - **Work branch:** `feature/temporadas`
 - **Owned files:** a new `apps/web/src/services/seasonReadModels.ts` and its test, `apps/web/src/components/TotalStandings.tsx`, `apps/web/src/components/TeamsView.tsx`, `apps/web/src/components/PilotDetailModal.tsx`
 - **Do not touch:** economy services, write paths, Firestore rules
@@ -9,7 +9,7 @@
 
 ## Context
 
-Owner decisions of 2026-10-22. All data is already public in Firestore (splits, circuits, teams, rosters with `rating_piloto`, Origins `duos`). Open question for the owner: is the season standing the sum of split points or another rule? Origins positions: the Excel only stores points; `AGENTS.md` forbids inferring positions from points, so either import them from the league's source with a reference or label them "estimated".
+Owner decisions of 2026-10-22. All data is already public in Firestore (splits, circuits, teams, rosters with `rating_piloto`, Origins `duos`). The season standing is the sum of its splits' points (owner, 2026-10-22). Origins positions are deduced from standard points as the prototype does (owner-approved exception in `AGENTS.md`); keep the 11-20 range as a range, never a single invented position.
 
 ## Report
 

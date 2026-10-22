@@ -1,6 +1,6 @@
 # 11. The commissioner (admin) has no team
 
-- **Branch from:** `feature/stitch-redesign`
+- **Branch from:** `feature/rediseno-app`
 - **Work branch:** `feature/comisario-sin-equipo`
 - **Owned files:** `apps/web/src/App.tsx`, `apps/web/src/components/Dashboards.tsx` (role routing only)
 - **Do not touch:** auth, Firestore rules, the hardcoded admin e-mail logic beyond reading it

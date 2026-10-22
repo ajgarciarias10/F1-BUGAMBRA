@@ -1,6 +1,6 @@
 # 09. TV: videos from the league's Twitch channels
 
-- **Branch from:** `feature/stitch-redesign`
+- **Branch from:** `feature/rediseno-app`
 - **Work branch:** `feature/tv-twitch`
 - **Owned files:** `apps/api/src/server.ts` (one new read-only route), a new `apps/api/src/twitch.ts` and its test, `apps/api/.env.example`, `apps/web/src/components/FomLive.tsx`, a new `apps/web/src/services/twitchService.ts`
 - **Do not touch:** economy code, auth, Firestore rules

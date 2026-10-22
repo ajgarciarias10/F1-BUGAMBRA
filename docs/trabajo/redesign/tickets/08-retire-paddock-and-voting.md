@@ -1,6 +1,6 @@
 # 08. Retire the Paddock and the driver-of-the-day vote
 
-- **Branch from:** `feature/stitch-redesign` (after `main` has been merged into it)
+- **Branch from:** `feature/rediseno-app`
 - **Work branch:** `feature/retirar-paddock-votacion`
 - **Owned files:** `apps/web/src/components/PaddockForum.tsx`, `apps/web/src/components/PaddockAdminPanel.tsx`, `apps/web/src/services/paddockAdminService.ts`, `apps/web/src/components/Dashboards.tsx`, `apps/web/src/components/PublicHome.tsx`, `apps/web/src/components/RaceResultsView.tsx`, `apps/web/src/components/AdminDashboard.tsx` (only the Paddock tab and its import), `apps/web/src/services/readModels.ts` (only the voting read model), `apps/web/src/services/raceProcessor.ts` (only the vote functions), `apps/web/src/types/index.ts` (only voting/paddock types), their tests, `docs/BACKLOG.md`
 - **Do not touch:** economy services and utils, `firestore.rules`, any Firestore data, `apps/api/**`
