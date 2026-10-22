@@ -4,11 +4,19 @@ What is open right now. Details per feature go in `docs/trabajo/<slug>/`. Remove
 
 ## Redesign (`docs/trabajo/redesign/`)
 
-- [ ] 01 Design prototype with Review mode (Codex, in progress): `docs/redesign/prototype/`
-- [ ] 02 Owner review of the prototype using Review mode, then decide what to keep
-- [ ] 03 Foundation: tokens, primitives, shell (Codex mid-tier; blocked on 02; merges first)
-- [ ] 04 User and public screens (Claude; blocked on 03)
-- [ ] 05 Admin screens (Claude, economy paths untouched; blocked on 03)
+The owner approved `docs/redesign/prototipo-gemini/` on 2026-10-22 and wants it to become the real app. Decisions: `docs/redesign/prototipo-gemini/decisiones.md`.
+
+- [ ] 00 Owner: merge `main` into `feature/stitch-redesign` (it lacks `bc5f6e3` and later work) before any ticket below branches from it
+- [ ] 08 Retire Paddock and driver-of-the-day vote (behaviour, owner decision; before 04 and 05)
+- [ ] 03 Foundation: tokens, primitives, shell (Codex mid-tier; merges before 04 and 05)
+- [ ] 04 User and public screens (Claude; after 03 and 08)
+- [ ] 05 Admin screens (Claude, economy paths untouched; after 03 and 08)
+- [ ] 11 Commissioner without a team (role routing)
+- [ ] 09 TV with the league's Twitch channels through the official API (needs the owner's Twitch app credentials)
+- [ ] 10 Race act: positions 1-20, qualifying "did not run", position after a penalty (owner must confirm the data model first)
+- [ ] 12 Seasons: Origins by duos, Temporada 1 total and every split (after 04; owner must confirm the season standing rule)
+- [ ] Assign Antonio Ceferi as Alfa Romero's sporting director in Equipos y usuarios (owner, live data)
+- [ ] Rename Split 3 GP 16 from España to Italia (Imola) with the new circuit-name field (owner, live data)
 - [ ] Decide fate of `GuestDashboard.tsx` and `AestheticLogin.tsx` (no references found outside their own files)
 - [ ] Vercel does not build `feature/stitch-redesign` automatically; check Settings > Git (ignored build step, branch filter, connection)
 
