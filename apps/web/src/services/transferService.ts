@@ -24,13 +24,53 @@ async function pilotLocations(splitId: string, pilotoId: string) {
     .map(id => doc(db, `splits/${splitId}/equipos/${id}/pilotos`, pilotoId));
 }
 
+/**
+ * Devuelve el split siguiente al de origen y, si todavía no existe, lo crea vacío: sin calendario ni
+ * pilotos, con las mismas escuderías y su saldo actual como disponible heredado. Así un pacto se puede
+ * guardar y deshacer antes de preparar el split; «Inicializar» lo completa al terminar el de origen.
+ */
+export async function asegurarSplitSiguiente(splitId: string): Promise<{ id: string; nombre: string; creado: boolean }> {
+  const origenRef = doc(db, "splits", splitId);
+  const equiposOrigen = await getDocs(collection(db, `splits/${splitId}/equipos`));
+  return runTransaction(db, async tx => {
+    const origen = await tx.get(origenRef);
+    if (!origen.exists()) throw new Error("El split de origen ya no existe.");
+    const datos = origen.data();
+    const orden = Number(datos.orden);
+    if (!Number.isInteger(orden)) throw new Error(`${datos.nombre || splitId} no tiene orden: no se puede saber cuál es el siguiente split.`);
+    const id = `split_${orden + 1}`;
+    const nombre = `Split ${orden + 1}`;
+    const destinoRef = doc(db, "splits", id);
+    const equipos = await Promise.all(equiposOrigen.docs.map(equipo => tx.get(equipo.ref)));
+    const destino = await tx.get(destinoRef);
+    if (destino.exists()) return { id, nombre: destino.data()?.nombre || nombre, creado: false };
+    const reales = equipos.filter(equipo => equipo.exists() && equipo.id !== "agente_libre");
+    if (!reales.length) throw new Error(`${datos.nombre || splitId} no tiene escuderías: no hay de dónde crear ${nombre}.`);
+    const saldos = reales.map(equipo => saldoValido(equipo.data(), equipo.data()?.nombre || equipo.id));
+    tx.set(destinoRef, {
+      nombre, orden: orden + 1, tipo: "equipos", temporadaId: datos.temporadaId ?? null,
+      activo: false, completado: false, fichajes_abiertos: false, temporada_iniciada: false,
+      creado_por_pacto_desde: splitId,
+    });
+    reales.forEach((equipo, indice) => tx.set(doc(db, `splits/${id}/equipos`, equipo.id), {
+      id: equipo.id, nombre: equipo.data()?.nombre || equipo.id,
+      presupuesto: saldos[indice], presupuesto_inicial: saldos[indice], presupuesto_origen_splitId: splitId,
+      puntos_constructores: 0, puntos_carreras: [],
+    }));
+    tx.set(doc(db, `splits/${id}/equipos`, "agente_libre"), {
+      id: "agente_libre", nombre: "Agentes libres", presupuesto: 0, puntos_constructores: 0,
+    });
+    return { id, nombre, creado: true };
+  });
+}
+
 export async function guardarPacto(params: {
   splitId: string; nextSplitId: string | null; equipoOrigenId: string; pilotoId: string;
   equipoDestinoId: string; precio: number; tipo: string; circuitoId: string | null;
 }) {
   const { splitId, nextSplitId, equipoOrigenId, pilotoId, equipoDestinoId, precio, tipo, circuitoId } = params;
   if (!Number.isFinite(precio)) throw new Error("Importe no válido.");
-  if (!nextSplitId) throw new Error("Crea primero el split de destino para registrar un pacto reversible.");
+  if (!nextSplitId) throw new Error("Falta el split de destino: créalo con asegurarSplitSiguiente antes de pactar.");
   if (equipoDestinoId === "agente_libre") throw new Error("Selecciona una escudería para el pacto.");
   const refs = nextSplitId ? await pilotLocations(nextSplitId, pilotoId) : [];
   const source = doc(db, `splits/${splitId}/equipos/${equipoOrigenId}/pilotos`, pilotoId);

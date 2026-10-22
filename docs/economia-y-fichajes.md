@@ -3,7 +3,7 @@
 ## Operaciones desde administración
 
 - **Fichar en este split / Alta directa**: incorpora al piloto libre a la plantilla actual. Cobra una sola vez, registra el movimiento y conserva la ficha anterior. **Deshacer alta** compensa ese cobro y restaura la ficha anterior; los ingresos ajenos a la operación se conservan. Si hubo actividad posterior, debe deshacerse primero.
-- **Pactar próximo split**: mantiene al piloto en su equipo de competición y escribe su destino en el siguiente split. El importe se carga en el split de origen. Debe existir el split de destino. Cambiar el pacto compensa el anterior antes de aplicar el nuevo, dentro de la misma transacción.
+- **Pactar próximo split**: mantiene al piloto en su equipo de competición y escribe su destino en el siguiente split. El importe se carga en el split de origen. Si el split de destino aún no existe, se crea vacío al confirmar el pacto (sin calendario, mismas escuderías y saldo actual como disponible heredado); el calendario se añade después con «Añadir carrera» y, al terminar el split de origen, «Inicializar» lo completa. Cambiar el pacto compensa el anterior antes de aplicar el nuevo, dentro de la misma transacción.
 - **Deshacer pacto**: restaura la fotografía anterior del destino y compensa el movimiento económico en una sola transacción. Se conserva el identificador del split de destino para que reordenar splits no cambie qué se revierte.
 - **Liberar**: pasa la ficha a agentes libres; no es una devolución del fichaje. No permite borrar un pacto pendiente sin anularlo antes.
 - **Ajustar saldo**: introduce un movimiento positivo o negativo y su motivo. Sirve para correcciones administrativas y conciliación histórica; no modifica el precio de los pilotos.

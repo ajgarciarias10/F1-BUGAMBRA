@@ -11,7 +11,7 @@ import { Loader2, Trash2, RefreshCw, ArrowRightLeft, FileText } from "lucide-rea
 import { resolveTransferView, type TransferView } from "../utils/transferView";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
 import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, sumClausePriceAdjustments, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
-import { guardarPacto, anularPacto, deshacerAlta } from "../services/transferService";
+import { guardarPacto, anularPacto, deshacerAlta, asegurarSplitSiguiente } from "../services/transferService";
 import { applyTeamEconomyCorrection } from "../services/adminMutationService";
 import { economyRules } from "../utils/economyRules";
 import { FiaFinancialReportModal } from "./FiaFinancialReportModal";
@@ -689,12 +689,26 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     try {
       const pilot = fichajeModal;
       const lastDone = [...circuits].filter(c => c.completado).at(-1);
+      let nextSplitId = getNextSplitId(pilot.splitId);
+      const avisos: string[] = [];
+      if (!nextSplitId) {
+        const origenNombre = splits.find((s: any) => s.id === pilot.splitId)?.nombre ?? "este split";
+        if (!confirm(
+          `Todavía no existe el split siguiente a ${origenNombre}.\n\n` +
+          `Se creará vacío, sin calendario, para guardar el pacto de ${pilot.nombre}. ` +
+          `Las escuderías parten de su saldo actual. Al terminar ${origenNombre}, usa «Inicializar» para completarlo.\n\n¿Continuar?`
+        )) return;
+        const siguiente = await asegurarSplitSiguiente(pilot.splitId);
+        nextSplitId = siguiente.id;
+        if (siguiente.creado) avisos.push(`${siguiente.nombre} creado vacío para guardar el pacto. Añade su calendario cuando lo tengáis.`);
+      }
       await guardarPacto({
-        splitId: pilot.splitId, nextSplitId: getNextSplitId(pilot.splitId), equipoOrigenId: pilot.equipoId,
+        splitId: pilot.splitId, nextSplitId, equipoOrigenId: pilot.equipoId,
         pilotoId: pilot.id, equipoDestinoId: fichajeEquipoId, precio: pendingPrice,
         tipo: fichajeTipo, circuitoId: lastDone?.id ?? null,
       });
 
+      if (avisos.length) setProcessLog(avisos);
       setFichajeModal(null);
       setPendingPrecioCompra("");
     } catch (error: any) {
