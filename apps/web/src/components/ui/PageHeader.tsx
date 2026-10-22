@@ -18,8 +18,8 @@ export function PageHeader({ title, eyebrow, description, actions, level = 1, cl
   return (
     <div className={cn("mb-6 flex flex-col gap-3 md:mb-8 md:flex-row md:items-end md:justify-between", className)}>
       <div className="min-w-0">
-        {eyebrow && <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">{eyebrow}</p>}
-        <Heading className={cn("font-semibold tracking-tight text-ink", level === 1 ? "text-3xl md:text-4xl" : "text-xl md:text-2xl")}>{title}</Heading>
+        {eyebrow && <p className="eyebrow mb-1">{eyebrow}</p>}
+        <Heading className={cn("font-bold tracking-tight text-ink", level === 1 ? "page-title" : "section-title")}>{title}</Heading>
         {description && <p className="mt-1.5 max-w-2xl text-sm text-ink-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
