@@ -21,6 +21,6 @@ New code lives in `apps/web/src/nueva/`:
 | 3, one at a time | 21 my team and ledger, 22 market and auction, 23 admin races and act (includes former 10), 24 admin economy and transfers, 25 admin rivalries, users, videos, suggestions, season | high (money, writes) | Claude, strongest model, owner watching |
 | 4 | 26 switch every route to `nueva`, retire old screens and unused code | medium | Claude |
 
-Each ticket owns disjoint files. A screen ticket may read `datos`, `ui` and existing services but not edit them; if it needs a change there, it asks the coordinator, who amends the owning ticket.
+Agents are not fixed here: before each wave the coordinator asks TypeSafe (`tool/pedir-agente.sh`) and dispatches with Orca (`docs/agents/orquestacion.md`). Wave 1 was launched by hand before this was adopted. Each ticket owns disjoint files. A screen ticket may read `datos`, `ui` and existing services but not edit them; if it needs a change there, it asks the coordinator, who amends the owning ticket.
 
 Retired by this plan: tickets 04 and 05 (presentation-only restyle), 11 (folded into 15), 12 (folded into 13, 16 and 17), 09 (renumbered 20), 10 (folded into 23).

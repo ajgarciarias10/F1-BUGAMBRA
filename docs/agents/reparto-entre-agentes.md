@@ -12,6 +12,9 @@ Several tools can work here at once. This page says which kind of work goes to w
 
 ## Which work goes where
 
+Since 2026-10-23 the agent for each ticket is decided by TypeSafe, as in CleverTracker (`docs/agents/orquestacion.md`). The table below is only a guide for the ticket's level (`top` or `bounded`), not a choice of agent.
+
+
 | Kind of work | Agent | Model tier |
 |---|---|---|
 | Read-only investigation, searches, audits | Claude subagent (Explore or general-purpose) | Default |
