@@ -2,7 +2,7 @@
 
 - **Branch from:** `feature/rediseno-app` (after tickets 13, 14 and 15 are merged)
 - **Work branch:** `feature/nueva-inicio`
-- **Owned files:** `apps/web/src/nueva/pantallas/Inicio.tsx`, `Perfil.tsx`, `Buzon.tsx`, `Acceso.tsx`, `Instalar.tsx` (all under `apps/web/src/nueva/pantallas/`) and their tests
+- **Owned files:** `apps/web/src/nueva/pantallas/Inicio.tsx`, `apps/web/src/nueva/pantallas/Inicio.test.ts`, `apps/web/src/nueva/pantallas/Perfil.tsx`, `apps/web/src/nueva/pantallas/Perfil.test.ts`, `apps/web/src/nueva/pantallas/Buzon.tsx`, `apps/web/src/nueva/pantallas/Buzon.test.ts`, `apps/web/src/nueva/pantallas/Acceso.tsx`, `apps/web/src/nueva/pantallas/Acceso.test.ts`, `apps/web/src/nueva/pantallas/Instalar.tsx`, `apps/web/src/nueva/pantallas/Instalar.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Codex, mid-tier model, medium reasoning
 - **Done when:** each role's home matches the prototype (jeque and director: team and balance, never 0 for an unknown balance; pilot; user; commissioner: pending acts and unprocessed economy); profile, suggestions, login and install keep their current logic with the new look.

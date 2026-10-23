@@ -2,7 +2,7 @@
 
 - **Branch from:** `feature/rediseno-app` (after tickets 13, 14 and 15 are merged)
 - **Work branch:** `feature/nueva-equipos`
-- **Owned files:** `apps/web/src/nueva/pantallas/Equipos.tsx`, `apps/web/src/nueva/pantallas/MiPiloto.tsx` and their tests
+- **Owned files:** `apps/web/src/nueva/pantallas/Equipos.tsx`, `apps/web/src/nueva/pantallas/MiPiloto.tsx`, `apps/web/src/nueva/pantallas/Equipos.test.ts`, `apps/web/src/nueva/pantallas/MiPiloto.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Codex, mid-tier model, medium reasoning
 - **Done when:** Teams per season (each split with rosters, points and balances, changes versus the previous split; Origins duo cards; Temporada 1 with every pilot per team) and My driver (season evolution, results per GP, career by season) match the prototype; cards open the season card.

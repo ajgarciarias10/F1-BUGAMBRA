@@ -2,7 +2,7 @@
 
 - **Branch from:** `feature/rediseno-app` (after tickets 13, 14 and 15 are merged)
 - **Work branch:** `feature/nueva-carreras`
-- **Owned files:** `apps/web/src/nueva/pantallas/Carreras.tsx` and its test
+- **Owned files:** `apps/web/src/nueva/pantallas/Carreras.tsx`, `apps/web/src/nueva/pantallas/Carreras.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Claude subagent, default model
 - **Done when:** calendar per split and race detail (podium, published act with DNF / did not run / unknown position kept distinct, FIA decisions, fastest-lap video only after Play) match the prototype; no vote.

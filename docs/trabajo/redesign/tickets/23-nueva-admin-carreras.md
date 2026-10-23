@@ -2,7 +2,7 @@
 
 - **Branch from:** `feature/rediseno-app` (after tickets 13, 14 and 15 are merged)
 - **Work branch:** `feature/nueva-admin-carreras`
-- **Owned files:** `apps/web/src/nueva/pantallas/admin/Carreras.tsx` and its test
+- **Owned files:** `apps/web/src/nueva/pantallas/admin/Carreras.tsx`, `apps/web/src/nueva/pantallas/admin/Carreras.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Claude, strongest model, owner watching
 - **Done when:** results entry like the prototype (qualifying and race 1–20 or did not run, DNF, fastest lap, FIA status, repeated-position warning), schedule with circuit name, add race, close and reopen act, all through the existing services. A separate post-penalty position needs the owner's approval of the data model first.

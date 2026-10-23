@@ -2,7 +2,7 @@
 
 - **Branch from:** `feature/rediseno-app` (after tickets 13, 14 and 15 are merged)
 - **Work branch:** `feature/nueva-admin-resto`
-- **Owned files:** `apps/web/src/nueva/pantallas/admin/Rivalidades.tsx`, `Usuarios.tsx`, `Videos.tsx`, `Sugerencias.tsx`, `Temporada.tsx` (under `apps/web/src/nueva/pantallas/admin/`) and their tests
+- **Owned files:** `apps/web/src/nueva/pantallas/admin/Rivalidades.tsx`, `apps/web/src/nueva/pantallas/admin/Rivalidades.test.ts`, `apps/web/src/nueva/pantallas/admin/Usuarios.tsx`, `apps/web/src/nueva/pantallas/admin/Usuarios.test.ts`, `apps/web/src/nueva/pantallas/admin/Videos.tsx`, `apps/web/src/nueva/pantallas/admin/Videos.test.ts`, `apps/web/src/nueva/pantallas/admin/Sugerencias.tsx`, `apps/web/src/nueva/pantallas/admin/Sugerencias.test.ts`, `apps/web/src/nueva/pantallas/admin/Temporada.tsx`, `apps/web/src/nueva/pantallas/admin/Temporada.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Claude, default model
 - **Done when:** rivalries picked with one tap (2 or 3 pilots, a pilot leaves his previous group), users and roles, videos, suggestions and season tools with the prototype's look, through the existing services.

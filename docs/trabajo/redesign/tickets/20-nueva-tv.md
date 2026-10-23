@@ -2,7 +2,7 @@
 
 - **Branch from:** `feature/rediseno-app` (after tickets 13, 14 and 15 are merged)
 - **Work branch:** `feature/nueva-tv`
-- **Owned files:** `apps/web/src/nueva/pantallas/Tv.tsx`, a new `apps/api/src/twitch.ts` and its test, one read-only route in `apps/api/src/server.ts`, `apps/api/.env.example`
+- **Owned files:** `apps/web/src/nueva/pantallas/Tv.tsx`, a new `apps/api/src/twitch.ts`, `apps/api/src/twitch.test.ts`, one read-only route in `apps/api/src/server.ts`, `apps/api/.env.example`, `apps/web/src/nueva/pantallas/Tv.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Claude subagent, default model
 - **Done when:** TV lists live state, videos and 2026 clips of `tonicotitular` and of pilot channels (first `fabiml_204`), plays only after a tap, matches videos to GPs only when unambiguous, and shows an honest error if Twitch fails. Uses the official Twitch API from `apps/api` with the owner's credentials (ask; never in the frontend).

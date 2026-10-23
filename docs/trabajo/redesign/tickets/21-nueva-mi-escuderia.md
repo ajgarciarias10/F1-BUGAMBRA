@@ -2,7 +2,7 @@
 
 - **Branch from:** `feature/rediseno-app` (after tickets 13, 14 and 15 are merged)
 - **Work branch:** `feature/nueva-escuderia`
-- **Owned files:** `apps/web/src/nueva/pantallas/MiEscuderia.tsx` and its test
+- **Owned files:** `apps/web/src/nueva/pantallas/MiEscuderia.tsx`, `apps/web/src/nueva/pantallas/MiEscuderia.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Claude, strongest model, owner watching
 - **Done when:** summary, roster with prices per circuit, ledger with the 11 sources and «Conciliado», balance after each GP from the real ledger (no estimate), transfers of the split; read-only. Open question for the owner before coding: the sporting director should see his team's economy (owner said so); today `canViewBudget` is false for him.
