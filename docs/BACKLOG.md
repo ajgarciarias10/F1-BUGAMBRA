@@ -8,7 +8,7 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 
 - [x] 08 Retire Paddock and vote (in the preview)
 - [x] 03 Foundation tokens and type (in the preview)
-- [ ] Wave 1: 13 data layer · 14 visual pieces · 15 shell and routes
+- [x] Wave 1: 13 data layer · 14 visual pieces · 15 shell and routes (in the preview)
 - [ ] Wave 2: 16 home and championship · 17 teams and my driver · 18 races · 19 role homes, profile, login · 20 TV (needs the owner's Twitch credentials)
 - [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
 - [ ] 26 Switch every route and retire the old screens
