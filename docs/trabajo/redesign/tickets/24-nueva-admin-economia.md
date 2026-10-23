@@ -5,7 +5,7 @@
 - **Owned files:** `apps/web/src/nueva/pantallas/admin/Economia.tsx`, `apps/web/src/nueva/pantallas/admin/Economia.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Claude, strongest model, owner watching
-- **Done when:** team summary by source, balance chart, pilots and market table per circuit (prices / performance), «Procesar economía» showing the per-team breakdown before confirming, pact (creating the next split if missing), release, undo, clause and price adjustments, all through the existing services with their confirmations and audit.
+- **Done when:** team summary by source, balance chart, pilots and market table per circuit (prices / performance), «Procesar economía» showing the per-team breakdown before confirming, pact during a split for the next one (creating the next split if missing), with the «Próx. split» column showing each pending pact and an undo, release, undo, clause and price adjustments, all through the existing services with their confirmations and audit.
 
 ## Context
 

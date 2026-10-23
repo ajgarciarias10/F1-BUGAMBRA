@@ -5,7 +5,7 @@
 - **Owned files:** `apps/web/src/nueva/pantallas/Mercado.tsx`, `apps/web/src/nueva/pantallas/Mercado.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Claude, strongest model, owner watching
-- **Done when:** market screen with the prototype's look around the existing auction logic (`AuctionRoom` behaviour, bids only for the jeque, closed state honest); no change to `auctionService`.
+- **Done when:** market screen with the prototype's look around the existing auction logic (`AuctionRoom` behaviour, bids only for the jeque, closed state honest); no change to `auctionService`. New (owner, 2026-10-23): a «Pactos para el próximo split» block listing every pilot already signed for the next split, with team, type and price, read from the data layer.
 
 ## Context
 

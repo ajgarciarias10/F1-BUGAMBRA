@@ -5,7 +5,7 @@
 - **Owned files:** `apps/web/src/nueva/pantallas/Equipos.tsx`, `apps/web/src/nueva/pantallas/MiPiloto.tsx`, `apps/web/src/nueva/pantallas/Equipos.test.ts`, `apps/web/src/nueva/pantallas/MiPiloto.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Codex, mid-tier model, medium reasoning
-- **Done when:** Teams per season (each split with rosters, points and balances, changes versus the previous split; Origins duo cards; Temporada 1 with every pilot per team) and My driver (season evolution, results per GP, career by season) match the prototype; cards open the season card.
+- **Done when:** Teams per season (each split with rosters, points and balances, changes versus the previous split; Origins duo cards; Temporada 1 with every pilot per team) and My driver (season evolution, results per GP, career by season) match the prototype; cards open the season card. New (owner, 2026-10-23): each team has its own page with its evolution chart (points and balance GP by GP and between splits), and a pilot signed for the next split shows it on his card, in his team and in the next-split preview («Fichado para el Split 4 con Roses · 70 M€»).
 
 ## Context
 

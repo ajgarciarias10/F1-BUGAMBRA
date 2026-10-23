@@ -13,6 +13,9 @@ The prototype computes everything in `generador/liga-block.js`, `standings-block
 
 ## What to do
 
+- Pacts (owner, 2026-10-23): a pilot signed during a split for the next one. Expose per pilot and per team the pending move stored on the current split's roster (`pending_equipoId`, `pending_precio_compra`, `pending_tipo_fichaje`, `pending_splitId`, `congelado`), reusing `resolveTransferView` from `utils/transferView.ts`, and a «next split» roster preview per team (who stays, who arrives, who leaves). Read only: writing a pact stays in `services/transferService.ts`.
+- Team evolution (owner, 2026-10-23): per team, points and balance GP by GP within a split and between splits, ready for the aligned chart.
+
 - Seasons: Origins (individual, by duos; positions deduced from standard points with `origins-detalle.json`, owner-approved exception in `AGENTS.md`), each split, and the Temporada 1 aggregate (sum of splits; per-GP team points with each split's roster; every pilot who raced for each team).
 - Standings for pilots and teams per season; per-GP points and cumulative series aligned to the calendar; carry-over balances between splits (closing of one split = opening of the next).
 - Card of a pilot in a given season (team and `rating_piloto` of that split; tiers as in `PilotCardF1.tsx`: ELITE ≥ 90, PRO ≥ 85, ADV ≥ 80, CORE).
