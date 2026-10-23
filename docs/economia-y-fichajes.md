@@ -23,6 +23,10 @@ El valor `-110` ya no activa ninguna excepción: es un precio negativo normal. L
 
 Procesar una carrera y revertirla utiliza transacciones. La reversión identifica equipos por ID, compensa los movimientos originales y recupera los valores anteriores de los pilotos. Solo puede revertirse la última carrera liquidada. Si faltan los movimientos originales, se informa del problema sin inventar una devolución.
 
+Cada nueva liquidación guarda en el documento del circuito `economia_saldos: { [equipoId]: { antes, ingresos, despues } }`, con importes en millones. Incluye todas las escuderías, también las que no ingresan nada; excluye el contenedor de agentes libres. `antes` es el presupuesto leído dentro de la transacción, `ingresos` es exactamente el total abonado por ese GP y `despues` es su suma, sin cambiar los premios ni redondear el saldo. Se conservan los saldos negativos existentes. Los abonos, movimientos y saldos del circuito se confirman juntos; un fallo de commit no deja cambios parciales y un reintento vuelve a leer el presupuesto vigente.
+
+Los fichajes, pactos y ajustes entre carreras ya están incluidos en `antes` del siguiente GP; no se atribuyen a sus ingresos ni reescriben la fotografía anterior. Revertir elimina `economia_saldos` en la misma transacción que compensa los abonos, conservando los movimientos ajenos al GP. El procesado retroactivo utiliza esa misma liquidación en secuencia y guarda una fotografía por carrera, sin volver a abonar carreras ya procesadas. Las carreras antiguas pueden carecer del campo: su ausencia no significa saldo cero y este cambio no reconstruye saldos históricos ni modifica datos reales.
+
 El antiguo reset destructivo se sustituye por la reversión secuencial de liquidaciones: conserva fichajes, pactos y ajustes. Si una carrera falla al revertirse, se detiene y muestra el error; las ya revertidas quedan identificadas por su estado.
 
 Al derivar aperturas:
