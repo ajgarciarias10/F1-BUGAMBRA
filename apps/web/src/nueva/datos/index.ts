@@ -4,4 +4,6 @@ export * from "./origins";
 export * from "./temporadas";
 export * from "./cartas";
 export * from "./ingresos";
+export * from "./evolucion";
+export * from "./pactos";
 export { useLiga, desglosesPorSplit } from "./useLiga";
