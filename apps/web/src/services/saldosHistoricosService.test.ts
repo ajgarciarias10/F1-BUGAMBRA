@@ -66,6 +66,7 @@ const circuito = (id: string, numero: number, data: Record<string, unknown> = {}
 // a P2 por 10 y b recibió una devolución de 5; tras GP2 hay un premio. GP3 sin liquidar.
 beforeEach(() => {
   state.docs = new Map(); state.failCommit = false; txSeq = 0;
+  state.docs.set("splits/s3", { nombre: "Split 3" });
   state.docs.set("splits/s3/equipos/a", { nombre: "A", presupuesto_inicial: 100, presupuesto: 45 });
   state.docs.set("splits/s3/equipos/b", { nombre: "B", presupuesto_inicial: 50, presupuesto: 81.5 });
   state.docs.set("splits/s3/equipos/agente_libre", { nombre: "Agentes libres", presupuesto: 0 });
@@ -244,4 +245,34 @@ test("asientos antiguos sin equipoId se atribuyen por nombre; uno sin escudería
   ({ vista: v } = await vista());
   assert.equal(v.escribible, false);
   assert.match(v.problemas.join(" "), /huerfano no corresponde/);
+});
+
+test("con el tope de temporada aplicado, lo esperado antes del primer GP es la apertura recortada al tope", async () => {
+  // b: 80 + 20 de mercado = 100, recortado a 50 al comenzar la temporada (asiento con fecha anterior al GP1).
+  state.docs.set("splits/s3", { nombre: "Split 3", economia_tope_aplicado: true });
+  state.docs.get("splits/s3/equipos/b").presupuesto_inicial = 80;
+  state.docs.set("transacciones/tope_subasta__s3__b", { splitId: "s3", equipoId: "b", equipo: "B", tipo: "ajuste", cantidad: 50, esIngreso: false, fecha: { seconds: 0.1 } });
+  state.docs.get("splits/s3/equipos/b").presupuesto = 61.5;
+  const { vista: v } = await vista();
+  const b = equipo(v, "b"), a = equipo(v, "a");
+  assert.equal(b.aperturaSinTope, 100); assert.equal(b.reduccionTope, 50); assert.equal(b.apertura, 50);
+  assert.equal(b.saldoAntesPrimerGp, 50); assert.equal(b.desvio, 0);
+  assert.equal(a.reduccionTope, 0); assert.equal(a.apertura, 40);
+  assert.equal(v.escribible, true, v.problemas.join(" "));
+
+  // Sin la marca del split, el asiento del tope basta; y el tope sale de las reglas del split.
+  state.docs.set("splits/s3", { nombre: "Split 3", economia_config: { tope_presupuesto_subasta: 60 } });
+  state.docs.get("transacciones/tope_subasta__s3__b").cantidad = 40;
+  state.docs.get("splits/s3/equipos/b").presupuesto = 71.5;
+  const otra = (await vista()).vista;
+  assert.equal(equipo(otra, "b").reduccionTope, 40);
+  assert.equal(equipo(otra, "b").desvio, 0);
+  assert.equal(otra.escribible, true);
+
+  // Sin tope aplicado, el mismo saldo se muestra como desvío.
+  state.docs.delete("transacciones/tope_subasta__s3__b");
+  const sinTope = (await vista()).vista;
+  assert.equal(equipo(sinTope, "b").reduccionTope, 0);
+  assert.equal(equipo(sinTope, "b").desvio, -40);
+  assert.equal(sinTope.escribible, false);
 });

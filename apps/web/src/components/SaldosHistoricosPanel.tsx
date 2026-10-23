@@ -39,7 +39,7 @@ export function SaldosHistoricosPanel({ splits }: { splits: any[] }) {
   return <section className="rounded-2xl border border-line bg-surface-3 p-5 space-y-4">
     <div>
       <h2 className="text-lg font-bold">Saldos tras cada GP ya liquidado</h2>
-      <p className="mt-1 text-sm text-ink-2">Reconstruye el saldo de cada escudería tras los GP liquidados antes de que se guardara. Parte del saldo actual y resta, hacia atrás, solo los movimientos guardados en el libro. Se comprueba con el saldo justo antes del primer GP: debe coincidir con el presupuesto inicial más el mercado de la plantilla (margen {TOLERANCIA_SALDOS}M). Si no coincide, se muestra el desvío y no se guarda nada.</p>
+      <p className="mt-1 text-sm text-ink-2">Reconstruye el saldo de cada escudería tras los GP liquidados antes de que se guardara. Parte del saldo actual y resta, hacia atrás, solo los movimientos guardados en el libro. Se comprueba con el saldo justo antes del primer GP: debe coincidir con el presupuesto inicial más el mercado de la plantilla, recortado al tope de temporada si el split lo aplicó (margen {TOLERANCIA_SALDOS}M). Si no coincide, se muestra el desvío y no se guarda nada.</p>
       <p className="mt-1 text-sm text-ink-2">Que el libro cuadre no significa que coincida con el Excel oficial. Puedes teclear el saldo oficial antes del primer GP de cada escudería para ver su desvío; ese dato es solo informativo.</p>
     </div>
     <label className="block text-sm font-bold">Split
@@ -69,7 +69,7 @@ export function SaldosHistoricosPanel({ splits }: { splits: any[] }) {
           <thead><tr className="border-b border-line text-left text-ink-muted">
             <th className="p-2">Escudería</th><th className="p-2 text-right">Saldo actual</th><th className="p-2 text-right">Inicial</th>
             <th className="p-2 text-right">Mercado plantilla</th><th className="p-2 text-right">Mercado posterior al primer GP</th>
-            <th className="p-2 text-right">Inicial + mercado − posterior</th><th className="p-2 text-right">Antes del primer GP</th><th className="p-2 text-right">Desvío</th>
+            <th className="p-2 text-right">Inicial + mercado − posterior</th><th className="p-2 text-right">Recorte del tope de temporada</th><th className="p-2 text-right">Esperado</th><th className="p-2 text-right">Antes del primer GP</th><th className="p-2 text-right">Desvío</th>
             <th className="p-2 text-right">Saldo oficial</th><th className="p-2 text-right">Desvío oficial</th>
           </tr></thead>
           <tbody className="divide-y divide-line">
@@ -81,6 +81,8 @@ export function SaldosHistoricosPanel({ splits }: { splits: any[] }) {
                 <td className="p-2 text-right font-mono">{fmt(e.presupuestoInicial)}</td>
                 <td className="p-2 text-right font-mono">{fmtDesvio(e.mercado)}</td>
                 <td className="p-2 text-right font-mono" title="Cargos de mercado del libro hechos después del primer GP: no están en el saldo de antes y se descuentan del mercado de la plantilla">{e.mercadoPosterior ? fmtDesvio(e.mercadoPosterior) : "—"}</td>
+                <td className="p-2 text-right font-mono">{fmt(e.aperturaSinTope)}</td>
+                <td className="p-2 text-right font-mono" title="Al comenzar la temporada el saldo se recorta al tope de presupuesto del split">{e.reduccionTope ? fmtDesvio(-e.reduccionTope) : "—"}</td>
                 <td className="p-2 text-right font-mono">{fmt(e.apertura)}</td>
                 <td className="p-2 text-right font-mono">{fmt(e.saldoAntesPrimerGp)}</td>
                 <td className={`p-2 text-right font-mono font-bold ${desviado ? "text-danger" : "text-ok"}`}>{fmtDesvio(e.desvio)}</td>

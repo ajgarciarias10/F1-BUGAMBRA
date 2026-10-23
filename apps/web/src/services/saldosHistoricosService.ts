@@ -4,12 +4,13 @@
 // reconstruido sale de datos reales. La prueba es el saldo justo antes del primer GP
 // liquidado: tiene que cuadrar con `presupuesto_inicial` + el mercado de la plantilla.
 // Si algo no se puede demostrar (asiento sin fecha, GP sin asientos, desvío) no se escribe.
-import { collection, doc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { runAuditedAdminBatch } from "./adminMutationService";
 import { matchesTeamLedgerEntry } from "./readModels";
 import { cargoPorPrecio } from "../utils/presupuesto";
 import { sumEconomyMarketTransactions } from "../utils/economyIncomeBreakdown";
+import { ajustarPresupuestoAlTope, economyRules } from "../utils/economyRules";
 import type { Transaccion } from "../types";
 
 /** Desvío máximo, en millones, para considerar demostrado el saldo antes del primer GP. */
@@ -40,6 +41,8 @@ export interface EquipoFuente {
 
 export interface FuenteSaldos {
   splitId: string;
+  /** Documento del split: si se aplicó el tope de presupuesto al comenzar la temporada y con qué reglas. */
+  split?: { economia_tope_aplicado?: boolean; economia_config?: Parameters<typeof economyRules>[0] };
   circuitos: CircuitoFuente[];
   equipos: EquipoFuente[];
   asientos: Transaccion[];
@@ -64,7 +67,11 @@ export interface SaldosEquipo {
   mercado: number;
   /** Asientos de mercado posteriores al primer GP: su cargo no está en el saldo de antes. */
   mercadoPosterior: number;
-  /** presupuesto_inicial + mercado de la plantilla − mercado posterior al primer GP. */
+  /** presupuesto_inicial + mercado de la plantilla − mercado posterior al primer GP, antes del tope. */
+  aperturaSinTope: number | null;
+  /** Lo que el tope de presupuesto al comenzar la temporada recortó a esa apertura (0 si no se aplicó). */
+  reduccionTope: number;
+  /** Saldo esperado justo antes del primer GP: la apertura con el tope aplicado si el split lo tuvo. */
   apertura: number | null;
   saldoAntesPrimerGp: number | null;
   desvio: number | null;
@@ -181,6 +188,10 @@ export function reconstruirSaldosSplit(fuente: FuenteSaldos, referencias: Record
   });
 
   const recorrible = liquidadas.length > 0 && liquidadas.every(c => finDe.has(c.id));
+  const tope = (() => {
+    try { return economyRules(fuente.split?.economia_config).tope_presupuesto_subasta; }
+    catch (error: any) { problemas.push(`Las reglas económicas del split no son válidas: ${error.message}`); return null; }
+  })();
   const filas: SaldosEquipo[] = equipos.map(e => {
     const presupuesto = finito(e.presupuesto) ? e.presupuesto : null;
     const presupuestoInicial = finito(e.presupuesto_inicial) ? e.presupuesto_inicial : null;
@@ -191,10 +202,16 @@ export function reconstruirSaldosSplit(fuente: FuenteSaldos, referencias: Record
     const mercado = mercadoPlantilla(e.pilotos);
     const finPrimera = recorrible ? finDe.get(liquidadas[0].id)! : Infinity;
     const mercadoPosterior = r2(sumEconomyMarketTransactions(propios.filter(a => a.ms > finPrimera).map(a => a.tx)));
-    const apertura = presupuestoInicial === null ? null : r2(presupuestoInicial + mercado - mercadoPosterior);
+    const aperturaSinTope = presupuestoInicial === null ? null : r2(presupuestoInicial + mercado - mercadoPosterior);
+    // El asiento del tope tiene fecha de inicio de temporada, así que ya está dentro del saldo
+    // de antes del primer GP: aquí solo se aplica a lo esperado, no se resta otra vez.
+    const conTope = tope !== null && (fuente.split?.economia_tope_aplicado === true || propios.some(a => a.id === `tope_subasta__${splitId}__${e.id}`));
+    const recorte = conTope && aperturaSinTope !== null ? ajustarPresupuestoAlTope(aperturaSinTope, tope) : null;
+    const apertura = recorte ? recorte.presupuesto : aperturaSinTope;
     const referencia = finito(referencias[e.id]) ? referencias[e.id] : null;
     const fila: SaldosEquipo = {
-      id: e.id, nombre, presupuesto, presupuestoInicial, mercado, mercadoPosterior, apertura,
+      id: e.id, nombre, presupuesto, presupuestoInicial, mercado, mercadoPosterior, aperturaSinTope,
+      reduccionTope: recorte?.ajuste ?? 0, apertura,
       saldoAntesPrimerGp: null, desvio: null, referencia, desvioReferencia: null, tramos: [], pilotosFuera: [],
     };
     if (!recorrible || presupuesto === null) return fila;
@@ -245,7 +262,8 @@ export function reconstruirSaldosSplit(fuente: FuenteSaldos, referencias: Record
 
 /** Lee todo lo que necesita la reconstrucción. No escribe nada. */
 export async function cargarFuenteSaldos(splitId: string): Promise<FuenteSaldos> {
-  const [circuitosSnap, equiposSnap, asientosSnap, pilotosSnap] = await Promise.all([
+  const [splitSnap, circuitosSnap, equiposSnap, asientosSnap, pilotosSnap] = await Promise.all([
+    getDoc(doc(db, "splits", splitId)),
     getDocs(collection(db, `splits/${splitId}/circuitos`)),
     getDocs(collection(db, `splits/${splitId}/equipos`)),
     getDocs(query(collection(db, "transacciones"), where("splitId", "==", splitId))),
@@ -255,8 +273,10 @@ export async function cargarFuenteSaldos(splitId: string): Promise<FuenteSaldos>
     const pilotos = equipo.id === "agente_libre" ? [] : (await getDocs(collection(db, `splits/${splitId}/equipos/${equipo.id}/pilotos`))).docs.map(p => ({ pilotoId: p.id, ...p.data() }));
     return { id: equipo.id, ...(equipo.data() as Omit<EquipoFuente, "id" | "pilotos">), pilotos };
   }));
+  if (!splitSnap.exists()) throw new Error("El split no existe.");
   return {
     splitId,
+    split: splitSnap.data() as FuenteSaldos["split"],
     circuitos: circuitosSnap.docs.map(c => ({ id: c.id, ...(c.data() as Omit<CircuitoFuente, "id">) })),
     equipos,
     asientos: asientosSnap.docs.map(t => ({ id: t.id, ...t.data() }) as Transaccion),
