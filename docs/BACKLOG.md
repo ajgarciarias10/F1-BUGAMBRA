@@ -12,10 +12,11 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [ ] Wave 2: 16 home and championship · 17 teams and my driver · 18 races · 19 role homes, profile, login · 20 TV (needs the owner's Twitch credentials)
 - [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
 - [ ] 26 Switch every route and retire the old screens
-- [ ] 27 Save each team's balance after every processed race (owner, 2026-10-23; economy, top)
+- [x] 27 Save each team's balance after every processed race (in the preview)
 - [ ] Live pill bug (production too): `PublicHome.tsx` treats decapi's «tonicotitular is offline» as live because it only checks the exact text «offline» (found in ticket 15; the new shell is not affected)
 - [ ] `apps/api` typecheck fails on the base (`auth.ts:25` TS2769, `domain/race-winner-image.ts:49,52` TS18048), found in ticket 27
-- [ ] 28 Rebuild that balance for races processed before 27, only when it reconciles (top; owner runs it)
+- [x] 28 Tool to rebuild that balance for races processed before 27 (in the preview; the owner runs it from the admin with the workbook checkpoints)
+- [ ] TypeSafe reports OpenCode as available (no meter) but on this server it has 0 credentials and never picked up ticket 14; fix OpenCode's setup or tell TypeSafe (CleverTracker repo)
 - [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes or retire it
 - [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
 - [ ] Assign Antonio Ceferi as Alfa Romero's sporting director in Equipos y usuarios (owner, live data)
