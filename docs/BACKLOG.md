@@ -13,6 +13,7 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
 - [ ] 26 Switch every route and retire the old screens
 - [ ] 27 Save each team's balance after every processed race (owner, 2026-10-23; economy, top)
+- [ ] Live pill bug (production too): `PublicHome.tsx` treats decapi's «tonicotitular is offline» as live because it only checks the exact text «offline» (found in ticket 15; the new shell is not affected)
 - [ ] 28 Rebuild that balance for races processed before 27, only when it reconciles (top; owner runs it)
 - [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes or retire it
 - [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
