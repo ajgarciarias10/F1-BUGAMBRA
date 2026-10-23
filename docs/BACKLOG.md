@@ -17,7 +17,7 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [ ] Live pill bug (production too): `PublicHome.tsx` treats decapi's «tonicotitular is offline» as live because it only checks the exact text «offline» (found in ticket 15; the new shell is not affected)
 - [ ] `apps/api` typecheck fails on the base (`auth.ts:25` TS2769, `domain/race-winner-image.ts:49,52` TS18048), found in ticket 27
 - [x] 28 Tool to rebuild that balance for races processed before 27 (in the preview; the owner runs it from the admin with the workbook checkpoints)
-- [ ] TypeSafe reads Antigravity from the «Gemini Models» bucket of `agy /usage` only (reported 7.4 % weekly) and ignores «Claude and GPT models» (44 % of 5 h used) and «Gemini 4 Argon» (0 % left until 2026-10-27); it also reported Codex weekly at 100 % until 2026-10-29 while the owner sees it back at 18:31 UTC. Fix in CleverTracker
+- [ ] TypeSafe reads Antigravity from the «Gemini Models» bucket of `agy /usage` only (reported 7.4 % weekly) and ignores «Claude and GPT models» (44 % of 5 h used) and «Gemini 4 Argon» (0 % left until 2026-10-27); it also reported Codex weekly at 100 % until 2026-10-29 while Orca's usage panel showed Codex weekly at 16 % (only the 5 h window full, back at 18:31 UTC). Fix in CleverTracker
 - [ ] TypeSafe reports OpenCode as available (no meter) but on this server it has 0 credentials and never picked up ticket 14; fix OpenCode's setup or tell TypeSafe (CleverTracker repo)
 - [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes or retire it
 - [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
