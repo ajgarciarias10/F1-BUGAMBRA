@@ -3,7 +3,7 @@ import {
   serverTimestamp, increment, writeBatch, runTransaction, deleteField, query, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { TipoTransaccion } from "../types";
+import type { Circuito, TipoTransaccion } from "../types";
 import { DEFAULT_ECONOMY_RULES, economyRules, ordenarPorClasificacion, pointsForRaceResult } from "../utils/economyRules";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
 import { preparePurchaseCorrections, writePurchaseCorrections } from "./purchaseCorrection";
@@ -728,6 +728,14 @@ export async function procesarEconomiaCarrera(
         }
       }
 
+      const saldos: NonNullable<Circuito["economia_saldos"]> = {};
+      for (const team of teamDocs) {
+        if (team.id === "agente_libre") continue;
+        const antes = team.data()!.presupuesto;
+        const ingresos = earnings[team.id] ?? 0;
+        saldos[team.id] = { antes, ingresos, despues: antes + ingresos };
+      }
+
       for (const [teamId, total] of Object.entries(earnings)) {
         if (teamById[teamId]) transaction.update(teamById[teamId].ref, { presupuesto: increment(total) });
       }
@@ -736,7 +744,7 @@ export async function procesarEconomiaCarrera(
         const logRef = doc(db, "transacciones", `${splitId}__${circuitoId}__${index}`);
         transaction.set(logRef, transactionPayload({ ...entry, splitId, circuitoId }));
       });
-      transaction.update(circuitoRef, { economia_procesada: true, economia_reglas_aplicadas: rules, economia_version: increment(1) });
+      transaction.update(circuitoRef, { economia_procesada: true, economia_saldos: saldos, economia_reglas_aplicadas: rules, economia_version: increment(1) });
 
       return { applied: true as const, earnings, txQueue, decayLog, teamById };
     });
@@ -983,7 +991,7 @@ export async function revertirEconomiaCarrera(
         });
       }
 
-    batch.update(circuitoRef, { economia_procesada: false });
+    batch.update(circuitoRef, { economia_procesada: false, economia_saldos: deleteField() });
 
     return {
       ok: true,
@@ -1192,6 +1200,8 @@ export async function procesarEconomiaRetroactivaSplit(
         continue;
       }
       onProgress?.(`  ↳ Procesando ${c.nombre || c.id}…`);
+      // Cada liquidación guarda economia_saldos en su propia transacción, leyendo el
+      // saldo vigente tras la carrera anterior, también durante el retroactivo.
       const result = await procesarEconomiaCarrera(splitId, c.id, c.nombre || c.id, undefined, processedSoFar);
       processedSoFar.push(c.id);
       if (result.processed > 0) {
