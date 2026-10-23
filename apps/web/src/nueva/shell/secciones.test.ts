@@ -79,3 +79,12 @@ test("enlace activo compara ruta y pestaña", () => {
   assert.ok(!enlaceActivo("/nueva/portada?tab=equipos", "/nueva/portada", "?tab=tv"));
   assert.ok(!enlaceActivo("/nueva/carreras", "/nueva/admin/carreras", ""));
 });
+
+test("directo: solo una duración cuenta como en directo", async () => {
+  const { textoIndicaDirecto } = await import("./useDirecto.ts");
+  assert.equal(textoIndicaDirecto("tonicotitular is offline"), false);
+  assert.equal(textoIndicaDirecto("Error: user not found"), false);
+  assert.equal(textoIndicaDirecto(""), false);
+  assert.equal(textoIndicaDirecto("1 hour, 5 minutes, 3 seconds"), true);
+  assert.equal(textoIndicaDirecto("12 minutes"), true);
+});
