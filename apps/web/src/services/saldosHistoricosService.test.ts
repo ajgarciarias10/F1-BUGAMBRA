@@ -86,7 +86,7 @@ beforeEach(() => {
   // Saldos vivos: a = 100 − 60 + 8 − 10 + 6 + 1 = 45; b = 50 + 20 + 4 + 5 + 2.5 = 81.5
 });
 
-const vista = async (referencias?: Record<string, number>) => {
+const vista = async (referencias?: Record<string, { saldo: number; referenciaLibro: string }>) => {
   const fuente = await service.cargarFuenteSaldos("s3");
   return { fuente, vista: service.reconstruirSaldosSplit(fuente, referencias) };
 };
@@ -219,11 +219,84 @@ test("un asiento de un GP sin liquidar bloquea la escritura", async () => {
   assert.match(v.problemas.join(" "), /es de un GP sin liquidar/);
 });
 
-test("el checkpoint de referencia se compara pero no decide la escritura", async () => {
-  const { vista: v } = await vista({ a: 35, b: 70 });
-  assert.equal(equipo(v, "a").desvioReferencia, 5);
-  assert.equal(equipo(v, "b").desvioReferencia, 0);
+test("un checkpoint oficial que cuadra permite guardar un ajuste manual y audita su cifra y referencia", async () => {
+  // Ajuste de comisarios sin asiento de tope: 70M teóricos, 50M oficiales antes del GP1.
+  state.docs.get("splits/s3/equipos/b").presupuesto = 61.5;
+  const { fuente, vista: v } = await vista({ b: { saldo: 50, referenciaLibro: "2026!R53" } });
+  const b = equipo(v, "b");
+  assert.equal(b.aperturaPlantilla, 70);
+  assert.equal(b.apertura, 50);
+  assert.equal(b.desvio, -20);
+  assert.equal(b.desvioReferencia, 0);
   assert.equal(v.escribible, true);
+  const balances = fuente.equipos.map((e: any) => [e.id, e.presupuesto]);
+  await service.guardarSaldosReconstruidos(fuente, v);
+  assert.equal(state.docs.get("splits/s3/circuitos/gp1").economia_saldos.b.antes, 50);
+  const audits = [...state.docs.entries()].filter(([path]) => path.startsWith("admin_audit/"));
+  assert.equal(audits.length, 1);
+  assert.match(audits[0][1].summary, /b: 50M \(2026!R53\)/);
+  for (const [id, balance] of balances) assert.equal(state.docs.get(`splits/s3/equipos/${id}`).presupuesto, balance);
+});
+
+test("un checkpoint que discrepa bloquea aunque inicial + mercado cuadre", async () => {
+  const { fuente, vista: v } = await vista({ b: { saldo: 50, referenciaLibro: "2026!R53" } });
+  assert.equal(equipo(v, "b").desvio, 0);
+  assert.equal(equipo(v, "b").desvioReferencia, 20);
+  assert.equal(v.escribible, false);
+  const antes = sinCambios();
+  await assert.rejects(service.guardarSaldosReconstruidos(fuente, v), /no está demostrada/);
+  assert.deepEqual([...state.docs], antes);
+});
+
+test("un checkpoint sin hoja y celda bloquea incluso cuando ambos saldos cuadran", async () => {
+  for (const referenciaLibro of ["", "   ", "R53", "2026", "2026!"]) {
+    const { fuente, vista: v } = await vista({ b: { saldo: 70, referenciaLibro } });
+    assert.equal(v.escribible, false, referenciaLibro);
+    assert.match(v.problemas.join(" "), /hoja y celda/);
+    const antes = sinCambios();
+    await assert.rejects(service.guardarSaldosReconstruidos(fuente, v), /no está demostrada/);
+    assert.deepEqual([...state.docs], antes);
+  }
+});
+
+test("un checkpoint no numérico bloquea sin volver a inicial + mercado", async () => {
+  for (const saldo of [NaN, Infinity]) {
+    const { fuente, vista: v } = await vista({ b: { saldo, referenciaLibro: "2026!R53" } });
+    assert.equal(v.escribible, false);
+    assert.match(v.problemas.join(" "), /saldo oficial válido/);
+    await assert.rejects(service.guardarSaldosReconstruidos(fuente, v), /no está demostrada/);
+  }
+});
+
+test("guardar vuelve a validar el checkpoint aunque la vista conserve escribible", async () => {
+  for (const checkpoint of [{ saldo: 50, referenciaLibro: "2026!R53" }, { saldo: 70, referenciaLibro: "" }]) {
+    const { fuente, vista: v } = await vista({ b: { saldo: 70, referenciaLibro: "2026!R53" } });
+    assert.equal(v.escribible, true);
+    v.checkpoints.b = checkpoint;
+    const antes = sinCambios();
+    await assert.rejects(service.guardarSaldosReconstruidos(fuente, v), /no está demostrada/);
+    assert.deepEqual([...state.docs], antes);
+  }
+});
+
+test("el checkpoint admite hasta 0,1M de desvío en ambos sentidos y bloquea fuera del margen", async () => {
+  for (const saldo of [69.9, 70.1, 69.89, 70.11]) {
+    const { vista: v } = await vista({ b: { saldo, referenciaLibro: "2026!R53" } });
+    assert.equal(v.escribible, saldo === 69.9 || saldo === 70.1, String(saldo));
+  }
+});
+
+test("el checkpoint no permite saltarse problemas del libro ni cambios desde la vista previa", async () => {
+  const referencias = { b: { saldo: 70, referenciaLibro: "2026!R53" } };
+  const { fuente, vista: v } = await vista(referencias);
+  state.docs.get("splits/s3/equipos/b").presupuesto = 82;
+  const antes = sinCambios();
+  await assert.rejects(service.guardarSaldosReconstruidos(fuente, v), /ha cambiado/);
+  assert.deepEqual([...state.docs], antes);
+  asiento("a", 1, true, null);
+  const otra = await vista(referencias);
+  assert.equal(otra.vista.escribible, false);
+  assert.match(otra.vista.problemas.join(" "), /no tiene fecha/);
 });
 
 test("conserva un saldo negativo existente", async () => {
@@ -247,32 +320,37 @@ test("asientos antiguos sin equipoId se atribuyen por nombre; uno sin escudería
   assert.match(v.problemas.join(" "), /huerfano no corresponde/);
 });
 
-test("con el tope de temporada aplicado, lo esperado antes del primer GP es la apertura recortada al tope", async () => {
-  // b: 80 + 20 de mercado = 100, recortado a 50 al comenzar la temporada (asiento con fecha anterior al GP1).
+test("la marca o un asiento de tope no recortan la apertura teórica: sin checkpoint se bloquea", async () => {
   state.docs.set("splits/s3", { nombre: "Split 3", economia_tope_aplicado: true });
-  state.docs.get("splits/s3/equipos/b").presupuesto_inicial = 80;
-  state.docs.set("transacciones/tope_subasta__s3__b", { splitId: "s3", equipoId: "b", equipo: "B", tipo: "ajuste", cantidad: 50, esIngreso: false, fecha: { seconds: 0.1 } });
   state.docs.get("splits/s3/equipos/b").presupuesto = 61.5;
-  const { vista: v } = await vista();
-  const b = equipo(v, "b"), a = equipo(v, "a");
-  assert.equal(b.aperturaSinTope, 100); assert.equal(b.reduccionTope, 50); assert.equal(b.apertura, 50);
-  assert.equal(b.saldoAntesPrimerGp, 50); assert.equal(b.desvio, 0);
-  assert.equal(a.reduccionTope, 0); assert.equal(a.apertura, 40);
-  assert.equal(v.escribible, true, v.problemas.join(" "));
+  for (const conAsiento of [false, true]) {
+    if (conAsiento) state.docs.set("transacciones/tope_subasta__s3__b", {
+      splitId: "s3", equipoId: "b", equipo: "B", tipo: "ajuste", cantidad: 20, esIngreso: false, fecha: { seconds: 0.1 },
+    });
+    const { fuente, vista: v } = await vista();
+    assert.equal(equipo(v, "b").apertura, 70);
+    assert.equal(equipo(v, "b").saldoAntesPrimerGp, 50);
+    assert.equal(equipo(v, "b").desvio, -20);
+    assert.equal(v.escribible, false);
+    const antes = sinCambios();
+    await assert.rejects(service.guardarSaldosReconstruidos(fuente, v), /no está demostrada/);
+    assert.deepEqual([...state.docs], antes);
+  }
+});
 
-  // Sin la marca del split, el asiento del tope basta; y el tope sale de las reglas del split.
-  state.docs.set("splits/s3", { nombre: "Split 3", economia_config: { tope_presupuesto_subasta: 60 } });
-  state.docs.get("transacciones/tope_subasta__s3__b").cantidad = 40;
-  state.docs.get("splits/s3/equipos/b").presupuesto = 71.5;
-  const otra = (await vista()).vista;
-  assert.equal(equipo(otra, "b").reduccionTope, 40);
-  assert.equal(equipo(otra, "b").desvio, 0);
-  assert.equal(otra.escribible, true);
-
-  // Sin tope aplicado, el mismo saldo se muestra como desvío.
-  state.docs.delete("transacciones/tope_subasta__s3__b");
-  const sinTope = (await vista()).vista;
-  assert.equal(equipo(sinTope, "b").reduccionTope, 0);
-  assert.equal(equipo(sinTope, "b").desvio, -40);
-  assert.equal(sinTope.escribible, false);
+test("un asiento de tope fechado se cuenta una sola vez según su lugar en el libro", async () => {
+  state.docs.get("splits/s3/equipos/b").presupuesto = 61.5;
+  for (const seconds of [0.1, 1.7, 3.5]) {
+    state.docs.set("transacciones/tope_subasta__s3__b", {
+      splitId: "s3", equipoId: "b", equipo: "B", tipo: "ajuste", cantidad: 20, esIngreso: false, fecha: { seconds },
+    });
+    const saldo = seconds < 1 ? 50 : 70;
+    const { vista: v } = await vista({ b: { saldo, referenciaLibro: "2026!R53" } });
+    const b = equipo(v, "b");
+    assert.equal(b.saldoAntesPrimerGp, saldo);
+    assert.equal(b.desvioReferencia, 0);
+    assert.equal(b.tramos[0].despues, saldo + 4);
+    assert.equal(b.tramos[1].despues, seconds > 2 ? 81.5 : 61.5);
+    assert.equal(v.escribible, true, v.problemas.join(" "));
+  }
 });

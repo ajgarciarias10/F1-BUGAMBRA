@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  cargarFuenteSaldos, guardarSaldosReconstruidos, reconstruirSaldosSplit, TOLERANCIA_SALDOS, type FuenteSaldos,
+  cargarFuenteSaldos, guardarSaldosReconstruidos, reconstruirSaldosSplit, TOLERANCIA_SALDOS, type FuenteSaldos, type CheckpointSaldo,
 } from "../services/saldosHistoricosService";
 import { useSingleFlight } from "../hooks/useSingleFlight";
 
@@ -13,17 +13,22 @@ export function SaldosHistoricosPanel({ splits }: { splits: any[] }) {
   const opciones = splits.filter(s => s.id !== "global" && s.tipo !== "individual");
   const [splitId, setSplitId] = useState(opciones[0]?.id ?? "");
   const [fuente, setFuente] = useState<FuenteSaldos | null>(null);
-  const [referencias, setReferencias] = useState<Record<string, string>>({});
+  const [referencias, setReferencias] = useState<Record<string, { saldo: string; referenciaLibro: string }>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const { run: runOnce, pending: pendingOnce } = useSingleFlight();
 
   const vista = useMemo(() => {
     if (!fuente) return null;
-    const numeros = Object.fromEntries(Object.entries(referencias)
-      .map(([id, raw]) => [id, raw.trim() ? Number(raw.replace(",", ".")) : NaN])
-      .filter(([, n]) => Number.isFinite(n)));
-    return reconstruirSaldosSplit(fuente, numeros as Record<string, number>);
+    const checkpoints: Record<string, CheckpointSaldo> = {};
+    for (const [id, raw] of Object.entries(referencias)) {
+      if (!raw.saldo.trim() && !raw.referenciaLibro.trim()) continue;
+      checkpoints[id] = {
+        saldo: raw.saldo.trim() ? Number(raw.saldo.replace(",", ".")) : NaN,
+        referenciaLibro: raw.referenciaLibro,
+      };
+    }
+    return reconstruirSaldosSplit(fuente, checkpoints);
   }, [fuente, referencias]);
 
   async function cargar(id: string) {
@@ -39,8 +44,8 @@ export function SaldosHistoricosPanel({ splits }: { splits: any[] }) {
   return <section className="rounded-2xl border border-line bg-surface-3 p-5 space-y-4">
     <div>
       <h2 className="text-lg font-bold">Saldos tras cada GP ya liquidado</h2>
-      <p className="mt-1 text-sm text-ink-2">Reconstruye el saldo de cada escudería tras los GP liquidados antes de que se guardara. Parte del saldo actual y resta, hacia atrás, solo los movimientos guardados en el libro. Se comprueba con el saldo justo antes del primer GP: debe coincidir con el presupuesto inicial más el mercado de la plantilla, recortado al tope de temporada si el split lo aplicó (margen {TOLERANCIA_SALDOS}M). Si no coincide, se muestra el desvío y no se guarda nada.</p>
-      <p className="mt-1 text-sm text-ink-2">Que el libro cuadre no significa que coincida con el Excel oficial. Puedes teclear el saldo oficial antes del primer GP de cada escudería para ver su desvío; ese dato es solo informativo.</p>
+      <p className="mt-1 text-sm text-ink-2">Reconstruye el saldo de cada escudería tras los GP liquidados antes de que se guardara. Parte del saldo actual y resta, hacia atrás, solo los movimientos guardados en el libro. Se comprueba con el saldo justo antes del primer GP: debe coincidir con el checkpoint oficial, si se indica, o con el presupuesto inicial más el mercado de la plantilla, descontando el mercado posterior (margen {TOLERANCIA_SALDOS}M). Si no coincide, se muestra el desvío y no se guarda nada.</p>
+      <p className="mt-1 text-sm text-ink-2">Si hubo un ajuste manual de los comisarios, indica el saldo oficial antes del primer GP y su hoja y celda del libro (por ejemplo, 2026!R53). Ese checkpoint pasa a ser el saldo esperado y su referencia queda en la auditoría. Sin checkpoint, un desvío frente a inicial más mercado bloquea el guardado. Se muestran siempre ambos desvíos; no se aplica un tope automático.</p>
     </div>
     <label className="block text-sm font-bold">Split
       <select value={splitId} disabled={busy} onChange={e => { setSplitId(e.target.value); setFuente(null); setReferencias({}); setMessage(""); }}
@@ -69,8 +74,8 @@ export function SaldosHistoricosPanel({ splits }: { splits: any[] }) {
           <thead><tr className="border-b border-line text-left text-ink-muted">
             <th className="p-2">Escudería</th><th className="p-2 text-right">Saldo actual</th><th className="p-2 text-right">Inicial</th>
             <th className="p-2 text-right">Mercado plantilla</th><th className="p-2 text-right">Mercado posterior al primer GP</th>
-            <th className="p-2 text-right">Inicial + mercado − posterior</th><th className="p-2 text-right">Recorte del tope de temporada</th><th className="p-2 text-right">Esperado</th><th className="p-2 text-right">Antes del primer GP</th><th className="p-2 text-right">Desvío</th>
-            <th className="p-2 text-right">Saldo oficial</th><th className="p-2 text-right">Desvío oficial</th>
+            <th className="p-2 text-right">Inicial + mercado − posterior</th><th className="p-2 text-right">Esperado</th><th className="p-2 text-right">Antes del primer GP</th><th className="p-2 text-right">Desvío inicial + mercado</th>
+            <th className="p-2 text-right">Saldo oficial</th><th className="p-2">Referencia del libro</th><th className="p-2 text-right">Desvío oficial</th>
           </tr></thead>
           <tbody className="divide-y divide-line">
             {vista.equipos.map(e => {
@@ -81,17 +86,22 @@ export function SaldosHistoricosPanel({ splits }: { splits: any[] }) {
                 <td className="p-2 text-right font-mono">{fmt(e.presupuestoInicial)}</td>
                 <td className="p-2 text-right font-mono">{fmtDesvio(e.mercado)}</td>
                 <td className="p-2 text-right font-mono" title="Cargos de mercado del libro hechos después del primer GP: no están en el saldo de antes y se descuentan del mercado de la plantilla">{e.mercadoPosterior ? fmtDesvio(e.mercadoPosterior) : "—"}</td>
-                <td className="p-2 text-right font-mono">{fmt(e.aperturaSinTope)}</td>
-                <td className="p-2 text-right font-mono" title="Al comenzar la temporada el saldo se recorta al tope de presupuesto del split">{e.reduccionTope ? fmtDesvio(-e.reduccionTope) : "—"}</td>
+                <td className="p-2 text-right font-mono">{fmt(e.aperturaPlantilla)}</td>
                 <td className="p-2 text-right font-mono">{fmt(e.apertura)}</td>
                 <td className="p-2 text-right font-mono">{fmt(e.saldoAntesPrimerGp)}</td>
                 <td className={`p-2 text-right font-mono font-bold ${desviado ? "text-danger" : "text-ok"}`}>{fmtDesvio(e.desvio)}</td>
                 <td className="p-2 text-right">
-                  <input inputMode="decimal" aria-label={`Saldo oficial de ${e.nombre} antes del primer GP`} value={referencias[e.id] ?? ""}
-                    onChange={ev => setReferencias(prev => ({ ...prev, [e.id]: ev.target.value }))}
+                  <input inputMode="decimal" aria-label={`Saldo oficial de ${e.nombre} antes del primer GP`} disabled={busy || pendingOnce} value={referencias[e.id]?.saldo ?? ""}
+                    onChange={ev => setReferencias(prev => ({ ...prev, [e.id]: { saldo: ev.target.value, referenciaLibro: prev[e.id]?.referenciaLibro ?? "" } }))}
                     className="w-20 border border-line bg-surface px-2 py-1 text-right font-mono" />
                 </td>
-                <td className="p-2 text-right font-mono">{fmtDesvio(e.desvioReferencia)}</td>
+                <td className="p-2">
+                  <input aria-label={`Hoja y celda del saldo oficial de ${e.nombre}`} placeholder="2026!R53" disabled={busy || pendingOnce}
+                    value={referencias[e.id]?.referenciaLibro ?? ""}
+                    onChange={ev => setReferencias(prev => ({ ...prev, [e.id]: { saldo: prev[e.id]?.saldo ?? "", referenciaLibro: ev.target.value } }))}
+                    className="w-32 border border-line bg-surface px-2 py-1 font-mono" />
+                </td>
+                <td className={`p-2 text-right font-mono ${e.desvioReferencia === null ? "text-ink-muted" : Math.abs(e.desvioReferencia) > TOLERANCIA_SALDOS + 1e-9 ? "text-danger" : "text-ok"}`}>{fmtDesvio(e.desvioReferencia)}</td>
               </tr>;
             })}
           </tbody>
@@ -122,7 +132,8 @@ export function SaldosHistoricosPanel({ splits }: { splits: any[] }) {
         className="min-h-12 rounded-xl bg-warn-soft border border-warn/40 px-4 font-bold text-warn disabled:opacity-40"
         onClick={() => runOnce(async () => {
           if (!fuente || !vista.escribible) return;
-          if (!confirm(`¿Guardar el saldo reconstruido de ${vista.equipos.length} escuderías en ${pendientes.map(c => c.nombre).join(", ")}?\n\nNo se mueve ningún saldo ni movimiento: solo se guarda la foto de cada GP, marcada como reconstruida, con un registro de auditoría. Si algo cambió desde la vista previa, no se guardará nada.`)) return;
+          const controles = vista.equipos.map(e => `${e.nombre}: ${fmt(e.apertura)} · ${e.referencia !== null ? e.referenciaLibro : "inicial + mercado − posterior"}`).join("\n");
+          if (!confirm(`¿Guardar el saldo reconstruido de ${vista.equipos.length} escuderías en ${pendientes.map(c => c.nombre).join(", ")}?\n\nSaldos esperados antes del primer GP:\n${controles}\n\nNo se mueve ningún saldo ni movimiento: solo se guarda la foto de cada GP, marcada como reconstruida, con un registro de auditoría. Si algo cambió desde la vista previa, no se guardará nada.`)) return;
           setBusy(true);
           try {
             const { circuitos } = await guardarSaldosReconstruidos(fuente, vista);
