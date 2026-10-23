@@ -10,13 +10,14 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [x] 03 Foundation tokens and type (in the preview)
 - [x] Wave 1: 13 data layer · 14 visual pieces · 15 shell and routes (in the preview)
 - [ ] Wave 2: 16 home and championship · 17 teams and my driver · 18 races · 19 role homes, profile, login · 20 TV (needs the owner's Twitch credentials)
-  - 16-19 launched 2026-10-23 with Antigravity (owner's call: TypeSafe chose OpenCode, which has no credentials; Claude and Codex out of quota)
+  - 16-19 launched 2026-10-23 with Antigravity and stopped minutes later with no changes (Antigravity quota is the scarcest); worktrees `~/projects/F1-nueva-{campeonato,equipos,carreras,inicio}` ready; relaunch when Claude (17:50 UTC) or Codex (18:31 UTC) is back, asking TypeSafe again
 - [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
 - [ ] 26 Switch every route and retire the old screens
 - [x] 27 Save each team's balance after every processed race (in the preview)
 - [ ] Live pill bug (production too): `PublicHome.tsx` treats decapi's «tonicotitular is offline» as live because it only checks the exact text «offline» (found in ticket 15; the new shell is not affected)
 - [ ] `apps/api` typecheck fails on the base (`auth.ts:25` TS2769, `domain/race-winner-image.ts:49,52` TS18048), found in ticket 27
 - [x] 28 Tool to rebuild that balance for races processed before 27 (in the preview; the owner runs it from the admin with the workbook checkpoints)
+- [ ] TypeSafe reads Antigravity from the «Gemini Models» bucket of `agy /usage` only (reported 7.4 % weekly) and ignores «Claude and GPT models» (44 % of 5 h used) and «Gemini 4 Argon» (0 % left until 2026-10-27); it also reported Codex weekly at 100 % until 2026-10-29 while the owner sees it back at 18:31 UTC. Fix in CleverTracker
 - [ ] TypeSafe reports OpenCode as available (no meter) but on this server it has 0 credentials and never picked up ticket 14; fix OpenCode's setup or tell TypeSafe (CleverTracker repo)
 - [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes or retire it
 - [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
