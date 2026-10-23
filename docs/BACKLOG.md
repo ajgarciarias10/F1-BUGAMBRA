@@ -10,6 +10,7 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [x] 03 Foundation tokens and type (in the preview)
 - [x] Wave 1: 13 data layer · 14 visual pieces · 15 shell and routes (in the preview)
 - [ ] Wave 2: 16 home and championship · 17 teams and my driver · 18 races · 19 role homes, profile, login · 20 TV (needs the owner's Twitch credentials)
+  - 16-19 launched 2026-10-23 with Antigravity (owner's call: TypeSafe chose OpenCode, which has no credentials; Claude and Codex out of quota)
 - [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
 - [ ] 26 Switch every route and retire the old screens
 - [x] 27 Save each team's balance after every processed race (in the preview)
@@ -21,7 +22,6 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
 - [ ] Assign Antonio Ceferi as Alfa Romero's sporting director in Equipos y usuarios (owner, live data)
 - [ ] Rename Split 3 GP 16 from España to Italia (Imola) with the circuit-name field (owner, live data)
-- [ ] Find out what the «Mundial» split in Firestore is before ticket 16 shows it
 
 ## Economy and data (rules in `AGENTS.md`)
 

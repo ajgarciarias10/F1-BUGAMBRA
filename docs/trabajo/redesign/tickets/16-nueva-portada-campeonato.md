@@ -5,7 +5,7 @@
 - **Owned files:** `apps/web/src/nueva/pantallas/Portada.tsx`, `apps/web/src/nueva/pantallas/Campeonato.tsx`, `apps/web/src/nueva/pantallas/Portada.test.ts`, `apps/web/src/nueva/pantallas/Campeonato.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Claude subagent, default model
-- **Done when:** public home (hero, next GP with the real date or «Fecha por confirmar», tabs) and Championship (season rail; pilots, teams and duos for Origins; races; honours; aligned evolution; driver cards and head-to-head) match the prototype with real data.
+- **Done when:** public home (hero, next GP with the real date or «Fecha por confirmar», tabs) and Championship (season rail; pilots, teams and duos for Origins; races; honours; aligned evolution; driver cards and head-to-head) match the prototype with real data. Owner, 2026-10-23: the prototype's «Mundial» is not a Firestore split (only `origins`, `split_1`, `split_2`, `split_3` exist); it is the current app's «Mundial Global» aggregate. Show it as a «Histórico» entry in the season rail (Origins + Temporada 1), composed in your screen from `nueva/datos` exports, with no new document; if that needs a change in `nueva/datos`, ask the coordinator.
 
 ## Context
 
