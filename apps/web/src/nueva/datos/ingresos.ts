@@ -5,7 +5,6 @@
 // `economia_config` del split; aquí no hay constantes copiadas. Cada línea conserva su fuente.
 import type { Circuito, LedgerSource, RaceResult, SplitView, TipoTransaccion } from "../../types";
 import { economyRules, pointsForRaceResult } from "../../utils/economyRules";
-import type { Temporada } from "./tipos";
 
 export type FuenteIngreso = Extract<LedgerSource, "points" | "pole" | "fastestLap" | "rivalry" | "participation" | "cleanTeam">;
 export const FUENTES_INGRESO: readonly FuenteIngreso[] = ["points", "pole", "fastestLap", "rivalry", "participation", "cleanTeam"];
@@ -37,6 +36,9 @@ export interface DesgloseCircuito {
   /** Motivos por los que `procesarEconomiaCarrera` no lo procesaría ahora mismo. */
   problemas: string[];
   procesada: boolean;
+  /** «aplicadas»: las reglas que guardó el circuito al procesarse (`economia_reglas_aplicadas`);
+   *  «split»: la `economia_config` actual del split. */
+  reglas: "aplicadas" | "split";
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -54,11 +56,16 @@ export function desgloseCircuito(split: SplitView, circuito: Circuito): Desglose
     if (resultados.filter(r => r.fastestLap === true).length !== 1) problemas.push("La carrera debe tener exactamente una vuelta rápida.");
     if (resultados.some(r => typeof r.isClean !== "boolean")) problemas.push("Indica si todos los pilotos están limpios o sancionados.");
   }
-  const vacio: DesgloseCircuito = { circuitoId: circuito.id, lineas: [], porEquipo: {}, problemas, procesada: circuito.economia_procesada === true };
+  // Un circuito ya procesado guarda las reglas con las que se abonó: así lo enseñado es lo
+  // que se cobró aunque después cambie la configuración del split.
+  const aplicadas = circuito.economia_procesada === true
+    ? (circuito as Circuito & { economia_reglas_aplicadas?: unknown }).economia_reglas_aplicadas : undefined;
+  const reglas = aplicadas && typeof aplicadas === "object" ? "aplicadas" as const : "split" as const;
+  const vacio: DesgloseCircuito = { circuitoId: circuito.id, lineas: [], porEquipo: {}, problemas, procesada: circuito.economia_procesada === true, reglas };
 
   let rules: ReturnType<typeof economyRules>;
   try {
-    rules = economyRules(split.economia_config as Parameters<typeof economyRules>[0]);
+    rules = economyRules((reglas === "aplicadas" ? aplicadas : split.economia_config) as Parameters<typeof economyRules>[0]);
   } catch (error) {
     // Con reglas inválidas el servicio tampoco procesa: no hay importes que enseñar.
     return { ...vacio, problemas: [...problemas, (error as Error).message] };
@@ -157,48 +164,4 @@ export function ingresosSplit(split: SplitView, opciones: { soloProcesadas?: boo
     .filter(c => c.completado && (!opciones.soloProcesadas || c.economia_procesada))
     .flatMap(c => desgloseCircuito(split, c).lineas);
   return agrupar(lineas);
-}
-
-export interface FilaSaldo {
-  clave: "salida" | "resto" | "gp";
-  circuitoId?: string;
-  numero?: number;
-  nombre?: string;
-  /** Saldo tras esa fila; null si el GP aún no tiene la economía procesada. */
-  saldo: number | null;
-  /** Lo que movió esa fila; en un GP sin procesar es lo previsto. */
-  delta: number | null;
-  pendiente: boolean;
-  procesada: boolean;
-}
-
-/**
- * Saldo de una escudería en un split, GP a GP: la salida (cierre del split anterior), el resto
- * (mercado y ajustes: lo que falta para llegar al saldo actual) y lo que sumó cada GP procesado.
- * Un GP disputado sin procesar enseña lo previsto pero no mueve el saldo, porque aún no se abonó.
- */
-export function evolucionSaldo(split: SplitView, t: Temporada, equipoId: string): FilaSaldo[] {
-  const equipo = t.equipos.find(e => e.equipoId === equipoId);
-  if (!equipo) return [];
-  const desgloses = new Map(split.circuitos.filter(c => c.completado).map(c => [c.id, desgloseCircuito(split, c)]));
-  const ingresoDe = (circuitoId: string) => desgloses.get(circuitoId)?.porEquipo[equipoId]?.total ?? 0;
-  const procesados = t.gps.filter(g => g.disputada && g.economiaProcesada);
-  const sumaProcesados = r2(procesados.reduce((s, g) => s + ingresoDe(g.circuitoId), 0));
-  const resto = equipo.saldoActual !== null && equipo.saldoApertura !== null
-    ? r2(equipo.saldoActual - equipo.saldoApertura - sumaProcesados) : null;
-
-  const filas: FilaSaldo[] = [
-    { clave: "salida", saldo: equipo.saldoApertura, delta: null, pendiente: false, procesada: true },
-    { clave: "resto", saldo: resto === null ? null : r2(equipo.saldoApertura! + resto), delta: resto, pendiente: false, procesada: true },
-  ];
-  let saldo = filas[1].saldo;
-  for (const g of t.gps) {
-    const base = { clave: "gp" as const, circuitoId: g.circuitoId, numero: g.numero, nombre: g.nombre };
-    if (!g.disputada) { filas.push({ ...base, saldo: null, delta: null, pendiente: true, procesada: false }); continue; }
-    const delta = ingresoDe(g.circuitoId);
-    if (!g.economiaProcesada) { filas.push({ ...base, saldo: null, delta, pendiente: false, procesada: false }); continue; }
-    saldo = saldo === null ? null : r2(saldo + delta);
-    filas.push({ ...base, saldo, delta, pendiente: false, procesada: true });
-  }
-  return filas;
 }

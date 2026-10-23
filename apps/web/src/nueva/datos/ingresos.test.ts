@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SplitView } from "../../types";
 import { DEFAULT_ECONOMY_RULES } from "../../utils/economyRules";
-import { desgloseCircuito, evolucionSaldo, ingresosSplit } from "./ingresos";
-import { construirLiga } from "./temporadas";
+import { desgloseCircuito, ingresosSplit } from "./ingresos";
 import { EQUIPO_ID, pid, snapshotASplits } from "./fixtures/snapshot";
 
 const ALFA = EQUIPO_ID.alfa, ZENITH = EQUIPO_ID.zenith, ROSES = EQUIPO_ID.roses;
@@ -78,28 +77,6 @@ test("avisa de lo que impediría procesar la carrera, como el servicio", () => {
   assert.equal(invalida.problemas.length, 1);
 });
 
-test("saldo GP a GP del split: salida, resto hasta el saldo actual y lo que sumó cada GP procesado", () => {
-  const splits = snapshotASplits();
-  const t = construirLiga(splits).splits.find(x => x.id === "split_3")!;
-  const filas = evolucionSaldo(splits.find(x => x.id === "split_3")!, t, ALFA);
-  assert.deepEqual(filas.map(f => [f.clave, f.numero ?? null, f.saldo, f.delta]), [
-    ["salida", null, 165.2, null],
-    // El resto es el mercado: los 115,2M de fichajes del Split 3 en el libro oficial (R53).
-    ["resto", null, 50, -115.2],
-    ["gp", 13, 67.1, 17.1],
-    ["gp", 14, 87.8, 20.7],
-    ["gp", 15, 105, 17.2],
-    ["gp", 16, null, null], ["gp", 17, null, null], ["gp", 18, null, null],
-  ]);
-  // Un GP disputado sin procesar enseña lo previsto pero no mueve el saldo.
-  const sinProcesar = splits.map(x => x.id !== "split_3" ? x : {
-    ...x, circuitos: x.circuitos.map(c => c.numero_carrera === 15 ? { ...c, economia_procesada: false } : c),
-  });
-  const t2 = construirLiga(sinProcesar).splits.find(x => x.id === "split_3")!;
-  const fila15 = evolucionSaldo(sinProcesar.find(x => x.id === "split_3")!, t2, ALFA).find(f => f.numero === 15)!;
-  assert.deepEqual([fila15.saldo, fila15.delta, fila15.procesada], [null, 17.2, false]);
-});
-
 test("en una pareja el segundo no cobra; en un trío sí (premios de dúo frente a los de grupo)", () => {
   const s = split3();
   const hungria = s.circuitos.find(c => c.numero_carrera === 13)!;
@@ -120,4 +97,16 @@ test("un grupo de tipo «solo» no reparte premios de grupo: solo cuenta soloPil
   s.rivalries = { groups: [{ ...s.rivalries!.groups[3], type: "solo", members: [s.rivalries!.groups[3].members[0]] }], soloPilots: [] };
   const hungria = desgloseCircuito(s, s.circuitos.find(c => c.numero_carrera === 13)!);
   assert.deepEqual(hungria.lineas.filter(l => l.fuente === "rivalry"), []);
+});
+
+test("un circuito procesado usa las reglas que guardó al procesarse, no la config actual", () => {
+  const s: SplitView = { ...split3(), economia_config: { participacion: 9 } };
+  const hungria = s.circuitos.find(c => c.numero_carrera === 13)!;
+  const procesada = { ...hungria, economia_procesada: true, economia_reglas_aplicadas: { ...DEFAULT_ECONOMY_RULES } };
+  const d = desgloseCircuito(s, procesada);
+  assert.equal(d.reglas, "aplicadas");
+  assert.equal(d.porEquipo[ALFA].porFuente.participation, 4);
+  const sinGuardar = desgloseCircuito(s, { ...hungria, economia_procesada: false });
+  assert.equal(sinGuardar.reglas, "split");
+  assert.equal(sinGuardar.porEquipo[ALFA].porFuente.participation, 9);
 });
