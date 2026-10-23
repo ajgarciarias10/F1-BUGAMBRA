@@ -1,0 +1,14 @@
+import "./nueva.css";
+export * from "./Evolucion";
+export * from "./TemporadasRail";
+export * from "./TarjetaPiloto";
+export * from "./CartaPilotoModal";
+export * from "./TarjetaEquipo";
+export * from "./TarjetaDuo";
+export * from "./Kpi";
+export * from "./ControlSegmentado";
+export * from "./TablaAdmin";
+export * from "./ChipRivalidad";
+export * from "./BarraSeleccion";
+export * from "./TarjetaVideo";
+export * from "./Demo";
