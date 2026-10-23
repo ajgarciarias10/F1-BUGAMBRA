@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { isSplitUnlocked } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
 import { EconomyAdminPanel } from "./EconomyAdminPanel";
+import { SaldosHistoricosPanel } from "./SaldosHistoricosPanel";
 import { StorageImageUpload } from "./StorageImageUpload";
 import { AuctionRoom } from "./AuctionRoom";
 import { comenzarTemporada } from "../services/auctionService";
@@ -33,11 +34,12 @@ import { buildHistoricalRaceCorrectionPlan, HistoricalRaceCorrectionPlan } from 
 import { useSingleFlight } from "../hooks/useSingleFlight";
 const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
 
-type AdminTab = "results" | "economy" | "rivalries" | "roster" | "production" | "suggestions" | "tools";
+type AdminTab = "results" | "economy" | "balances" | "rivalries" | "roster" | "production" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; description: string }> = [
   { id: "results", label: "Carreras", description: "Programa la carrera, introduce los resultados y cierra el acta para liquidar su economía. Tras cerrarla, aquí puedes generar y descargar con Gemini un borrador de imagen del podio." },
   { id: "economy", label: "Economía y fichajes", description: "Gestiona los traspasos, contratos y presupuestos de cada split." },
+  { id: "balances", label: "Saldos por GP", description: "Reconstruye desde el libro el saldo de cada escudería tras los GP ya liquidados y lo guarda solo si cuadra." },
   { id: "rivalries", label: "Rivalidades", description: "Define los grupos de pilotos que compiten por los premios de rivalidad." },
   { id: "roster", label: "Equipos y usuarios", description: "Gestiona las escuderías, las cuentas y sus roles." },
   { id: "production", label: "Vídeos", description: "Publica o cambia el vídeo de presentación de cada split." },
@@ -1032,6 +1034,8 @@ export function AdminDashboard() {
           <AdminRivalriesPanel splits={splits} />
         ) : adminTab === "economy" ? (
           <EconomyAdminPanel splits={splits} />
+        ) : adminTab === "balances" ? (
+          <SaldosHistoricosPanel splits={splits} />
         ) : adminTab === "roster" ? (
           <div className="space-y-6">
             <AdminTeamManager splitId={selectedSplitId} teams={currentRawSplit?.equipos || []} roster={currentRawSplit?.roster || []} splits={splits} onSelectSplit={(id: string) => setSelectedSplitId(id)} />
