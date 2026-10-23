@@ -4,22 +4,19 @@ What is open right now. Details per feature go in `docs/trabajo/<slug>/`. Remove
 
 ## Redesign (`docs/trabajo/redesign/`)
 
-The owner approved `docs/redesign/prototipo-gemini/` on 2026-10-22 and wants it to become the real app. Decisions: `docs/redesign/prototipo-gemini/decisiones.md`.
+The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign/plan-app.md`. Integration branch and Vercel preview: `feature/rediseno-app`. Owner decisions: `docs/redesign/prototipo-gemini/decisiones.md`.
 
-- Work happens on `feature/rediseno-app` (redesign + `main` merged on 2026-10-22); Vercel publishes it as a preview. `main` and production stay as they are until the owner decides.
-- [ ] 08 Retire Paddock and driver-of-the-day vote: done in `feature/retirar-paddock-votacion`, pending merge into `feature/rediseno-app`
-- [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes (TV, race page) or retire it
+- [x] 08 Retire Paddock and vote (in the preview)
+- [x] 03 Foundation tokens and type (in the preview)
+- [ ] Wave 1: 13 data layer · 14 visual pieces · 15 shell and routes
+- [ ] Wave 2: 16 home and championship · 17 teams and my driver · 18 races · 19 role homes, profile, login · 20 TV (needs the owner's Twitch credentials)
+- [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
+- [ ] 26 Switch every route and retire the old screens
+- [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes or retire it
 - [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
-- [ ] 03 Foundation: tokens, primitives, shell (Codex mid-tier; merges before 04 and 05)
-- [ ] 04 User and public screens (Claude; after 03 and 08)
-- [ ] 05 Admin screens (Claude, economy paths untouched; after 03 and 08)
-- [ ] 11 Commissioner without a team (role routing)
-- [ ] 09 TV with the league's Twitch channels through the official API (needs the owner's Twitch app credentials)
-- [ ] 10 Race act: positions 1-20, qualifying "did not run", position after a penalty (owner must confirm the data model first)
-- [ ] 12 Seasons: Origins by duos, Temporada 1 total and every split (after 04; season standing = sum of splits, Origins positions deduced: owner, 2026-10-22)
 - [ ] Assign Antonio Ceferi as Alfa Romero's sporting director in Equipos y usuarios (owner, live data)
-- [ ] Rename Split 3 GP 16 from España to Italia (Imola) with the new circuit-name field (owner, live data)
-- [ ] Decide fate of `GuestDashboard.tsx` and `AestheticLogin.tsx` (no references found outside their own files)
+- [ ] Rename Split 3 GP 16 from España to Italia (Imola) with the circuit-name field (owner, live data)
+- [ ] Find out what the «Mundial» split in Firestore is before ticket 16 shows it
 
 ## Economy and data (rules in `AGENTS.md`)
 
