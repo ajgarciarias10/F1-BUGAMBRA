@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Transaccion } from "../../types";
+import type { Circuito, Transaccion } from "../../types";
 import { evolucionEscuderias } from "./evolucion";
 import { construirLiga } from "./temporadas";
 import { EQUIPO_ID, snapshotASplits } from "./fixtures/snapshot";
@@ -61,4 +61,60 @@ test("un GP disputado sin procesar enseña lo previsto y su saldo queda pendient
   const alfa = evolucionEscuderias(l, sinProcesar, l.splits[2]).series.find(s => s.equipoId === ALFA)!;
   assert.deepEqual([alfa.ingresosPorGp[2].importe, alfa.ingresosPorGp[2].origen], [17.2, "previsto"]);
   assert.deepEqual(alfa.saldoTrasGp[2], { saldo: null, estado: "pendiente" });
+});
+
+// Ticket 27: liquidar un GP guarda en el circuito economia_saldos[equipo] = { antes, ingresos, despues }.
+const ZENITH = EQUIPO_ID.zenith;
+const conSaldos = (cambios: Record<number, Partial<Circuito>>) => splits.map(x => x.id !== "split_3" ? x : {
+  ...x, circuitos: x.circuitos.map(c => cambios[c.numero_carrera!] ? { ...c, ...cambios[c.numero_carrera!] } : c),
+});
+const serie = (sv: ReturnType<typeof conSaldos>, equipoId: string, libro: Transaccion[] = []) => {
+  const l = construirLiga(sv);
+  return evolucionEscuderias(l, sv, l.splits[2], libro).series.find(s => s.equipoId === equipoId)!;
+};
+
+test("con economia_saldos guardado: saldo real tras el GP e ingresos guardados, también en negativo", () => {
+  const sv = conSaldos({
+    13: { economia_saldos: { [ALFA]: { antes: 50, ingresos: 17.1, despues: 67.1 }, [ZENITH]: { antes: -10, ingresos: 6.6, despues: -3.4 } } },
+    14: { economia_saldos: { [ALFA]: { antes: 67.1, ingresos: 20.7, despues: 87.8, origen: "reconstruido" } as never } },
+  });
+  const alfa = serie(sv, ALFA);
+  assert.deepEqual(alfa.saldoTrasGp.slice(0, 2), [
+    { saldo: 67.1, estado: "guardado", antes: 50 },
+    { saldo: 87.8, estado: "guardado", antes: 67.1, reconstruido: true },
+  ]);
+  assert.deepEqual(alfa.ingresosPorGp.slice(0, 2).map(i => [i.importe, i.origen]), [[17.1, "guardado"], [20.7, "guardado"]]);
+  // GP 15 procesado sin el campo (carrera antigua): sigue desconocido.
+  assert.deepEqual(alfa.saldoTrasGp[2], { saldo: null, estado: "desconocido" });
+  assert.equal(alfa.ingresosPorGp[2].origen, "calculado");
+  // Un saldo negativo es un dato real y se enseña tal cual; el importe guardado manda sobre el recalculado.
+  const zenith = serie(sv, ZENITH);
+  assert.deepEqual(zenith.saldoTrasGp[0], { saldo: -3.4, estado: "guardado", antes: -10 });
+  assert.deepEqual([zenith.ingresosPorGp[0].importe, zenith.ingresosPorGp[0].origen], [6.6, "guardado"]);
+  // Una escudería que no aparece en el campo de ese GP no hereda nada de otra.
+  assert.deepEqual(serie(sv, EQUIPO_ID.roses).saldoTrasGp[0], { saldo: null, estado: "desconocido" });
+});
+
+test("economia_saldos manda sobre el libro; el libro queda como respaldo cuando falta", () => {
+  const s3 = splits.find(x => x.id === "split_3")!;
+  const gp13 = s3.circuitos.find(c => c.numero_carrera === 13)!.id, gp14 = s3.circuitos.find(c => c.numero_carrera === 14)!.id;
+  const libro: Transaccion[] = [
+    { equipo: "Alfa Romero", equipoId: ALFA, splitId: "split_3", circuitoId: gp13, tipo: "premio_carrera", cantidad: 4, esIngreso: true, fecha: 1, saldo_nuevo: 999 },
+    { equipo: "Alfa Romero", equipoId: ALFA, splitId: "split_3", circuitoId: gp14, tipo: "premio_carrera", cantidad: 4, esIngreso: true, fecha: 2, saldo_nuevo: 71.1 },
+  ];
+  const alfa = serie(conSaldos({ 13: { economia_saldos: { [ALFA]: { antes: 50, ingresos: 17.1, despues: 67.1 } } } }), ALFA, libro);
+  assert.deepEqual([alfa.saldoTrasGp[0].saldo, alfa.saldoTrasGp[0].estado], [67.1, "guardado"]);
+  assert.equal(alfa.ingresosPorGp[0].porFuente?.participation, 4);
+  assert.deepEqual(alfa.saldoTrasGp[1], { saldo: 71.1, estado: "registrado" });
+});
+
+test("una carrera revertida (sin procesar y sin el campo) vuelve a pendiente; un campo huérfano se ignora", () => {
+  const revertida = serie(conSaldos({ 15: { economia_procesada: false } }), ALFA);
+  assert.deepEqual(revertida.saldoTrasGp[2], { saldo: null, estado: "pendiente" });
+  assert.equal(revertida.ingresosPorGp[2].origen, "previsto");
+  const huerfano = serie(conSaldos({ 15: { economia_procesada: false, economia_saldos: { [ALFA]: { antes: 1, ingresos: 2, despues: 3 } } } }), ALFA);
+  assert.deepEqual(huerfano.saldoTrasGp[2], { saldo: null, estado: "pendiente" });
+  // Cifras no numéricas no se toman por un saldo.
+  const roto = serie(conSaldos({ 15: { economia_saldos: { [ALFA]: { antes: 1, ingresos: 2, despues: Number.NaN } } } }), ALFA);
+  assert.deepEqual(roto.saldoTrasGp[2], { saldo: null, estado: "desconocido" });
 });
