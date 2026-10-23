@@ -3,7 +3,7 @@
 - **Branch from:** `feature/rediseno-app`
 - **Work branch:** `feature/nueva-ui`
 - **Owned files:** `apps/web/src/nueva/ui/**`
-- **Do not touch:** everything outside `apps/web/src/nueva/ui/`
+- **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/shell/**`, `apps/web/src/components/**`, `apps/web/src/services/**`, `apps/web/src/utils/**`, `apps/web/src/hooks/**`
 - **Agent and model:** Codex, mid-tier model, medium reasoning
 - **Done when:** each piece renders like the prototype from plain props (no data fetching): aligned evolution grid (chart and table share columns, sticky first column, pending GPs hatched, group bands per split), season rail, F1-style driver card, team card with photo lineup, flip card modal (the photo must not show through the back), KPI card, segmented control use, admin table styles, rivalry chips, video card; a demo page `nueva/ui/Demo.tsx` shows them all with sample props.
 
