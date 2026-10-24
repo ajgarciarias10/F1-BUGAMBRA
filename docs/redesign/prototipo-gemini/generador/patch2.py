@@ -32,7 +32,6 @@ bloque = (sp / "liga-block.js").read_text(encoding="utf-8").replace("__LIGA__", 
 rep("    const FOTOS_PILOTO = [", bloque + "    const FOTOS_PILOTO = [")
 rep("seasonFilter: 'Split 3', // 'Origins' | 'Split 1' | 'Split 2' | 'Split 3' | 'Mundial'",
     "seasonFilter: 'Split 3', // 'Origins' | 'Split 1' | 'Split 2' | 'Split 3'\n        evoAlcance: 'split', // 'split' | 'ano'\n        saldoVista: 'gp', // 'gp' | 'splits'")
-rep("standingsMode: 'pilotos',", "standingsMode: 'escuderias',")
 
 # 3. Clasificación con temporadas enlazadas
 nuevo = (sp / "standings-block.js").read_text(encoding="utf-8")
