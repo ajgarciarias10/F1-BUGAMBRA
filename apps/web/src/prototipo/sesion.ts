@@ -35,7 +35,7 @@ function publicar(sesion: SesionPrototipo | null) {
 
 /** Una acción de acceso cada vez: un doble toque no lanza dos ventanas de Google. */
 async function unaVez(accion: () => Promise<Resultado>): Promise<Resultado> {
-  if (ocupado) return { ok: false };
+  if (ocupado) return { ok: false, mensaje: "Espera un momento: hay otra operación en marcha." };
   ocupado = true;
   try { return await accion(); }
   catch (error) {
@@ -45,29 +45,39 @@ async function unaVez(accion: () => Promise<Resultado>): Promise<Resultado> {
   finally { ocupado = false; }
 }
 
+/** Cuántas veces se ha pulsado Google: solo la última pulsación enseña su resultado. */
+let intentoGoogle = 0;
+
+/**
+ * Fuera de `unaVez` a propósito: Google no deja a la página comprobar si su ventana sigue
+ * abierta (Cross-Origin-Opener-Policy), así que un intento cerrado a medias puede no terminar
+ * nunca. Volver a pulsar abre otra ventana y Firebase cancela la anterior.
+ */
 async function entrarConGoogle(): Promise<Resultado> {
-  return unaVez(async () => {
+  const intento = ++intentoGoogle;
+  try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    try {
-      const result = await signInWithPopup(auth, provider);
-      const correo = result.user.email?.trim().toLowerCase();
-      if (!correo) throw new Error("Google no devolvió un correo válido.");
-      if (await perfilGoogleExistente(result.user.uid, correo)) {
-        await signOut(auth);
-        return { ok: false, mensaje: "No se ha podido vincular Google con tu cuenta. Accede con correo y contraseña o pide ayuda al comisario." };
-      }
-      await provisionProfile(result.user, correo);
-      return { ok: true };
-    } catch (error: any) {
-      if (error?.code === "auth/account-exists-with-different-credential") {
-        googlePendiente = GoogleAuthProvider.credentialFromError(error);
-        if (googlePendiente) return { ok: false, mensaje: "Este Gmail ya tiene cuenta. Entra con su correo y contraseña para vincular Google sin perder tus datos." };
-      }
-      if (error?.code === "auth/popup-closed-by-user") return { ok: false };
-      throw error;
+    const result = await signInWithPopup(auth, provider);
+    const correo = result.user.email?.trim().toLowerCase();
+    if (!correo) throw new Error("Google no devolvió un correo válido.");
+    if (await perfilGoogleExistente(result.user.uid, correo)) {
+      await signOut(auth);
+      return { ok: false, mensaje: "No se ha podido vincular Google con tu cuenta. Accede con correo y contraseña o pide ayuda al comisario." };
     }
-  });
+    await provisionProfile(result.user, correo);
+    return { ok: true };
+  } catch (error: any) {
+    // Una pulsación posterior ya ha abierto otra ventana: esta no tiene nada que decir.
+    if (intento !== intentoGoogle) return { ok: false };
+    console.error("Acceso con Google", error);
+    if (error?.code === "auth/account-exists-with-different-credential") {
+      googlePendiente = GoogleAuthProvider.credentialFromError(error);
+      if (googlePendiente) return { ok: false, mensaje: "Este Gmail ya tiene cuenta. Entra con su correo y contraseña para vincular Google sin perder tus datos." };
+    }
+    if (auth.currentUser && !actual) await signOut(auth).catch(() => {});
+    return { ok: false, mensaje: authFeedback(error) };
+  }
 }
 
 async function entrarConCorreo(email: string, password: string): Promise<Resultado> {
