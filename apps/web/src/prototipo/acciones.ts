@@ -272,10 +272,11 @@ export async function logo(p: { splitId: string; equipo: string; url: string }):
 }
 
 /** Fecha, hora y vídeo de la vuelta rápida de un GP, como «Programar carrera» del panel. */
-export async function programar(p: { splitId: string; n: number; fecha: string; hora: string; hotlap: string }): Promise<Resultado> {
+export async function programar(p: { splitId: string; n: number; nombre: string; fecha: string; hora: string; hotlap: string }): Promise<Resultado> {
+  if (!p.nombre.trim()) return { ok: false, mensaje: "Escribe el nombre del circuito." };
   if (p.hora && !/^\d{2}:\d{2}$/.test(p.hora)) return { ok: false, mensaje: "Escribe la hora como 22:30." };
   const { circuito } = await circuitoPorNumero(p.splitId, p.n);
-  await programarCarrera(p.splitId, circuito.id, { nombre: circuito.nombre, fecha: p.fecha, hora: p.hora, numero_carrera: Number(circuito.numero_carrera) });
+  await programarCarrera(p.splitId, circuito.id, { nombre: p.nombre.trim(), fecha: p.fecha, hora: p.hora, numero_carrera: Number(circuito.numero_carrera) });
   if ((circuito.hotlap_url || "") !== p.hotlap.trim()) {
     try { await setFastestLapVideo(p.splitId, circuito.id, p.hotlap); }
     catch (error: any) { return { ok: true, mensaje: `Programación guardada, pero el vídeo NO: ${error.message}` }; }

@@ -208,7 +208,7 @@ cambiar(`onsubmit="event.preventDefault();showToast('Prototipo: el alta no se gu
 cambiar(`onclick="showToast('En la web real, aquí se fija el presupuesto inicial.')"`, `onclick="bugambraPresupuestoInicial('\${r.id}')"`);
 cambiar(`onclick="showToast('En la web real, aquí se descarga el boletín FIA en PDF.')"`, `onclick="bugambraPendiente('Descargar el boletín FIA en PDF')"`);
 // Acta y FIA: el estado del acta y las decisiones salen de Firestore; se puede guardar sin cerrar.
-cambiar("disputada: !!c.completado, res };", "disputada: !!c.completado, actaCerrada: !!c.acta_cerrada, hotlap: c.hotlap_url || null, fia: (c.decisiones_fia || []).map(d => ({ piloto: d.pilotoId ? slug(d.pilotoId) : null, motivo: d.motivo, efecto: d.efecto_deportivo || d.tipo })), res };");
+cambiar("disputada: !!c.completado, res };", "disputada: !!c.completado, actaCerrada: !!c.acta_cerrada, hotlap: c.hotlap_url || null, nombreGuardado: c.nombre, fia: (c.decisiones_fia || []).map(d => ({ piloto: d.pilotoId ? slug(d.pilotoId) : null, motivo: d.motivo, efecto: d.efecto_deportivo || d.tipo })), res };");
 cambiar("actaEstado: disputada ? 'Acta cerrada por la FIA' :", "actaEstado: disputada ? (g.actaCerrada ? 'Acta cerrada' : 'Resultados guardados · acta abierta') :");
 cambiar(`          resultadosDetalle: detalle,
           decisionesFia: []`, `          resultadosDetalle: detalle,

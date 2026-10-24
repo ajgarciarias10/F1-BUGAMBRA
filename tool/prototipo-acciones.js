@@ -333,6 +333,7 @@
       return `
         <form class="clean-table-panel" onsubmit="event.preventDefault(); programarCarreraAdmin(${orden});" style="display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:end;margin-bottom:var(--sp-4);">
           <h2 class="section-title" style="width:100%;">Programación · GP ${orden} (${g.pais || ''} · ${g.circuito || ''})</h2>
+          <div class="form-field"><label for="progNombre">Nombre del circuito</label><input id="progNombre" class="form-input" required value="${atributo(g.nombreGuardado)}"></div>
           <div class="form-field"><label for="progFecha">Fecha</label><input id="progFecha" class="form-input" type="date" value="${atributo(g.fecha)}"></div>
           <div class="form-field"><label for="progHora">Hora</label><input id="progHora" class="form-input" type="time" value="${atributo(g.hora)}"></div>
           <div class="form-field" style="flex:1;min-width:260px;"><label for="progHotlap">Vídeo de la vuelta rápida (YouTube)</label><input id="progHotlap" class="form-input" type="url" placeholder="https://youtu.be/…" value="${atributo(g.hotlap)}"></div>
@@ -342,7 +343,7 @@
 
     window.programarCarreraAdmin = function(orden) {
       const valor = (id) => document.getElementById(id).value.trim();
-      bugambraAccion(() => bugambraAcciones.programar({ splitId: temporadaActual().id, n: Number(orden), fecha: valor('progFecha'), hora: valor('progHora'), hotlap: valor('progHotlap') }));
+      bugambraAccion(() => bugambraAcciones.programar({ splitId: temporadaActual().id, n: Number(orden), nombre: valor('progNombre'), fecha: valor('progFecha'), hora: valor('progHora'), hotlap: valor('progHotlap') }));
     };
 
     /** El vídeo de la vuelta rápida del GP: miniatura y, al pulsar, el reproductor. */
