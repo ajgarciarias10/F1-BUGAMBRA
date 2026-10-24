@@ -12,7 +12,7 @@ import { resolveTransferView, type TransferView } from "../utils/transferView";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
 import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, sumClausePriceAdjustments, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
 import { guardarPacto, anularPacto, deshacerAlta, asegurarSplitSiguiente, liberarPiloto as liberarFicha, ajustarClausula } from "../services/transferService";
-import { applyTeamEconomyCorrection } from "../services/adminMutationService";
+import { applyTeamEconomyCorrection, fijarPresupuestoInicial } from "../services/adminMutationService";
 import { economyRules } from "../utils/economyRules";
 import { FiaFinancialReportModal } from "./FiaFinancialReportModal";
 
@@ -421,18 +421,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
     if (!rawVal.trim() || !Number.isFinite(val)) return;
     setSavingBudget(team.id);
     try {
-    await runTransaction(db, async tx => {
-      const ref = doc(db, `splits/${selectedSplitId}/equipos`, team.id);
-      const snap = await tx.get(ref);
-      if (!snap.exists()) throw new Error("La escudería no existe.");
-      const data = snap.data();
-      const anterior = typeof data.presupuesto_inicial === "number" ? data.presupuesto_inicial : null;
-      // Si falta el metadato histórico se rellena sin volver a ingresar todo el saldo.
-      const delta = anterior == null ? 0 : val - anterior;
-      tx.update(ref, { presupuesto_inicial: val, ...(delta ? { presupuesto: increment(delta) } : {}) });
-      if (delta) tx.set(doc(collection(db, "transacciones")), { splitId: selectedSplitId, equipoId: team.id, equipo: team.nombre,
-        tipo: "ajuste", cantidad: Math.abs(delta), esIngreso: delta >= 0, descripcion: "Ajuste administrativo del presupuesto inicial", fecha: serverTimestamp() });
-    });
+    await fijarPresupuestoInicial(selectedSplitId, team.id, team.nombre, val);
     setEditingBudget(prev => { const n = { ...prev }; delete n[team.id]; return n; });
     await loadData(selectedSplitId);
     } catch (error: any) { setProcessLog([error.message]); }

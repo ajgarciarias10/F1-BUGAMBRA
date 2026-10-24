@@ -147,6 +147,20 @@ function accion<K extends Exclude<keyof Acciones, "Resultado">>(nombre: K) {
   });
 }
 
+/** Lecturas que la página lanza sola (libro, avisos): fuera del candado, para no bloquear los clics. */
+function lectura<K extends "libro" | "ultimoAviso">(nombre: K) {
+  return async (...args: Parameters<Acciones[K]>) => {
+    if (!actual) return { ok: false };
+    try {
+      const modulo = await import("./acciones");
+      return await (modulo[nombre] as (...a: unknown[]) => ReturnType<Acciones[K]>)(...args);
+    } catch (error) {
+      console.error(`No se pudo leer ${nombre}`, error);
+      return { ok: false };
+    }
+  };
+}
+
 const bugambraAcciones = {
   pactar: accion("pactar"),
   deshacer: accion("deshacer"),
@@ -164,6 +178,12 @@ const bugambraAcciones = {
   guardarUsuario: accion("guardarUsuario"),
   logo: accion("logo"),
   programar: accion("programar"),
+  libro: lectura("libro"),
+  ultimoAviso: lectura("ultimoAviso"),
+  publicarAviso: accion("publicarAviso"),
+  alternarSubasta: accion("alternarSubasta"),
+  comenzarSplit: accion("comenzarSplit"),
+  presupuestoInicial: accion("presupuestoInicial"),
   proponer: (p: { categoria: string; titulo: string }) => unaVez(async () => {
     if (!actual) return { ok: false, mensaje: "Entra con tu cuenta para enviar propuestas." };
     const { proponer } = await import("./acciones");

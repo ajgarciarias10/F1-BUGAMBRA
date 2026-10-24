@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, runTransaction, serverTimestamp, type DocumentReference } from "firebase/firestore";
+import { collection, doc, getDocs, increment, runTransaction, serverTimestamp, type DocumentReference } from "firebase/firestore";
 import { db } from "./firebase";
 import { auth } from "./auth";
 import {
@@ -374,3 +374,23 @@ export async function applyTeamEconomyCorrection(input: TeamEconomyCorrectionInp
   });
 }
 
+
+/**
+ * Fija el presupuesto inicial de una escudería en un split. La diferencia con el anterior se
+ * suma al saldo y queda en el libro; si faltaba el dato histórico, solo se rellena.
+ */
+export async function fijarPresupuestoInicial(splitId: string, teamId: string, teamNombre: string, val: number) {
+  if (!Number.isFinite(val)) throw new Error("Importe no válido.");
+  await runTransaction(db, async tx => {
+    const ref = doc(db, `splits/${splitId}/equipos`, teamId);
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error("La escudería no existe.");
+    const data = snap.data();
+    const anterior = typeof data.presupuesto_inicial === "number" ? data.presupuesto_inicial : null;
+    // Si falta el metadato histórico se rellena sin volver a ingresar todo el saldo.
+    const delta = anterior == null ? 0 : val - anterior;
+    tx.update(ref, { presupuesto_inicial: val, ...(delta ? { presupuesto: increment(delta) } : {}) });
+    if (delta) tx.set(doc(collection(db, "transacciones")), { splitId, equipoId: teamId, equipo: teamNombre,
+      tipo: "ajuste", cantidad: Math.abs(delta), esIngreso: delta >= 0, descripcion: "Ajuste administrativo del presupuesto inicial", fecha: serverTimestamp() });
+  });
+}

@@ -134,9 +134,17 @@
 
     // ── Aún sin conectar: avisan y abren el panel completo en vez de simular ──
     window.realizarPujaJeque = () => bugambraPendiente('Pujar en la subasta');
-    window.solicitarSubirClausulaJeque = () => bugambraPendiente('Subir una cláusula');
     window.votarPilotoDelDia = () => bugambraPendiente('Votar al piloto del día');
     window.procesarEconomiaCircuitoModal = () => bugambraPendiente('Procesar la economía');
+    window.bugambraComenzarSplit = function() {
+      const t = temporadaActual();
+      openMoneyConfirmModal({
+        titulo: `Comenzar el ${t.nombre}`,
+        resumen: `Se cierra el mercado del ${t.nombre} y pasa a ser el split activo de la liga.`,
+        detalleExtra: 'Antes revisa que todas las plantillas estén completas.',
+        onConfirm: () => bugambraAccion(() => bugambraAcciones.comenzarSplit({ splitId: t.id }))
+      });
+    };
     window.accionPilotoEconomia = () => bugambraPendiente('Esta operación con el piloto');
     window.ejecutarDeshacerEconomia = () => {};
 
@@ -353,4 +361,106 @@
               </button>`}
         </div>`;
     }
+
+    // ── Mi escudería: el libro de movimientos de verdad, y si cuadra con el saldo ──
+    state.libros = {};
+    function cargarLibro(eq) {
+      state.libros[eq] = { estado: 'cargando', movimientos: [] };
+      bugambraAcciones.libro({ splitId: temporadaActual().id, equipo: eq }).then(r => {
+        state.libros[eq] = r.ok ? { estado: r.estado, movimientos: r.movimientos } : { estado: 'error', movimientos: [] };
+        if (parseHash().route === 'escuderia') renderApp();
+      });
+    }
+    Object.defineProperty(state, 'movimientos', {
+      configurable: true,
+      get() {
+        const eq = miEquipoId();
+        if (eq && state.sesion && !state.libros[eq]) cargarLibro(eq);
+        return (state.libros[eq] || {}).movimientos || [];
+      },
+      set() {}
+    });
+    // «Conciliado» solo si el último saldo apuntado en el libro coincide con el saldo de la escudería.
+    Object.defineProperty(state.ui, 'saldoConciliado', {
+      configurable: true,
+      get() { return !['pending_reconciliation', 'balance_unknown', 'error'].includes((state.libros[miEquipoId()] || {}).estado); },
+      set() {}
+    });
+
+    // ── Avisos oficiales: el último que publicó el comisario ──
+    state.avisoReal = null;
+    window.addEventListener('bugambra:sesion', (e) => {
+      state.libros = {};
+      if (!e.detail) { state.avisoReal = null; return; }
+      bugambraAcciones.ultimoAviso().then(r => {
+        state.avisoReal = r.ok ? r.aviso : null;
+        if (parseHash().route === 'inicio') renderApp();
+      });
+    });
+    function avisoInicio() {
+      return state.avisoReal || { titulo: 'Sin avisos oficiales', texto: 'Cuando el comisario publique uno, saldrá aquí.' };
+    }
+
+    window.bugambraPublicarAviso = function() {
+      const titulo = document.getElementById('avisoTitulo').value;
+      const texto = document.getElementById('avisoTexto').value;
+      openMoneyConfirmModal({
+        titulo: 'Publicar aviso oficial',
+        resumen: `«${titulo}» saldrá en el inicio de todos.`,
+        onConfirm: () => bugambraAccion(async () => {
+          const r = await bugambraAcciones.publicarAviso({ titulo, texto });
+          if (r.ok) state.avisoReal = { titulo: titulo.trim(), texto: texto.trim() };
+          return r;
+        })
+      });
+    };
+
+    const temporadaOriginal = renderAdminTemporadaSection;
+    renderAdminTemporadaSection = function() {
+      return temporadaOriginal() + `
+        <form class="section-card" onsubmit="event.preventDefault(); bugambraPublicarAviso();" style="display:flex;flex-direction:column;gap:var(--sp-3);">
+          <h2 class="section-title">Aviso oficial</h2>
+          <p style="font-size:var(--fs-sm);color:var(--text-muted);">Último publicado: <strong>${avisoInicio().titulo}</strong></p>
+          <div class="form-field"><label for="avisoTitulo">Título</label><input id="avisoTitulo" class="form-input" required placeholder="Ej.: Horario del GP de Imola"></div>
+          <div class="form-field"><label for="avisoTexto">Texto</label><input id="avisoTexto" class="form-input" required placeholder="Ej.: El lobby se abre a las 22:15."></div>
+          <button type="submit" class="btn btn-primary">Publicar aviso</button>
+        </form>`;
+    };
+
+    // ── Mercado y subasta en vivo ──
+    window.bugambraAlternarSubasta = function() {
+      const t = temporadaActual();
+      const activa = !!t.subastaEnVivo;
+      openMoneyConfirmModal({
+        titulo: activa ? 'Pausar la subasta en vivo' : 'Activar la subasta en vivo',
+        resumen: activa ? 'Los jeques fichan directamente, sin sala de pujas.' : 'El mercado abre la sala de pujas en vivo.',
+        onConfirm: () => bugambraAccion(() => bugambraAcciones.alternarSubasta({ splitId: t.id, activa }))
+      });
+    };
+
+    /** La sala de pujas (reloj y pujas al momento) vive en el panel completo de cada rol. */
+    function salaDePujas() {
+      return `${({ jeque: '/jeque', admin: '/piloto', piloto: '/piloto' })[state.ui.role] || '/usuario'}?tab=market`;
+    }
+    renderMercadoView = function() {
+      const t = temporadaActual();
+      return `
+        <section class="section-card" style="display:flex;flex-direction:column;gap:var(--sp-3);">
+          <div class="section-header"><h1 class="section-title">Mercado · ${t.nombre}</h1><span class="badge-pill badge-split">Abierto</span></div>
+          <p>${t.subastaEnVivo ? 'Subasta en vivo: los jeques pujan en la sala, con reloj y prórrogas.' : 'Fichaje directo: cada jeque ficha desde su panel.'}</p>
+          <p style="font-size:var(--fs-sm);color:var(--text-muted);">${state.ui.role === 'jeque' ? 'Entra a la sala para pujar por los pilotos libres.' : 'Puedes seguir las pujas en directo desde la sala.'}</p>
+          <a class="btn btn-primary" style="align-self:flex-start;" href="${salaDePujas()}">Entrar a la sala de pujas</a>
+        </section>`;
+    };
+
+    // ── Presupuesto inicial de una escudería (Economía) ──
+    window.bugambraPresupuestoInicial = function(eqId) {
+      const t = splitAdmin('adminEcoSplit');
+      openMoneyConfirmModal({
+        titulo: `Presupuesto inicial · ${nombreEquipo(eqId)} (${t.nombre})`,
+        resumen: 'La diferencia con el inicial actual se suma o resta al saldo y queda en el libro.',
+        detalleExtra: '<span class="form-field"><label for="presIni">Presupuesto inicial (M€)</label><input id="presIni" class="form-input" type="number" step="0.1"></span>',
+        onConfirm: () => bugambraAccion(() => bugambraAcciones.presupuestoInicial({ splitId: t.id, equipo: eqId, importe: valorNumero('presIni') }))
+      });
+    };
 

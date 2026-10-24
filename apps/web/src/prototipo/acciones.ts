@@ -9,13 +9,16 @@ import { db } from "../services/firebase";
 import { ajustarClausula, anularPacto, asegurarSplitSiguiente, deshacerAlta, guardarPacto, liberarPiloto } from "../services/transferService";
 import { ficharPiloto, procesarEconomiaCarrera } from "../services/economyService";
 import { processRace } from "../services/raceProcessor";
-import { programarCarrera, registerFiaDecision, setFastestLapVideo } from "../services/readModelService";
+import { fetchLatestOfficialNotice, fetchTeamLedger, programarCarrera, publishOfficialNotice, registerFiaDecision, setFastestLapVideo } from "../services/readModelService";
+import { comenzarTemporada } from "../services/auctionService";
+import { auth } from "../services/auth";
+import type { LedgerSource } from "../types";
 import { guardarLogoEquipo } from "../services/perfilService";
 import { asignarUsuario, listarUsuarios } from "../services/usuariosService";
 import { canPilotParticipateInRace } from "../services/readModels";
 import { planActaCerrada } from "../utils/adminMutationPlans";
 import { resultadosDelActa, type EntradaActa } from "../utils/actaResultados";
-import { applyTeamEconomyCorrection, runAuditedAdminBatch } from "../services/adminMutationService";
+import { applyTeamEconomyCorrection, fijarPresupuestoInicial, runAuditedAdminBatch } from "../services/adminMutationService";
 import { planBooleanFlag } from "../utils/adminMutationPlans";
 import { guardarRivalidades, leerPlantillaSplit } from "../services/rivalidadesService";
 import { crearSugerencia } from "../services/sugerenciasService";
@@ -278,4 +281,68 @@ export async function programar(p: { splitId: string; n: number; fecha: string; 
     catch (error: any) { return { ok: true, mensaje: `Programación guardada, pero el vídeo NO: ${error.message}` }; }
   }
   return { ok: true, mensaje: `GP ${p.n} programado.` };
+}
+
+// ─── Lo que faltaba: libro real, avisos, subasta en vivo, comenzar el split, presupuesto inicial ───
+
+/** Fuente del libro con el nombre que usan los filtros de Mi escudería. */
+const FUENTE: Record<LedgerSource, string> = {
+  points: "Puntos de carrera", pole: "Pole", fastestLap: "Vuelta rápida", participation: "Participación",
+  cleanTeam: "Equipo sin sancionados", rivalry: "Rivalidad", seasonPrize: "Premio de temporada", transfer: "Fichajes y cláusulas",
+  priceAdjustment: "Ajuste de precio de compra", manualAdjustment: "Ajuste manual del administrador", other: "Otros",
+};
+const millones = (n: number) => `${n.toFixed(1).replace(".", ",")} M€`;
+
+/** Los movimientos de verdad de la escudería en el split (colección `transacciones`). */
+export async function libro(p: { splitId: string; equipo: string }) {
+  const [equipo, circuitos] = await Promise.all([escuderiaFirestore(p.splitId, p.equipo), circuitosPorOrden(p.splitId)]);
+  const vista = await fetchTeamLedger(p.splitId, equipo.id, equipo.data().presupuesto, equipo.data().nombre);
+  const gp = (id?: string) => { const c = circuitos.find(x => x.id === id); return c ? `GP ${c.numero_carrera} · ${c.nombre}` : "—"; };
+  return {
+    ok: true,
+    estado: vista.state,
+    movimientos: vista.entries.map(e => ({
+      id: e.id,
+      fecha: e.dateMs ? new Date(e.dateMs).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—",
+      gp: gp(e.circuitId), fuente: FUENTE[e.source], concepto: e.concept || FUENTE[e.source],
+      importeNum: e.signedAmount, importe: `${e.signedAmount >= 0 ? "+" : "−"}${millones(Math.abs(e.signedAmount))}`,
+      saldoDespues: e.balanceAfter == null ? "—" : millones(e.balanceAfter), piloto: e.pilot || "—", referencia: e.reference,
+    })),
+  };
+}
+
+export async function ultimoAviso() {
+  const aviso = await fetchLatestOfficialNotice();
+  return { ok: true, aviso: aviso ? { titulo: aviso.titulo, texto: aviso.texto } : null };
+}
+
+export async function publicarAviso(p: { titulo: string; texto: string }): Promise<Resultado> {
+  if (!p.titulo.trim() || !p.texto.trim()) return { ok: false, mensaje: "Escribe el título y el texto del aviso." };
+  await publishOfficialNotice({ id: `aviso_${Date.now()}`, titulo: p.titulo.trim(), texto: p.texto.trim(), actorUid: auth.currentUser?.uid || "" });
+  return { ok: true, mensaje: "Aviso publicado: ya sale en el inicio de todos." };
+}
+
+/** Activa o pausa la subasta en vivo del split, como el interruptor del panel. `activa` es lo que ve el admin. */
+export async function alternarSubasta(p: { splitId: string; activa: boolean }): Promise<Resultado> {
+  const ref = doc(db, "splits", p.splitId);
+  await runAuditedAdminBatch({
+    refs: [ref],
+    action: "mercado_subasta_toggle",
+    summary: `Subasta en vivo ${p.activa ? "desactivada" : "activada"} en ${p.splitId}`,
+    apply: currents => ({ writes: { [ref.path]: planBooleanFlag(currents[ref.path], "mercado_subasta_activado", p.activa).after } }),
+  });
+  return { ok: true, mensaje: p.activa ? "Subasta en vivo pausada: los jeques fichan directamente." : "Subasta en vivo activada: el mercado abre la sala de pujas." };
+}
+
+/** Cierra el mercado del split y lo convierte en el split activo de la liga. */
+export async function comenzarSplit(p: { splitId: string }): Promise<Resultado> {
+  const r = await comenzarTemporada(p.splitId);
+  return { ok: r.ok, mensaje: r.message };
+}
+
+export async function presupuestoInicial(p: { splitId: string; equipo: string; importe: number }): Promise<Resultado> {
+  if (!Number.isFinite(p.importe)) return { ok: false, mensaje: "Escribe un importe válido." };
+  const equipo = await escuderiaFirestore(p.splitId, p.equipo);
+  await fijarPresupuestoInicial(p.splitId, equipo.id, equipo.data().nombre || equipo.id, p.importe);
+  return { ok: true, mensaje: `Presupuesto inicial de ${equipo.data().nombre} fijado en ${millones(p.importe)}.` };
 }
