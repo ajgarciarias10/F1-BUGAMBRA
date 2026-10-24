@@ -14,7 +14,6 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
 - [ ] 26 Switch every route and retire the old screens
 - [ ] The approved prototype is the app (`docs/trabajo/conexion-real/tickets/03` to `07`): real sign-in, roles, ledger, notices, schedule, live stream and every admin action except the live bidding room, the FIA PDF report, disqualification (DSQ) and reopening a closed race report, which open the classic panel
-- [ ] Rename Split 3 GP 16 (`splits/split_3/circuitos/espana`) to «Imola» from Programar carrera (owner, live data); the design shows it as Italia · Imola
 - [x] 27 Save each team's balance after every processed race (in the preview)
 - [ ] Live pill bug (production too): `PublicHome.tsx` treats decapi's «tonicotitular is offline» as live because it only checks the exact text «offline» (found in ticket 15; the new shell is not affected)
 - [ ] `apps/api` typecheck fails on the base (`auth.ts:25` TS2769, `domain/race-winner-image.ts:49,52` TS18048), found in ticket 27
