@@ -12,25 +12,6 @@ import {
 const liga = construirLiga(snapshotASplits());
 const temporada = (id: string) => liga.temporadas.find(t => t.id === id)!;
 
-test("el comparador separa cada split y suma solo los splits de la temporada completa", () => {
-  const idA = "piloto_mimic";
-  const idB = "piloto_fabi";
-  const puntos = (id: string, t = liga.temporada1!) => cartaEnTemporada(liga, t, id)!.puntos;
-  const carreras = (id: string, t = liga.temporada1!) => cartaEnTemporada(liga, t, id)!.carreras;
-  for (const id of [idA, idB]) {
-    assert.equal(puntos(id), liga.splits.reduce((sum, split) => sum + puntos(id, split), 0));
-    assert.equal(carreras(id), liga.splits.reduce((sum, split) => sum + carreras(id, split), 0));
-    assert.notEqual(puntos(id), puntos(id, temporada("split_3")));
-    assert.notEqual(puntos(id), puntos(id) + puntos(id, liga.origins!));
-  }
-  for (const t of [...liga.splits, liga.temporada1!, liga.origins!]) {
-    const filas = caraACara(cartaEnTemporada(liga, t, idA)!, cartaEnTemporada(liga, t, idB)!);
-    const fila = filas.find(f => f.etiqueta === "Puntos")!;
-    assert.equal(Number(String(fila.a).replace(",", ".")), puntos(idA, t));
-    assert.equal(Number(String(fila.b).replace(",", ".")), puntos(idB, t));
-  }
-});
-
 test("el selector tiene Origins, la Temporada 1 con sus splits y el Histórico (Origins + Temporada 1)", () => {
   const grupos = gruposTemporadas(liga);
   assert.deepEqual(grupos.map(g => g.id), ["origins", "t1", ID_HISTORICO]);

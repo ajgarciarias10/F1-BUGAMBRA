@@ -1,6 +1,6 @@
 // Pantalla Portada (ticket 16): la entrada pública de la liga. Hero con el próximo GP y pestañas;
 // la Clasificación es la misma de Campeonato. Solo lectura: todo sale de `useLiga()`.
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLiga } from "../datos/useLiga";
@@ -8,10 +8,6 @@ import { clasificacionEquipos, clasificacionPilotos } from "../datos/temporadas"
 import type { GpTemporada, Temporada } from "../datos/tipos";
 import { rutaDe } from "../shell/secciones";
 import { Clasificacion, proximoGp, useTemporadaElegida } from "./Campeonato";
-
-const Carreras = lazy(() => import("./Carreras"));
-const TeamsView = lazy(() => import("../../components/TeamsView").then(m => ({ default: m.TeamsView })));
-const FomLive = lazy(() => import("../../components/FomLive").then(m => ({ default: m.FomLive })));
 
 export const PESTANAS = [
   { id: "clasificacion", etiqueta: "Clasificación" },
@@ -119,14 +115,13 @@ function ProximoGp({ t, gp }: { t: Temporada; gp: GpTemporada }) {
   </aside>;
 }
 
-function EquiposPublicos() {
-  const { liga, splits } = useLiga();
-  const [splitId, setSplitId] = useState<string | null>(null);
-  const split = splits.find(s => s.id === splitId) ?? splits.find(s => s.id === liga.actual?.id) ?? splits[0];
-  if (!split) return <p>No hay escuderías publicadas.</p>;
-  // La misma vista pública existente: las fichas no muestran precios privados.
-  return <TeamsView validSplits={splits} currentSplitId={split.id} onSelectSplit={setSplitId} currentSplit={split}
-    getPilotPhoto={id => split.roster.find(p => p.pilotoId === id)?.foto_url ?? ""} />;
+function EnConstruccion({ pestana }: { pestana: PestanaPortada }) {
+  const etiqueta = PESTANAS.find(p => p.id === pestana)?.etiqueta ?? pestana;
+  return <section className="rounded-lg border border-line bg-surface p-6" aria-labelledby="portada-obra">
+    <h2 id="portada-obra" className="text-xl font-bold">{etiqueta}</h2>
+    <p className="mt-1 text-sm text-ink-muted">Pantalla en construcción</p>
+    <Link to={`/?tab=${pestana}`} className="mt-3 inline-block font-semibold text-brand underline">Abrir en la portada actual</Link>
+  </section>;
 }
 
 export function Portada() {
@@ -170,12 +165,9 @@ export function Portada() {
     </div>
 
     <div id="portada-panel" role="tabpanel" aria-labelledby={`portada-tab-${pestana}`}>
-      <Suspense fallback={<p role="status">Cargando sección…</p>}>
-        {pestana === "clasificacion" && <Clasificacion liga={liga} temporadaId={temporadaId} onTemporada={setTemporadaId} />}
-        {pestana === "equipos" && <EquiposPublicos />}
-        {pestana === "resultados" && <Carreras />}
-        {pestana === "tv" && <FomLive />}
-      </Suspense>
+      {pestana === "clasificacion"
+        ? <Clasificacion liga={liga} temporadaId={temporadaId} onTemporada={setTemporadaId} />
+        : <EnConstruccion pestana={pestana} />}
     </div>
   </div>;
 }

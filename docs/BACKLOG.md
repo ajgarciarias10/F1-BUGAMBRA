@@ -13,7 +13,6 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
   - 16-19 launched 2026-10-23 with Antigravity and stopped minutes later with no changes (Antigravity quota is the scarcest); worktrees `~/projects/F1-nueva-{campeonato,equipos,carreras,inicio}` ready; relaunch when Claude (17:50 UTC) or Codex (18:31 UTC) is back, asking TypeSafe again
 - [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
 - [ ] 26 Switch every route and retire the old screens
-- [ ] Real app entry (`docs/trabajo/conexion-real/tickets/01-entrada-y-funciones-reales.md`, branch `fix/conexion-app-real`): the build no longer ships the prototype HTML, `/` opens `/nueva/portada`, public tabs show real data, comparator states split vs season, lap video verified locally. Pending: owner integrates the ticket and branch, a real Google sign-in, and the Vercel deploy
 - [x] 27 Save each team's balance after every processed race (in the preview)
 - [ ] Live pill bug (production too): `PublicHome.tsx` treats decapi's «tonicotitular is offline» as live because it only checks the exact text «offline» (found in ticket 15; the new shell is not affected)
 - [ ] `apps/api` typecheck fails on the base (`auth.ts:25` TS2769, `domain/race-winner-image.ts:49,52` TS18048), found in ticket 27

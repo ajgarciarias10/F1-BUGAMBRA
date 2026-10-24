@@ -2,8 +2,8 @@
  * Tabla de secciones de la app nueva (ADR 0004).
  *
  * Una sola fuente para las rutas, los menús por rol y los permisos de cada
- * pantalla. Mientras una pantalla no exista, la ruta abre el panel funcional
- * actual. Para enchufar una pantalla de
+ * pantalla. Mientras una pantalla no exista, la ruta enseña «Pantalla en
+ * construcción» con un enlace al panel actual. Para enchufar una pantalla de
  * los tickets 16 a 25 basta con rellenar `pantalla` en su entrada, por ejemplo:
  *
  *   campeonato: { ..., pantalla: lazy(() => import("../pantallas/Campeonato").then(m => ({ default: m.Campeonato }))) },
@@ -40,7 +40,7 @@ export function panelDeRol(rol: RolApp): string {
   // /piloto deja pasar al admin: es su "Acceder a la web" del panel de admin.
   if (rol === "piloto" || rol === "admin") return "/piloto";
   if (rol === "usuario" || rol === "invitado" || rol === "director_deportivo") return "/usuario";
-  return "/clasica";
+  return "/";
 }
 
 const pestana = (tab: string) => (rol: RolApp) => `${panelDeRol(rol)}?tab=${tab}`;
@@ -50,7 +50,7 @@ const SOLO_ADMIN = ["admin"] as const;
 
 const DEFINICION = {
   // ── Públicas ──
-  portada: { ruta: "portada", titulo: "Portada", sub: "Clasificación", roles: null, panelActual: fija("/clasica"), pantalla: lazy(() => import("../pantallas/Portada").then(m => ({ default: m.Portada }))) },
+  portada: { ruta: "portada", titulo: "Portada", sub: "Clasificación", roles: null, panelActual: fija("/"), pantalla: lazy(() => import("../pantallas/Portada").then(m => ({ default: m.Portada }))) },
   entrar: { ruta: "entrar", titulo: "Entrar", sub: "Iniciar sesión", roles: null, panelActual: fija("/login"), pantalla: lazy(() => import("../pantallas/Acceso").then(m => ({ default: m.Acceso }))) },
   instalar: { ruta: "instalar", titulo: "Instalar", sub: "Móvil y PC", roles: null, panelActual: fija("/instalar"), pantalla: lazy(() => import("../pantallas/Instalar").then(m => ({ default: m.Instalar }))) },
 
@@ -60,7 +60,7 @@ const DEFINICION = {
   carreras: { ruta: "carreras", titulo: "Carreras", sub: "Actas y FIA", roles: ROLES_CON_SESION, panelActual: pestana("resultados"), pantalla: lazy(() => import("../pantallas/Carreras").then(m => ({ default: m.Carreras }))) },
   mercado: { ruta: "mercado", titulo: "Mercado", sub: "Fichajes", roles: ROLES_CON_SESION, panelActual: pestana("market") },
   equipos: { ruta: "equipos", titulo: "Equipos", sub: "Escuderías y pilotos", roles: ROLES_CON_SESION, panelActual: pestana("equipos"), pantalla: lazy(() => import("../pantallas/Equipos").then(m => ({ default: m.Equipos }))) },
-  tv: { ruta: "tv", titulo: "TV", sub: "Vídeos y directo", roles: ROLES_CON_SESION, panelActual: pestana("tv"), pantalla: lazy(() => import("../../components/FomLive").then(m => ({ default: m.FomLive }))) },
+  tv: { ruta: "tv", titulo: "TV", sub: "Vídeos y directo", roles: ROLES_CON_SESION, panelActual: pestana("tv") },
   perfil: { ruta: "perfil", titulo: "Perfil", sub: "Tu cuenta", roles: ROLES_CON_SESION, panelActual: pestana("profile"), pantalla: lazy(() => import("../pantallas/Perfil").then(m => ({ default: m.Perfil }))) },
   buzon: { ruta: "buzon", titulo: "Buzón", sub: "Propuestas", roles: ROLES_CON_SESION, panelActual: pestana("suggestions"), pantalla: lazy(() => import("../pantallas/Buzon").then(m => ({ default: m.Buzon }))) },
   // Mismos roles que la ruta actual /piloto.
@@ -88,19 +88,6 @@ export const CLAVES_ADMIN: ClaveSeccion[] = [
 
 export function rutaDe(clave: ClaveSeccion, query = ""): string {
   return `${PREFIJO}/${SECCIONES[clave].ruta}${query}`;
-}
-
-/** Conserva enlaces compartidos del prototipo sin ejecutar sus acciones simuladas. */
-export function destinoEntrada(search: string, hash: string): string {
-  const [rutaHash, queryHash] = hash.replace(/^#/, "").split("?");
-  const ruta = rutaHash === "login" || rutaHash === "registro" ? "entrar" : rutaHash;
-  const clave = (Object.keys(SECCIONES) as ClaveSeccion[]).find(k =>
-    SECCIONES[k].ruta === ruta || SECCIONES[k].ruta.replace(/\//g, "-") === ruta);
-  if (!clave) return rutaDe("portada", search);
-  const params = new URLSearchParams(search);
-  for (const [key, value] of new URLSearchParams(queryHash)) params.set(key, value);
-  const query = params.toString();
-  return rutaDe(clave, query ? `?${query}` : "");
 }
 
 export interface EnlaceMenu {
