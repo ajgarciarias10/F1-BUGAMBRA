@@ -10,7 +10,7 @@
  *
  * El ticket 26 quitará el prefijo `/nueva` y los marcadores de posición.
  */
-import type { ComponentType } from "react";
+import { lazy, type ComponentType } from "react";
 
 /** Rol tal y como llega en `userData.rol`; `null` es una visita sin sesión. */
 export type RolApp = "admin" | "jeque" | "director_deportivo" | "piloto" | "usuario" | "invitado" | null;
@@ -50,21 +50,21 @@ const SOLO_ADMIN = ["admin"] as const;
 
 const DEFINICION = {
   // ── Públicas ──
-  portada: { ruta: "portada", titulo: "Portada", sub: "Clasificación", roles: null, panelActual: fija("/") },
-  entrar: { ruta: "entrar", titulo: "Entrar", sub: "Iniciar sesión", roles: null, panelActual: fija("/login") },
-  instalar: { ruta: "instalar", titulo: "Instalar", sub: "Móvil y PC", roles: null, panelActual: fija("/instalar") },
+  portada: { ruta: "portada", titulo: "Portada", sub: "Clasificación", roles: null, panelActual: fija("/"), pantalla: lazy(() => import("../pantallas/Portada").then(m => ({ default: m.Portada }))) },
+  entrar: { ruta: "entrar", titulo: "Entrar", sub: "Iniciar sesión", roles: null, panelActual: fija("/login"), pantalla: lazy(() => import("../pantallas/Acceso").then(m => ({ default: m.Acceso }))) },
+  instalar: { ruta: "instalar", titulo: "Instalar", sub: "Móvil y PC", roles: null, panelActual: fija("/instalar"), pantalla: lazy(() => import("../pantallas/Instalar").then(m => ({ default: m.Instalar }))) },
 
   // ── Con sesión ──
-  inicio: { ruta: "inicio", titulo: "Inicio", sub: "Panel de la liga", roles: ROLES_CON_SESION, panelActual: pestana("inicio") },
-  campeonato: { ruta: "campeonato", titulo: "Campeonato", sub: "Clasificación y pilotos", roles: ROLES_CON_SESION, panelActual: pestana("championship") },
-  carreras: { ruta: "carreras", titulo: "Carreras", sub: "Actas y FIA", roles: ROLES_CON_SESION, panelActual: pestana("resultados") },
+  inicio: { ruta: "inicio", titulo: "Inicio", sub: "Panel de la liga", roles: ROLES_CON_SESION, panelActual: pestana("inicio"), pantalla: lazy(() => import("../pantallas/Inicio").then(m => ({ default: m.Inicio }))) },
+  campeonato: { ruta: "campeonato", titulo: "Campeonato", sub: "Clasificación y pilotos", roles: ROLES_CON_SESION, panelActual: pestana("championship"), pantalla: lazy(() => import("../pantallas/Campeonato").then(m => ({ default: m.Campeonato }))) },
+  carreras: { ruta: "carreras", titulo: "Carreras", sub: "Actas y FIA", roles: ROLES_CON_SESION, panelActual: pestana("resultados"), pantalla: lazy(() => import("../pantallas/Carreras").then(m => ({ default: m.Carreras }))) },
   mercado: { ruta: "mercado", titulo: "Mercado", sub: "Fichajes", roles: ROLES_CON_SESION, panelActual: pestana("market") },
-  equipos: { ruta: "equipos", titulo: "Equipos", sub: "Escuderías y pilotos", roles: ROLES_CON_SESION, panelActual: pestana("equipos") },
+  equipos: { ruta: "equipos", titulo: "Equipos", sub: "Escuderías y pilotos", roles: ROLES_CON_SESION, panelActual: pestana("equipos"), pantalla: lazy(() => import("../pantallas/Equipos").then(m => ({ default: m.Equipos }))) },
   tv: { ruta: "tv", titulo: "TV", sub: "Vídeos y directo", roles: ROLES_CON_SESION, panelActual: pestana("tv") },
-  perfil: { ruta: "perfil", titulo: "Perfil", sub: "Tu cuenta", roles: ROLES_CON_SESION, panelActual: pestana("profile") },
-  buzon: { ruta: "buzon", titulo: "Buzón", sub: "Propuestas", roles: ROLES_CON_SESION, panelActual: pestana("suggestions") },
+  perfil: { ruta: "perfil", titulo: "Perfil", sub: "Tu cuenta", roles: ROLES_CON_SESION, panelActual: pestana("profile"), pantalla: lazy(() => import("../pantallas/Perfil").then(m => ({ default: m.Perfil }))) },
+  buzon: { ruta: "buzon", titulo: "Buzón", sub: "Propuestas", roles: ROLES_CON_SESION, panelActual: pestana("suggestions"), pantalla: lazy(() => import("../pantallas/Buzon").then(m => ({ default: m.Buzon }))) },
   // Mismos roles que la ruta actual /piloto.
-  miPiloto: { ruta: "mi-piloto", titulo: "Mi piloto", sub: "Ficha y carrera", roles: ["piloto", "admin"], panelActual: fija("/piloto?tab=inicio") },
+  miPiloto: { ruta: "mi-piloto", titulo: "Mi piloto", sub: "Ficha y carrera", roles: ["piloto", "admin"], panelActual: fija("/piloto?tab=inicio"), pantalla: lazy(() => import("../pantallas/MiPiloto").then(m => ({ default: m.MiPiloto }))) },
   miEscuderia: { ruta: "escuderia", titulo: "Mi escudería", sub: "Saldo y plantilla", roles: ["jeque", "director_deportivo"], panelActual: pestana("escuderia") },
 
   // ── Administración (el panel actual no lee ?tab, se abre en su primera pestaña) ──
