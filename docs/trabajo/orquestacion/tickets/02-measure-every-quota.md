@@ -1,6 +1,6 @@
 # 02. TypeSafe measures every quota group
 
-- **Branch from:** CleverTracker `origin/main` (the code lives in `~/projects/CleverTracker`; this repo only keeps the ticket, as part of the orchestration we adopted from CleverTracker, see `docs/agents/orquestacion.md`)
+- **Branch from:** CleverTracker `origin/docs/seguimientos-ola-4` (its `origin/main` is from 2026-09-19 and has no `tool/`; the TypeSafe that runs is `e5de36c`, contained in that branch) (the code lives in `~/projects/CleverTracker`; this repo only keeps the ticket, as part of the orchestration we adopted from CleverTracker, see `docs/agents/orquestacion.md`)
 - **Work branch:** CleverTracker `fix/tiposafe-todas-las-cuotas`, in its own worktree (CleverTracker's main checkout is on a detached HEAD that is not ours)
 - **Owned files:** CleverTracker `tool/servicio_tiposafe.py`, `tool/test_servicio_tiposafe.py`, `tool/cuota_de_cada_agente.py`, `tool/test_cuota_de_cada_agente.py`
 - **Do not touch:** anything else in CleverTracker (its `AGENTS.md` rules apply there), anything in this repo, `~/.gemini/**`, Orca's configuration

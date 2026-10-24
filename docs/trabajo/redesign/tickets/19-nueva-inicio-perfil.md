@@ -2,10 +2,10 @@
 
 - **Branch from:** `feature/rediseno-app` (after tickets 13, 14 and 15 are merged)
 - **Work branch:** `feature/nueva-inicio`
-- **Owned files:** `apps/web/src/nueva/pantallas/Inicio.tsx`, `apps/web/src/nueva/pantallas/Inicio.test.ts`, `apps/web/src/nueva/pantallas/Perfil.tsx`, `apps/web/src/nueva/pantallas/Perfil.test.ts`, `apps/web/src/nueva/pantallas/Buzon.tsx`, `apps/web/src/nueva/pantallas/Buzon.test.ts`, `apps/web/src/nueva/pantallas/Acceso.tsx`, `apps/web/src/nueva/pantallas/Acceso.test.ts`, `apps/web/src/nueva/pantallas/Instalar.tsx`, `apps/web/src/nueva/pantallas/Instalar.test.ts`
+- **Owned files:** `apps/web/src/nueva/pantallas/Inicio.tsx`, `apps/web/src/nueva/pantallas/Inicio.test.ts`, `apps/web/src/nueva/pantallas/Perfil.tsx`, `apps/web/src/nueva/pantallas/Perfil.test.ts`, `apps/web/src/nueva/pantallas/Buzon.tsx`, `apps/web/src/nueva/pantallas/Buzon.test.ts`, `apps/web/src/nueva/pantallas/Acceso.tsx`, `apps/web/src/nueva/pantallas/Acceso.test.ts`, `apps/web/src/nueva/pantallas/Instalar.tsx`, `apps/web/src/nueva/pantallas/Instalar.test.ts`, `apps/web/src/services/perfilService.ts`, `apps/web/src/services/perfilService.test.ts`, `apps/web/src/services/sugerenciasService.ts`, `apps/web/src/services/sugerenciasService.test.ts`
 - **Do not touch:** `apps/web/src/nueva/datos/**`, `apps/web/src/nueva/ui/**`, `apps/web/src/nueva/shell/**` (ask the coordinator if you need a change there), services, utils, old components
 - **Agent and model:** Codex, mid-tier model, medium reasoning
-- **Done when:** each role's home matches the prototype (jeque and director: team and balance, never 0 for an unknown balance; pilot; user; commissioner: pending acts and unprocessed economy); profile, suggestions, login and install keep their current logic with the new look.
+- **Done when:** each role's home matches the prototype (jeque and director: team and balance, never 0 for an unknown balance; pilot; user; commissioner: pending acts and unprocessed economy); profile, suggestions, login and install keep their current logic with the new look. Coordinator, 2026-10-24: `ProfileView.tsx` and `SuggestionsView.tsx` write to Firestore directly and there is no service for those writes. Move each write the new screens need into `perfilService.ts` / `sugerenciasService.ts` with exactly the same document paths, fields and operations (`updateDoc`, `addDoc`, `arrayUnion`, `arrayRemove`, `deleteDoc`), no new fields; the new screens call them behind `useSingleFlight`. The old views stay untouched until ticket 26 retires them.
 
 ## Context
 
