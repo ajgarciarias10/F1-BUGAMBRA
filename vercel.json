@@ -51,6 +51,14 @@
   ],
   "rewrites": [
     {
+      "source": "/:panel(admin|jeque|piloto|usuario)",
+      "destination": "/panel.html"
+    },
+    {
+      "source": "/:panel(admin|jeque|piloto|usuario)/:resto*",
+      "destination": "/panel.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

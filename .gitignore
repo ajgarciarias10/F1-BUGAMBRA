@@ -10,3 +10,6 @@ coverage/
 
 # Copias descargadas del Excel de control
 workbooks/
+
+# Entrada generada desde el prototipo por tool/conectar-prototipo.mjs
+apps/web/index.html

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover: necesario para que env(safe-area-inset-*) funcione con notch -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>F1 Bugambra</title>
+    <meta name="description" content="Clasificación, equipos, mercado y señal en directo de la liga F1 Bugambra." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet" />
+
+    <!-- El handshake con Firestore (DNS + TLS) cuesta cientos de ms en móvil.
+         Abriéndolo ya, se solapa con la descarga y el parseo del JavaScript en
+         vez de empezar cuando el SDK hace su primera consulta. -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#f4f2ee" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="application-name" content="F1 Bugambra" />
+
+    <!-- iOS: sin soporte de manifest, necesita sus propias metas para instalarse -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Bugambra" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <!-- Tema antes del primer pintado: evita el destello claro/oscuro. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("bugambra-theme") || localStorage.getItem("f1-theme");
+          var d = document.documentElement;
+          if (t === "dark") { d.classList.add("dark"); d.style.colorScheme = "dark"; }
+          d.dataset.theme = t === "dark" ? "dark" : "light";
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m && t === "dark") m.setAttribute("content", "#0b0c10");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

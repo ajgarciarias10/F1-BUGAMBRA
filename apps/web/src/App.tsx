@@ -2,13 +2,11 @@ import React, { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DataProvider } from "./hooks/useData";
-import { PublicHome } from "./components/PublicHome";
-import { InstallApp, InstallBanner } from "./components/InstallApp";
+import { InstallBanner } from "./components/InstallApp";
 import { MarketLifecycleProvider } from "./components/MarketLifecycleProvider";
 import "./hooks/useTheme";
 import { SECCIONES, type ClaveSeccion } from "./nueva/shell/secciones";
 
-const LoginRegister = lazy(() => import("./components/LoginRegister").then(module => ({ default: module.LoginRegister })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then(module => ({ default: module.AdminDashboard })));
 const JequeDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.JequeDashboard })));
 const PilotoDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.PilotoDashboard })));
@@ -19,6 +17,15 @@ const SeccionNueva = lazy(() => import("./nueva/shell/SeccionNueva"));
 const IndiceNueva = lazy(() => import("./nueva/shell/SeccionNueva").then(module => ({ default: module.IndiceNueva })));
 
 const routeFallback = <div role="status" className="min-h-screen bg-bg flex items-center justify-center text-ink-muted text-xs tracking-[0.3em] uppercase font-mono">Cargando</div>;
+
+/**
+ * Esta app React solo sirve los paneles clásicos (panel.html). La portada, el acceso y la
+ * instalación son del diseño aprobado (index.html, rutas con #): se sale a él con recarga.
+ */
+function AlDiseno({ hash = "" }: { hash?: string }) {
+  useEffect(() => { window.location.replace(`/${hash}`); }, [hash]);
+  return routeFallback;
+}
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, userData, loading } = useAuth();
@@ -62,10 +69,9 @@ export default function App() {
         <ScrollToTop />
         <Suspense fallback={routeFallback}>
           <Routes>
-            <Route path="/login" element={<LoginRegister />} />
-            <Route path="/instalar" element={<InstallApp />} />
+            <Route path="/login" element={<AlDiseno hash="#login" />} />
+            <Route path="/instalar" element={<AlDiseno hash="#instalar" />} />
             <Route element={<DataRoutes />}>
-              <Route path="/" element={<PublicHome />} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
               <Route path="/jeque" element={<ProtectedRoute allowedRoles={["jeque"]}><JequeDashboard /></ProtectedRoute>} />
               <Route path="/piloto" element={<ProtectedRoute allowedRoles={["piloto", "admin"]}><PilotoDashboard /></ProtectedRoute>} />
@@ -75,7 +81,7 @@ export default function App() {
                 {(Object.keys(SECCIONES) as ClaveSeccion[]).map(nuevaSeccion)}
                 <Route path="*" element={<Navigate to="/nueva" replace />} />
               </Route>
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<AlDiseno />} />
             </Route>
           </Routes>
         </Suspense>

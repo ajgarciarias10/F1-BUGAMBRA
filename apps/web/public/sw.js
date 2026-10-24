@@ -2,16 +2,18 @@
  * Service worker de F1 Bugambra.
  *
  * Estrategia:
- *  - Navegaciones: se sirve el shell cacheado al instante y se revalida por
- *    detrás. Esperar al index.html por red antes de empezar a bajar el JS
- *    añadía medio segundo largo a cada apertura en móvil.
+ *  - Navegaciones a la app (/): se sirve el shell cacheado al instante y se
+ *    revalida por detrás. Esperar al index.html por red antes de empezar a
+ *    bajar el JS añadía medio segundo largo a cada apertura en móvil.
+ *  - Paneles clásicos (/admin, /jeque…): son otra página (panel.html), van a
+ *    red; sin conexión no hay shell que valga para ellos.
  *  - /assets/* (hash en el nombre): caché primero, son inmutables.
  *  - Iconos y manifest: caché con revalidación en segundo plano.
  *  - Firestore, Auth, Storage y cualquier API: nunca se tocan, van siempre a red.
  *
  * Sube SW_VERSION al cambiar este archivo para forzar la limpieza de cachés viejas.
  */
-const SW_VERSION = "v2";
+const SW_VERSION = "v3";
 const SHELL_CACHE = `bugambra-shell-${SW_VERSION}`;
 const ASSET_CACHE = `bugambra-assets-${SW_VERSION}`;
 const CURRENT_CACHES = [SHELL_CACHE, ASSET_CACHE];
@@ -115,7 +117,7 @@ self.addEventListener("fetch", (event) => {
   if (isNeverCached(url)) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(shellFirstNavigation(request));
+    if (url.origin === self.location.origin && url.pathname === "/") event.respondWith(shellFirstNavigation(request));
     return;
   }
 

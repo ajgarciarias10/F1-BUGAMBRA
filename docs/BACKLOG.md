@@ -13,6 +13,8 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
   - 16-19 launched 2026-10-23 with Antigravity and stopped minutes later with no changes (Antigravity quota is the scarcest); worktrees `~/projects/F1-nueva-{campeonato,equipos,carreras,inicio}` ready; relaunch when Claude (17:50 UTC) or Codex (18:31 UTC) is back, asking TypeSafe again
 - [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
 - [ ] 26 Switch every route and retire the old screens
+- [ ] The approved prototype is the app (`docs/trabajo/conexion-real/tickets/03-prototipo-con-sesion-real.md`): phase 1 done (real Google/email sign-in, real role and identity, no simulation bar; classic React panels at /admin, /jeque, /piloto, /usuario). Phase 2: wire each action still marked «prototipo: no se guarda» to the audited services, and the sample ledger
+- [ ] Rename Split 3 GP 16 (`splits/split_3/circuitos/espana`) to «Imola» from Programar carrera (owner, live data); the design shows it as Italia · Imola
 - [x] 27 Save each team's balance after every processed race (in the preview)
 - [ ] Live pill bug (production too): `PublicHome.tsx` treats decapi's «tonicotitular is offline» as live because it only checks the exact text «offline» (found in ticket 15; the new shell is not affected)
 - [ ] `apps/api` typecheck fails on the base (`auth.ts:25` TS2769, `domain/race-winner-image.ts:49,52` TS18048), found in ticket 27
@@ -22,7 +24,6 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes or retire it
 - [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
 - [ ] Assign Antonio Ceferi as Alfa Romero's sporting director in Equipos y usuarios (owner, live data)
-- [ ] Rename Split 3 GP 16 from España to Italia (Imola) with the circuit-name field (owner, live data)
 
 ## Economy and data (rules in `AGENTS.md`)
 

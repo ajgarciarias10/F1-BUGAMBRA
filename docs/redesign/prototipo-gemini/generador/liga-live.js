@@ -14,7 +14,7 @@
     'Mónaco': ['Mónaco', 'Montecarlo'], 'Barcelona': ['España', 'Barcelona'], 'España': ['España', 'Barcelona'],
     'Austria': ['Austria', 'Red Bull Ring'], 'Gran Bretaña': ['Gran Bretaña', 'Silverstone'], 'Bélgica': ['Bélgica', 'Spa-Francorchamps'],
     'Hungría': ['Hungría', 'Hungaroring'], 'Países Bajos': ['Países Bajos', 'Zandvoort'], 'Italia': ['Italia', 'Monza'],
-    'Imola': ['Emilia-Romaña', 'Imola'], 'Emilia-Romaña': ['Emilia-Romaña', 'Imola'],
+    'Imola': ['Italia', 'Imola'], 'IMOLA': ['Italia', 'Imola'], 'Emilia-Romaña': ['Emilia-Romaña', 'Imola'],
     'Azerbayán': ['Azerbaiyán', 'Bakú'], 'Azerbaiyán': ['Azerbaiyán', 'Bakú'], 'Singapur': ['Singapur', 'Marina Bay']
   };
 

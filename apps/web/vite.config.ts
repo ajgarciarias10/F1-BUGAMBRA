@@ -19,6 +19,12 @@ export default defineConfig(() => {
       // solo invalide el trozo de la app, en vez de obligar a cada móvil a
       // volver a bajarse 1 MB. Además el navegador los descarga en paralelo.
       rollupOptions: {
+        // index.html: el diseño aprobado (prototipo) con sesión real; panel.html: los paneles
+        // clásicos de React (/admin, /jeque, /piloto, /usuario) mientras sus acciones no estén en él.
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          panel: path.resolve(__dirname, 'panel.html'),
+        },
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return;
