@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SECCIONES, barraInferior, enlaceActivo, inicioDe, menuPorRol, panelDeRol, type Cuenta, type RolApp } from "./secciones.ts";
+import { SECCIONES, barraInferior, destinoEntrada, enlaceActivo, inicioDe, menuPorRol, panelDeRol, type Cuenta, type RolApp } from "./secciones.ts";
 
 const cuenta = (rol: RolApp, extra: Partial<Cuenta> = {}): Cuenta => ({ rol, tienePiloto: false, conSesion: rol !== null, ...extra });
 const etiquetas = (c: Cuenta) => menuPorRol(c).principal.map(e => e.etiqueta);
 const adminEtiquetas = (c: Cuenta) => menuPorRol(c).admin.map(e => e.etiqueta);
+
+test("la entrada conserva pestañas y migra los enlaces del prototipo a pantallas reales", () => {
+  assert.equal(destinoEntrada("", ""), "/nueva/portada");
+  assert.equal(destinoEntrada("?tab=resultados", ""), "/nueva/portada?tab=resultados");
+  assert.equal(destinoEntrada("", "#portada?tab=tv"), "/nueva/portada?tab=tv");
+  assert.equal(destinoEntrada("", "#login"), "/nueva/entrar");
+  assert.equal(destinoEntrada("", "#campeonato"), "/nueva/campeonato");
+  assert.equal(destinoEntrada("", "#mi-piloto"), "/nueva/mi-piloto");
+  assert.equal(destinoEntrada("", "#admin-economia"), "/nueva/admin/economia");
+  assert.equal(destinoEntrada("?tab=equipos", "#desconocido"), "/nueva/portada?tab=equipos");
+  assert.equal(destinoEntrada("", "#https://example.com"), "/nueva/portada");
+});
 
 test("visita: portada con pestañas, entrar e instalar", () => {
   assert.deepEqual(etiquetas(cuenta(null)), ["Clasificación", "Equipos", "Resultados", "TV", "Entrar", "Instalar"]);

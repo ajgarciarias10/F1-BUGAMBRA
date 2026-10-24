@@ -16,10 +16,6 @@ import { Evolucion, type SerieGrafico } from "../ui/Evolucion";
 import { TarjetaPiloto, type AparienciaEquipo } from "../ui/TarjetaPiloto";
 import { TemporadasRail, type GrupoTemporadas, type OpcionTemporada } from "../ui/TemporadasRail";
 
-// Las hojas de la app nueva las carga `ui/index`; aquí se piden en el navegador para poder probar
-// el modelo en Node sin cargar CSS.
-if (typeof window !== "undefined") void import("../ui/nueva.css");
-
 export const ID_HISTORICO = "historico";
 
 // ─── MODELO (puro, con pruebas) ──────────────────────────────────────────────
@@ -572,7 +568,8 @@ function CartasYComparador({ liga, t }: { liga: Liga; t: Temporada }) {
       </div>)}</div>
     </section>
     <section aria-labelledby="duelo-titulo">
-      <h2 id="duelo-titulo" className={TITULO}>Cara a cara</h2>
+      <h2 id="duelo-titulo" className={TITULO}>Comparador · {t.nombre}</h2>
+      <p className={SUB}>{t.tipo === "agregada" ? "Estadísticas de la temporada completa, sumando sus splits." : `Estadísticas solo de ${t.nombre}.`}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <label className="flex flex-col gap-1 text-xs font-bold uppercase text-ink-muted">Piloto A
           <select className={SELECT} value={idA ?? ""} onChange={e => setA(e.target.value)}>{todos.map(p => <option key={p.pilotoId} value={p.pilotoId}>{p.nombre}</option>)}</select></label>
@@ -615,10 +612,11 @@ export function Campeonato() {
     <header><span className="nui-eyebrow">Campeonato</span><h1 className="text-3xl font-bold uppercase tracking-tight">Clasificación y pilotos</h1></header>
     <ControlSegmentado<Vista> etiqueta="Secciones del campeonato" valor={vistaEfectiva} onCambiar={setVista} opciones={[
       { valor: "clasificacion", etiqueta: "Clasificación" },
-      { valor: "pilotos", etiqueta: "Cartas y cara a cara", deshabilitada: !t },
+      { valor: "pilotos", etiqueta: "Cartas y comparador", deshabilitada: !t },
     ]} />
     {vistaEfectiva === "pilotos" && t
       ? <>
+        <p className={SUB}>Compara pilotos en una temporada completa o en uno de sus splits.</p>
         <TemporadasRail grupos={gruposTemporadas(liga)} seleccion={temporadaId} onSeleccionar={setTemporadaId} />
         <CartasYComparador liga={liga} t={t} />
       </>

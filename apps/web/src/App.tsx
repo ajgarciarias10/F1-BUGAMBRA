@@ -3,22 +3,27 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "rea
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DataProvider } from "./hooks/useData";
 import { PublicHome } from "./components/PublicHome";
-import { InstallApp, InstallBanner } from "./components/InstallApp";
+import { InstallBanner } from "./components/InstallApp";
 import { MarketLifecycleProvider } from "./components/MarketLifecycleProvider";
 import "./hooks/useTheme";
-import { SECCIONES, type ClaveSeccion } from "./nueva/shell/secciones";
+import "./nueva/ui/nueva.css";
+import { SECCIONES, destinoEntrada, rutaDe, type ClaveSeccion } from "./nueva/shell/secciones";
 
-const LoginRegister = lazy(() => import("./components/LoginRegister").then(module => ({ default: module.LoginRegister })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then(module => ({ default: module.AdminDashboard })));
 const JequeDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.JequeDashboard })));
 const PilotoDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.PilotoDashboard })));
 const UsuarioDashboard = lazy(() => import("./components/Dashboards").then(module => ({ default: module.UsuarioDashboard })));
-// App nueva (ADR 0004), en /nueva mientras se construye; el ticket 26 la pasa a la raíz.
+// Entrada del rediseño conectado (ADR 0004). Los paneles pendientes conservan sus rutas.
 const NuevaShell = lazy(() => import("./nueva/shell/AppShell"));
 const SeccionNueva = lazy(() => import("./nueva/shell/SeccionNueva"));
 const IndiceNueva = lazy(() => import("./nueva/shell/SeccionNueva").then(module => ({ default: module.IndiceNueva })));
 
 const routeFallback = <div role="status" className="min-h-screen bg-bg flex items-center justify-center text-ink-muted text-xs tracking-[0.3em] uppercase font-mono">Cargando</div>;
+
+function Entrada() {
+  const { search, hash } = useLocation();
+  return <Navigate to={destinoEntrada(search, hash)} replace />;
+}
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, userData, loading } = useAuth();
@@ -62,10 +67,11 @@ export default function App() {
         <ScrollToTop />
         <Suspense fallback={routeFallback}>
           <Routes>
-            <Route path="/login" element={<LoginRegister />} />
-            <Route path="/instalar" element={<InstallApp />} />
+            <Route path="/login" element={<Navigate to={rutaDe("entrar")} replace />} />
+            <Route path="/instalar" element={<Navigate to={rutaDe("instalar")} replace />} />
             <Route element={<DataRoutes />}>
-              <Route path="/" element={<PublicHome />} />
+              <Route path="/" element={<Entrada />} />
+              <Route path="/clasica" element={<PublicHome />} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
               <Route path="/jeque" element={<ProtectedRoute allowedRoles={["jeque"]}><JequeDashboard /></ProtectedRoute>} />
               <Route path="/piloto" element={<ProtectedRoute allowedRoles={["piloto", "admin"]}><PilotoDashboard /></ProtectedRoute>} />

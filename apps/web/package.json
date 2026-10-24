@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "start": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build && cp ../../docs/redesign/prototipo-gemini/index.html dist/index.html",
+    "build": "vite build && node ../../tool/web-entry.test.mjs",
     "preview": "vite preview --host=0.0.0.0 --port=3000",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/services/*.test.ts src/utils/*.test.ts src/hooks/*.test.ts src/nueva/**/*.test.ts",
