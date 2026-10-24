@@ -28,3 +28,8 @@ test("los paneles clásicos siguen publicados como app React", () => {
   assert.ok(html.includes('<div id="root"></div>'));
   assert.ok(moduloExiste(html), "Falta el módulo de los paneles");
 });
+
+test("un vídeo de Bugambra TV carga ese vídeo, no el canal (que sin directo sale «offline»)", () => {
+  const html = leer("index.html");
+  assert.match(html, /: item\.directo\s*\?\s*`https:\/\/player\.twitch\.tv\/\?channel=/, "El reproductor usa el canal para vídeos que no son directos");
+});

@@ -309,7 +309,7 @@
         <section class="section-card tv-directo is-live" style="margin-bottom:var(--sp-4);">
           <span class="badge-pill badge-split">En directo · ${d.espectadores} viendo</span>
           <h2 class="section-title">${d.titulo}</h2>
-          ${reproductorTwitch({ canal: d.canal, titulo: d.titulo })}
+          ${reproductorTwitch({ canal: d.canal, titulo: d.titulo, directo: true })}
         </section>`;
     }
 

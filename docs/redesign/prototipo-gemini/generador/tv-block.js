@@ -25,10 +25,10 @@
       const padre = padreTwitch();
       const src = item.slug
         ? `https://clips.twitch.tv/embed?clip=${item.slug}&parent=${padre}&autoplay=true`
-        : item.canal
+        : item.directo
           ? `https://player.twitch.tv/?channel=${item.canal}&parent=${padre}&autoplay=true`
           : `https://player.twitch.tv/?video=v${item.id}&parent=${padre}&autoplay=true`;
-      const enlace = item.slug ? `https://clips.twitch.tv/${item.slug}` : item.canal ? `https://www.twitch.tv/${item.canal}` : `https://www.twitch.tv/videos/${item.id}`;
+      const enlace = item.slug ? `https://clips.twitch.tv/${item.slug}` : item.directo ? `https://www.twitch.tv/${item.canal}` : `https://www.twitch.tv/videos/${item.id}`;
       return padre
         ? `<div class="tv-player"><iframe src="${src}" title="${item.titulo || 'Directo'}" allowfullscreen loading="lazy"></iframe></div>`
         : `<p class="evo-nota">Abre el prototipo desde su enlace para ver el vídeo aquí, o <a href="${enlace}" target="_blank" rel="noopener">míralo en Twitch</a>.</p>`;
@@ -130,7 +130,7 @@
             ${directo ? `
               <span class="badge-pill badge-split">En directo · ${directo.espectadores} viendo</span>
               <h3>${directo.titulo}</h3>
-              ${abierto === 'directo' ? reproductorTwitch({ canal: TWITCH.canal, titulo: directo.titulo })
+              ${abierto === 'directo' ? reproductorTwitch({ canal: TWITCH.canal, titulo: directo.titulo, directo: true })
                 : '<button type="button" class="btn btn-primary" onclick="abrirVideoTv(\'directo\')">Ver el directo</button>'}
             ` : `
               <span class="badge-pill">Directo apagado</span>
