@@ -18,6 +18,7 @@ import { guardarPerfil, perfilGoogleExistente, provisionProfile } from "../servi
 import { escucharSugerencias } from "../services/sugerenciasService";
 import { authFeedback } from "../utils/authFeedback";
 import { registerServiceWorker } from "../pwa/registerServiceWorker";
+import { getYoutubeEmbedUrl, getYoutubeThumbnailUrl } from "../utils/youtube";
 import { sesionDesdePerfil, type SesionPrototipo } from "./perfil";
 
 /** Resultado de una acción de acceso, para que el prototipo enseñe el aviso. */
@@ -162,6 +163,7 @@ const bugambraAcciones = {
   usuarios: accion("usuarios"),
   guardarUsuario: accion("guardarUsuario"),
   logo: accion("logo"),
+  programar: accion("programar"),
   proponer: (p: { categoria: string; titulo: string }) => unaVez(async () => {
     if (!actual) return { ok: false, mensaje: "Entra con tu cuenta para enviar propuestas." };
     const { proponer } = await import("./acciones");
@@ -172,6 +174,7 @@ const bugambraAcciones = {
 declare global {
   interface Window {
     bugambraAcciones: typeof bugambraAcciones;
+    bugambraYoutube: { embed: typeof getYoutubeEmbedUrl; miniatura: typeof getYoutubeThumbnailUrl };
     bugambraSesion: {
       entrarConGoogle: typeof entrarConGoogle;
       entrarConCorreo: typeof entrarConCorreo;
@@ -185,6 +188,8 @@ declare global {
 
 window.bugambraSesion = { entrarConGoogle, entrarConCorreo, registrar, recuperar, salir, guardarAlias };
 window.bugambraAcciones = bugambraAcciones;
+// Para enseñar el vídeo de la vuelta rápida con las mismas reglas que lo validan al guardarlo.
+window.bugambraYoutube = { embed: getYoutubeEmbedUrl, miniatura: getYoutubeThumbnailUrl };
 
 /** El buzón real (colección `mejoras`) para quien tiene sesión, con el evento `bugambra:propuestas`. */
 let dejarBuzon: (() => void) | null = null;

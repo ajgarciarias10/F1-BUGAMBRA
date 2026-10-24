@@ -287,3 +287,70 @@
       });
     };
 
+    // ── Directo: cuando la liga (o Fabi) emite, el vídeo sale arriba del inicio y de la portada ──
+    function directoActivo() {
+      if (TWITCH.enDirecto) return { canal: TWITCH.canal, ...TWITCH.enDirecto };
+      const otro = (TWITCH.canales || []).find(c => c.enDirecto);
+      return otro ? { canal: otro.login, ...otro.enDirecto } : null;
+    }
+
+    function bloqueDirecto() {
+      const d = directoActivo();
+      if (!d) return '';
+      return `
+        <section class="section-card tv-directo is-live" style="margin-bottom:var(--sp-4);">
+          <span class="badge-pill badge-split">En directo · ${d.espectadores} viendo</span>
+          <h2 class="section-title">${d.titulo}</h2>
+          ${reproductorTwitch({ canal: d.canal, titulo: d.titulo })}
+        </section>`;
+    }
+
+    // Twitch se consulta cada minuto: al empezar o acabar la emisión la página cambia sola.
+    setInterval(() => {
+      if (document.hidden || !window.cargarTwitch) return;
+      const antes = (directoActivo() || {}).canal;
+      cargarTwitch(fetch).then(t => {
+        Object.assign(TWITCH, t);
+        state.ui.tvStreamActive = !!t.enDirecto;
+        if ((directoActivo() || {}).canal !== antes) { updateHeaderAndDrawer(); renderApp(); }
+      }).catch(() => {});
+    }, 60000);
+
+    // ── Programación del GP (fecha, hora y vídeo de la vuelta rápida) ──
+    const atributo = (v) => String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    const gpDeTemporada = (orden) => temporadaActual().gps.find(g => g.n === Number(orden)) || {};
+
+    function renderProgramacionAdmin(orden) {
+      const g = gpDeTemporada(orden);
+      return `
+        <form class="clean-table-panel" onsubmit="event.preventDefault(); programarCarreraAdmin(${orden});" style="display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:end;margin-bottom:var(--sp-4);">
+          <h2 class="section-title" style="width:100%;">Programación · GP ${orden} (${g.pais || ''} · ${g.circuito || ''})</h2>
+          <div class="form-field"><label for="progFecha">Fecha</label><input id="progFecha" class="form-input" type="date" value="${atributo(g.fecha)}"></div>
+          <div class="form-field"><label for="progHora">Hora</label><input id="progHora" class="form-input" type="time" value="${atributo(g.hora)}"></div>
+          <div class="form-field" style="flex:1;min-width:260px;"><label for="progHotlap">Vídeo de la vuelta rápida (YouTube)</label><input id="progHotlap" class="form-input" type="url" placeholder="https://youtu.be/…" value="${atributo(g.hotlap)}"></div>
+          <button type="submit" class="btn btn-primary">Guardar programación</button>
+        </form>`;
+    }
+
+    window.programarCarreraAdmin = function(orden) {
+      const valor = (id) => document.getElementById(id).value.trim();
+      bugambraAccion(() => bugambraAcciones.programar({ splitId: temporadaActual().id, n: Number(orden), fecha: valor('progFecha'), hora: valor('progHora'), hotlap: valor('progHotlap') }));
+    };
+
+    /** El vídeo de la vuelta rápida del GP: miniatura y, al pulsar, el reproductor. */
+    function renderVueltaRapida(orden) {
+      const url = gpDeTemporada(orden).hotlap;
+      const yt = window.bugambraYoutube;
+      if (!url || !yt || !yt.embed(url)) return '';
+      return `
+        <div class="clean-table-panel" style="margin-bottom:var(--sp-3);">
+          <h3 class="section-title" style="margin-bottom:var(--sp-2);">Vídeo de la vuelta rápida</h3>
+          ${state.ui.vueltaRapidaAbierta === Number(orden)
+            ? `<div class="tv-player"><iframe src="${atributo(yt.embed(url))}&autoplay=1" title="Vuelta rápida · GP ${orden}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
+            : `<button type="button" class="btn btn-secondary" style="display:flex;flex-direction:column;gap:var(--sp-2);width:100%;padding:var(--sp-2);" onclick="state.ui.vueltaRapidaAbierta=${Number(orden)};renderApp();">
+                <img src="${atributo(yt.miniatura(url))}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:var(--radius-sm);">
+                <span>▶ Ver la vuelta rápida</span>
+              </button>`}
+        </div>`;
+    }
+

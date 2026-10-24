@@ -208,7 +208,7 @@ cambiar(`onsubmit="event.preventDefault();showToast('Prototipo: el alta no se gu
 cambiar(`onclick="showToast('En la web real, aquí se fija el presupuesto inicial.')"`, `onclick="bugambraPendiente('Fijar el presupuesto inicial')"`);
 cambiar(`onclick="showToast('En la web real, aquí se descarga el boletín FIA en PDF.')"`, `onclick="bugambraPendiente('Descargar el boletín FIA en PDF')"`);
 // Acta y FIA: el estado del acta y las decisiones salen de Firestore; se puede guardar sin cerrar.
-cambiar("disputada: !!c.completado, res };", "disputada: !!c.completado, actaCerrada: !!c.acta_cerrada, fia: (c.decisiones_fia || []).map(d => ({ piloto: d.pilotoId ? slug(d.pilotoId) : null, motivo: d.motivo, efecto: d.efecto_deportivo || d.tipo })), res };");
+cambiar("disputada: !!c.completado, res };", "disputada: !!c.completado, actaCerrada: !!c.acta_cerrada, hotlap: c.hotlap_url || null, fia: (c.decisiones_fia || []).map(d => ({ piloto: d.pilotoId ? slug(d.pilotoId) : null, motivo: d.motivo, efecto: d.efecto_deportivo || d.tipo })), res };");
 cambiar("actaEstado: disputada ? 'Acta cerrada por la FIA' :", "actaEstado: disputada ? (g.actaCerrada ? 'Acta cerrada' : 'Resultados guardados · acta abierta') :");
 cambiar(`          resultadosDetalle: detalle,
           decisionesFia: []`, `          resultadosDetalle: detalle,
@@ -216,6 +216,25 @@ cambiar(`          resultadosDetalle: detalle,
 cambiar("<strong>${d.piloto}</strong> · Multa: <strong>${d.multa}</strong>", "<strong>${d.piloto}</strong>${d.multa ? ` · Multa: <strong>${d.multa}</strong>` : ''}");
 cambiar(`<button type="button" class="btn btn-primary" onclick="confirmarCerrarActaAdmin(\${c.orden})">`, `<button type="button" class="btn btn-secondary" onclick="guardarActaAdmin(\${c.orden})">Guardar resultados sin cerrar</button>
               <button type="button" class="btn btn-primary" onclick="confirmarCerrarActaAdmin(\${c.orden})">`);
+// Directo en el inicio y la portada; programación y vuelta rápida del GP; cada vista abre el GP que toca.
+cambiar(`        <div class="kpi-grid">
+          <article class="kpi-card">
+            <span class="kpi-label">Próximo GP · \${etiquetaGp(ev)}</span>`, `        \${bloqueDirecto()}
+        <div class="kpi-grid">
+          <article class="kpi-card">
+            <span class="kpi-label">Próximo GP · \${etiquetaGp(ev)}</span>`);
+cambiar("main.innerHTML = `${renderHeroPortada()}${renderPortadaTabs()}${tabContent}`;", "main.innerHTML = `${renderHeroPortada()}${bloqueDirecto()}${renderPortadaTabs()}${tabContent}`;");
+cambiar("adminCarreraOrden: 14,", "adminCarreraOrden: null,");
+// El admin abre el GP activo (el próximo por disputar): el que se programa y, la noche de la carrera, el del acta.
+cambiar("if (ultima) { state.ui.selectedCarreraOrden = ultima.n; state.ui.adminCarreraOrden = ultima.n; }", "if (ultima) state.ui.selectedCarreraOrden = ultima.n;");
+cambiar("selectedCarreraOrden: 14,", "selectedCarreraOrden: null,");
+cambiar("const c = state.carreras.find(x => x.orden === Number(state.ui.adminCarreraOrden)) || state.carreras[2];", "const c = state.carreras.find(x => x.orden === Number(state.ui.adminCarreraOrden)) || state.carreras.find(x => x.estado === 'Próxima') || state.carreras[0];");
+cambiar("const cSel = state.carreras.find(c => c.orden === Number(state.ui.selectedCarreraOrden)) || state.carreras[2];", "const cSel = state.carreras.find(c => c.orden === Number(state.ui.selectedCarreraOrden)) || [...state.carreras].reverse().find(c => c.estado === 'Disputada') || state.carreras[0];");
+cambiar('<div style="margin-bottom:var(--sp-4);">${renderActaResultados(c.orden)}</div>', '${renderProgramacionAdmin(c.orden)}\n          <div style="margin-bottom:var(--sp-4);">${renderActaResultados(c.orden)}</div>');
+cambiar(`              <div class="clean-table-panel">
+                <h3 class="section-title" style="margin-bottom:var(--sp-2);">Decisiones FIA</h3>`, `              \${renderVueltaRapida(cSel.orden)}
+              <div class="clean-table-panel">
+                <h3 class="section-title" style="margin-bottom:var(--sp-2);">Decisiones FIA</h3>`);
 cambiar("    window.addEventListener('DOMContentLoaded', () => {", readFileSync(new URL("tool/prototipo-acciones.js", raiz), "utf8") + "    window.addEventListener('DOMContentLoaded', () => {");
 
 writeFileSync(salida, html);

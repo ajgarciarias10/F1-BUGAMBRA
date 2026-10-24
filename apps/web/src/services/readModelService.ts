@@ -6,6 +6,7 @@ import { collection, doc, getDocs, limit, orderBy, query, where } from "firebase
 import { db } from "./firebase";
 import { runAuditedAdminMutation } from "./adminMutationService";
 import { getYoutubeVideoId } from "../utils/youtube";
+import { mergeDoc } from "../utils/adminMutationPlans";
 import type { AvisoOficial, DecisionFia, Transaccion } from "../types";
 import { buildLedgerView, matchesTeamLedgerEntry, type LedgerView } from "./readModels";
 
@@ -44,6 +45,20 @@ export async function publishOfficialNotice(input: { id: string; titulo: string;
     apply: current => {
       if (current) throw new Error("Este aviso ya está publicado.");
       return { titulo, texto, publicado_por: input.actorUid, publicado_en: new Date().toISOString() };
+    },
+  });
+}
+
+/** Nombre, fecha, hora y número de una carrera, como los programa el admin. */
+export async function programarCarrera(splitId: string, circuitoId: string, p: { nombre: string; fecha: string; hora: string; numero_carrera: number }) {
+  await runAuditedAdminMutation({
+    ref: doc(db, `splits/${splitId}/circuitos`, circuitoId),
+    action: "race_schedule_update",
+    summary: `Programación de la carrera ${circuitoId}`,
+    apply: current => {
+      if (!current) throw new Error("La carrera no existe. No se aplicó ningún cambio.");
+      // El nombre se puede corregir; el identificador del documento no cambia, así no se pierden referencias.
+      return mergeDoc(current, p);
     },
   });
 }

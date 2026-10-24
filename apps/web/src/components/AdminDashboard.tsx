@@ -21,7 +21,7 @@ import { AdminUsersPanel } from "./AdminUsersPanel";
 import { AdminTeamManager } from "./AdminTeamManager";
 import { StatusBanner } from "./Feedback";
 import { canPilotParticipateInRace } from "../services/readModels";
-import { setFastestLapVideo } from "../services/readModelService";
+import { programarCarrera, setFastestLapVideo } from "../services/readModelService";
 import { runAuditedAdminMutation, runAuditedAdminBatch } from "../services/adminMutationService";
 import { mergeDoc, planActaCerrada, planBooleanFlag, planNameEdit, planPhotoEdit } from "../utils/adminMutationPlans";
 import { slug } from "../services/splitBuilder";
@@ -428,17 +428,7 @@ export function AdminDashboard() {
     setIsSavingSchedule(true);
     setMsg("");
     try {
-      const ref = doc(db, `splits/${selectedSplitId}/circuitos`, selectedCircuitoId);
-      await runAuditedAdminMutation({
-        ref,
-        action: "race_schedule_update",
-        summary: `Programación de la carrera ${selectedCircuitoId}`,
-        apply: current => {
-          if (!current) throw new Error("La carrera no existe. No se aplicó ningún cambio.");
-          // El nombre se puede corregir; el identificador del documento no cambia, así no se pierden referencias.
-          return mergeDoc(current, { nombre, fecha: fechaVal, hora: horaVal, numero_carrera: numeroCarrera });
-        },
-      });
+      await programarCarrera(selectedSplitId, selectedCircuitoId, { nombre, fecha: fechaVal, hora: horaVal, numero_carrera: numeroCarrera });
       // El vídeo se guarda por el servicio auditado (transacción + registro antes/después).
       const storedHotlap = splits.find(s => s.id === selectedSplitId)?.circuitos.find((c: any) => c.id === selectedCircuitoId)?.hotlap_url || "";
       if (hotlapUrl.trim() !== storedHotlap) {

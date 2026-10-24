@@ -9,7 +9,7 @@ import { db } from "../services/firebase";
 import { ajustarClausula, anularPacto, asegurarSplitSiguiente, deshacerAlta, guardarPacto, liberarPiloto } from "../services/transferService";
 import { ficharPiloto, procesarEconomiaCarrera } from "../services/economyService";
 import { processRace } from "../services/raceProcessor";
-import { registerFiaDecision } from "../services/readModelService";
+import { programarCarrera, registerFiaDecision, setFastestLapVideo } from "../services/readModelService";
 import { guardarLogoEquipo } from "../services/perfilService";
 import { asignarUsuario, listarUsuarios } from "../services/usuariosService";
 import { canPilotParticipateInRace } from "../services/readModels";
@@ -266,4 +266,16 @@ export async function logo(p: { splitId: string; equipo: string; url: string }):
   const equipo = await escuderiaFirestore(p.splitId, p.equipo);
   await guardarLogoEquipo(p.splitId, equipo.id, p.url.trim());
   return { ok: true, mensaje: p.url.trim() ? "Logo actualizado." : "Logo retirado." };
+}
+
+/** Fecha, hora y vídeo de la vuelta rápida de un GP, como «Programar carrera» del panel. */
+export async function programar(p: { splitId: string; n: number; fecha: string; hora: string; hotlap: string }): Promise<Resultado> {
+  if (p.hora && !/^\d{2}:\d{2}$/.test(p.hora)) return { ok: false, mensaje: "Escribe la hora como 22:30." };
+  const { circuito } = await circuitoPorNumero(p.splitId, p.n);
+  await programarCarrera(p.splitId, circuito.id, { nombre: circuito.nombre, fecha: p.fecha, hora: p.hora, numero_carrera: Number(circuito.numero_carrera) });
+  if ((circuito.hotlap_url || "") !== p.hotlap.trim()) {
+    try { await setFastestLapVideo(p.splitId, circuito.id, p.hotlap); }
+    catch (error: any) { return { ok: true, mensaje: `Programación guardada, pero el vídeo NO: ${error.message}` }; }
+  }
+  return { ok: true, mensaje: `GP ${p.n} programado.` };
 }
