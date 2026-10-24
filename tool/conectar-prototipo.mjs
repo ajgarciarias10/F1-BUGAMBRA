@@ -219,7 +219,7 @@ cambiar(`<button type="button" class="btn btn-primary" onclick="confirmarCerrarA
 // Directo en el inicio y la portada; programación y vuelta rápida del GP; cada vista abre el GP que toca.
 cambiar(`        <div class="kpi-grid">
           <article class="kpi-card">
-            <span class="kpi-label">Próximo GP · \${etiquetaGp(ev)}</span>`, `        \${bloqueDirecto()}
+            <span class="kpi-label">Próximo GP · \${etiquetaGp(ev)}</span>`, `        \${bloqueDirecto()}\${bloqueCarreraInicio()}
         <div class="kpi-grid">
           <article class="kpi-card">
             <span class="kpi-label">Próximo GP · \${etiquetaGp(ev)}</span>`);

@@ -346,21 +346,28 @@
       bugambraAccion(() => bugambraAcciones.programar({ splitId: temporadaActual().id, n: Number(orden), nombre: valor('progNombre'), fecha: valor('progFecha'), hora: valor('progHora'), hotlap: valor('progHotlap') }));
     };
 
-    /** El vídeo de la vuelta rápida del GP: miniatura y, al pulsar, el reproductor. */
-    function renderVueltaRapida(orden) {
+    /** El vídeo de la vuelta rápida del GP: miniatura con play y, al pulsar, el reproductor. */
+    function videoVueltaRapida(orden) {
       const url = gpDeTemporada(orden).hotlap;
       const yt = window.bugambraYoutube;
       if (!url || !yt || !yt.embed(url)) return '';
-      return `
+      return state.ui.vueltaRapidaAbierta === Number(orden)
+        ? `<div class="tv-player"><iframe src="${atributo(yt.embed(url))}&autoplay=1" title="Vuelta rápida · GP ${orden}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
+        : `<button type="button" aria-label="Ver la vuelta rápida del GP ${orden}" onclick="state.ui.vueltaRapidaAbierta=${Number(orden)};renderApp();"
+            style="position:relative;display:block;width:100%;aspect-ratio:16/9;border:0;padding:0;cursor:pointer;border-radius:var(--radius-md);background:#000 url('${atributo(yt.miniatura(url))}') center/cover no-repeat;">
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.25);border-radius:inherit;">
+              <span style="display:flex;align-items:center;gap:0.5rem;padding:0.75rem 1.25rem;border-radius:999px;background:var(--accent-f1);color:#fff;font-weight:700;">▶ Ver la vuelta rápida</span>
+            </span>
+          </button>`;
+    }
+
+    function renderVueltaRapida(orden) {
+      const video = videoVueltaRapida(orden);
+      return video ? `
         <div class="clean-table-panel" style="margin-bottom:var(--sp-3);">
           <h3 class="section-title" style="margin-bottom:var(--sp-2);">Vídeo de la vuelta rápida</h3>
-          ${state.ui.vueltaRapidaAbierta === Number(orden)
-            ? `<div class="tv-player"><iframe src="${atributo(yt.embed(url))}&autoplay=1" title="Vuelta rápida · GP ${orden}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
-            : `<button type="button" class="btn btn-secondary" style="display:flex;flex-direction:column;gap:var(--sp-2);width:100%;padding:var(--sp-2);" onclick="state.ui.vueltaRapidaAbierta=${Number(orden)};renderApp();">
-                <img src="${atributo(yt.miniatura(url))}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:var(--radius-sm);">
-                <span>▶ Ver la vuelta rápida</span>
-              </button>`}
-        </div>`;
+          ${video}
+        </div>` : '';
     }
 
     // ── Mi escudería: el libro de movimientos de verdad, y si cuadra con el saldo ──
@@ -464,4 +471,63 @@
         onConfirm: () => bugambraAccion(() => bugambraAcciones.presupuestoInicial({ splitId: t.id, equipo: eqId, importe: valorNumero('presIni') }))
       });
     };
+
+    // ── Inicio según el momento de la carrera: vuelta rápida antes, directo durante, resultado después ──
+    /**
+     * Con directo, solo el directo. Si el último GP ya tiene acta y el siguiente aún no tiene fecha y
+     * hora, su clasificación. Si no, la vuelta rápida de referencia del siguiente GP.
+     */
+    function bloqueCarreraInicio() {
+      if (directoActivo()) return '';
+      const t = temporadaActual();
+      const ultima = [...t.gps].reverse().find(g => g.disputada);
+      const proxima = t.gps.find(g => !g.disputada);
+      if (ultima && !(proxima && proxima.fecha && proxima.hora)) return resultadoInicio(ultima);
+      if (proxima) return vueltaRapidaInicio(proxima);
+      return '';
+    }
+
+    function vueltaRapidaInicio(g) {
+      const video = videoVueltaRapida(g.n);
+      if (!video) {
+        return state.ui.role === 'admin'
+          ? `<section class="section-card" style="margin-bottom:var(--sp-4);"><p style="color:var(--text-muted);">Aún no hay vuelta rápida de referencia del GP ${g.n} (${g.circuito}). <a href="#admin-carreras" style="font-weight:700;">Publícala en Carreras y actas →</a></p></section>`
+          : '';
+      }
+      return `
+        <section class="section-card" style="margin-bottom:var(--sp-4);">
+          <span class="eyebrow">Vuelta rápida de referencia · GP ${g.n}</span>
+          <h2 class="section-title" style="margin-bottom:var(--sp-3);">${g.pais} · ${g.circuito}</h2>
+          ${video}
+        </section>`;
+    }
+
+    function resultadoInicio(g) {
+      const c = state.carreras.find(x => x.orden === g.n);
+      if (!c) return '';
+      return `
+        <section class="section-card" style="margin-bottom:var(--sp-4);">
+          <div class="section-header">
+            <div>
+              <span class="eyebrow">Resultado · GP ${g.n}</span>
+              <h2 class="section-title">${g.pais} · ${g.circuito}</h2>
+            </div>
+            <a href="#carreras" class="btn btn-secondary" onclick="state.ui.selectedCarreraOrden=${g.n};">Ver el acta</a>
+          </div>
+          <div class="clean-table-panel">
+            <table class="standings-table">
+              <thead><tr><th>POS</th><th>PILOTO</th><th>ESCUDERÍA</th><th class="col-right">PTS</th></tr></thead>
+              <tbody>
+                ${c.resultadosDetalle.map(r => `
+                  <tr>
+                    <td>${r.estadoPos}</td>
+                    <td>${renderPilotTrigger(r.piloto)}</td>
+                    <td>${r.escuderia}</td>
+                    <td class="col-right"><strong>+${r.puntos}</strong></td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </section>`;
+    }
 
