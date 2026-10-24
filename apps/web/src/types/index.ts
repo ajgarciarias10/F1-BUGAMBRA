@@ -121,6 +121,8 @@ export interface Circuito {
   completado: boolean;
   acta_cerrada: boolean;
   economia_procesada: boolean;
+  /** Saldos en millones por escudería, leídos y guardados al liquidar el GP. Ausente en carreras antiguas o revertidas. */
+  economia_saldos?: Record<string, { antes: number; ingresos: number; despues: number }>;
   resultados: RaceResult[];
   /** uid del votante → pilotoId elegido. Un voto por cuenta de la liga, sin duplicados. */
   piloto_dia_votantes?: Record<string, string>;
@@ -174,7 +176,6 @@ export type LedgerSource =
   | "points" | "pole" | "fastestLap" | "participation" | "cleanTeam" | "rivalry"
   | "seasonPrize" | "transfer" | "priceAdjustment" | "manualAdjustment" | "other";
 
-export type VotingStatus = "open" | "closed" | "unavailable";
 
 // ─── RESULTADOS DE CARRERA ────────────────────────────────────────────────────
 

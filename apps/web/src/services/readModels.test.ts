@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildJequeHome, buildLedgerView, matchesTeamLedgerEntry, buildRaceReport, buildVotingArchive, fastestLapVideoOf, raceResultStatus } from "./readModels";
+import { buildJequeHome, buildLedgerView, matchesTeamLedgerEntry, buildRaceReport, fastestLapVideoOf, raceResultStatus } from "./readModels";
 import type { Circuito, PilotInRoster, Transaccion } from "../types";
 
 const tx = (o: Partial<Transaccion>): Transaccion => ({ equipo: "T", tipo: "ingreso_puntos", cantidad: 1, esIngreso: true, fecha: null, ...o });
@@ -53,21 +53,6 @@ test("fastest lap video is pending until a valid YouTube url exists", () => {
   const v = fastestLapVideoOf({ hotlap_url: "https://youtu.be/abc123" });
   assert.equal(v.status, "available");
   assert.match(v.embedUrl!, /embed\/abc123/);
-});
-
-test("voting archive: states, tally without uids, my vote, share url", () => {
-  const base = { nombre: "GP", acta_cerrada: true, economia_procesada: false, resultados: [res({ pilotoId: "a" }), res({ pilotoId: "b", isDnf: true })] };
-  const items = buildVotingArchive("s3", [
-    { ...base, id: "1", numero_carrera: 1, completado: true, piloto_dia_abierta: true, piloto_dia_votantes: { u1: "a", u2: "a" } },
-    { ...base, id: "2", numero_carrera: 2, completado: true, piloto_dia_cerrado: true, piloto_dia_ganador: "a" },
-    { ...base, id: "3", numero_carrera: 3, completado: true },
-  ] as Circuito[], "https://x.test", "u1");
-  assert.deepEqual(items.map(i => [i.circuitId, i.status]), [["2", "closed"], ["1", "open"]]);
-  const open = items[1];
-  assert.deepEqual(open.tally, { a: 2 });
-  assert.deepEqual([open.myVote, open.hasVoted, open.candidates], ["a", true, ["a"]]);
-  assert.ok(open.shareUrl.includes("carrera=1") && open.shareUrl.includes("temporada=s3"));
-  assert.equal(items[0].winnerId, "a");
 });
 
 test("jeque home: next GP, rank and unknown balance stay null", () => {

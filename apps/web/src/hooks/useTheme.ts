@@ -5,7 +5,7 @@ export type Theme = "light" | "dark";
 export const THEME_KEY = "bugambra-theme";
 // Clave del selector anterior: se respeta una vez para no resetear a nadie.
 const LEGACY_KEY = "f1-theme";
-const META_COLORS: Record<Theme, string> = { light: "#f1f4f7", dark: "#0b1120" };
+const META_COLORS: Record<Theme, string> = { light: "#f4f2ee", dark: "#0b0c10" };
 
 const listeners = new Set<() => void>();
 

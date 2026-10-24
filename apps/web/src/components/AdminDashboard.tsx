@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { isSplitUnlocked } from "../utils/splitResolver";
 import { SuggestionsView } from "./SuggestionsView";
 import { EconomyAdminPanel } from "./EconomyAdminPanel";
+import { SaldosHistoricosPanel } from "./SaldosHistoricosPanel";
 import { StorageImageUpload } from "./StorageImageUpload";
 import { AuctionRoom } from "./AuctionRoom";
 import { comenzarTemporada } from "../services/auctionService";
@@ -23,24 +24,24 @@ import { canPilotParticipateInRace } from "../services/readModels";
 import { setFastestLapVideo } from "../services/readModelService";
 import { runAuditedAdminMutation, runAuditedAdminBatch } from "../services/adminMutationService";
 import { mergeDoc, planActaCerrada, planBooleanFlag, planNameEdit, planPhotoEdit } from "../utils/adminMutationPlans";
+import { slug } from "../services/splitBuilder";
 import { AdminRivalriesPanel } from "./AdminRivalriesPanel";
 import { SplitIntroPanel } from "./SplitIntroPanel";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
-import { PaddockAdminPanel } from "./PaddockAdminPanel";
 import { RaceWinnersImagePanel } from "./RaceWinnersImagePanel";
 import { buildHistoricalRaceCorrectionPlan, HistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
 
 import { useSingleFlight } from "../hooks/useSingleFlight";
 const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
 
-type AdminTab = "results" | "economy" | "rivalries" | "roster" | "paddock" | "production" | "suggestions" | "tools";
+type AdminTab = "results" | "economy" | "balances" | "rivalries" | "roster" | "production" | "suggestions" | "tools";
 
 const ADMIN_TABS: Array<{ id: AdminTab; label: string; description: string }> = [
   { id: "results", label: "Carreras", description: "Programa la carrera, introduce los resultados y cierra el acta para liquidar su economía. Tras cerrarla, aquí puedes generar y descargar con Gemini un borrador de imagen del podio." },
   { id: "economy", label: "Economía y fichajes", description: "Gestiona los traspasos, contratos y presupuestos de cada split." },
+  { id: "balances", label: "Saldos por GP", description: "Reconstruye desde el libro el saldo de cada escudería tras los GP ya liquidados y lo guarda solo si cuadra." },
   { id: "rivalries", label: "Rivalidades", description: "Define los grupos de pilotos que compiten por los premios de rivalidad." },
   { id: "roster", label: "Equipos y usuarios", description: "Gestiona las escuderías, las cuentas y sus roles." },
-  { id: "paddock", label: "Paddock", description: "Revisa el OK completo y publica las bienvenidas oficiales con una foto." },
   { id: "production", label: "Vídeos", description: "Publica o cambia el vídeo de presentación de cada split." },
   { id: "suggestions", label: "Sugerencias", description: "Revisa las propuestas de la comunidad y actualiza su estado." },
   { id: "tools", label: "Datos y mantenimiento", description: "Controla el split destacado, los fichajes, la subasta y el inicio de temporada." },
@@ -223,6 +224,9 @@ export function AdminDashboard() {
   const [horaVal, setHoraVal] = useState("");
   const [hotlapUrl, setHotlapUrl] = useState("");
   const [numeroCarrera, setNumeroCarrera] = useState<number>(1);
+  const [nombreCircuito, setNombreCircuito] = useState("");
+  const [nuevaCarrera, setNuevaCarrera] = useState("");
+  const [isAddingRace, setIsAddingRace] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [showRaceReport, setShowRaceReport] = useState(false);
 
@@ -355,6 +359,7 @@ export function AdminDashboard() {
       setHoraVal(circuito?.hora || "");
       setHotlapUrl(circuito?.hotlap_url || "");
       setNumeroCarrera(circuito?.numero_carrera ?? 1);
+      setNombreCircuito(circuito?.nombre || "");
       
       if (circuito?.completado && circuito.resultados) {
         setIsEditingFinished(true);
@@ -381,9 +386,44 @@ export function AdminDashboard() {
     }
   }, [selectedSplitId, selectedCircuitoId, splits]);
 
+  // Añade una carrera al calendario del split elegido. Numera seguido: tras la última del split o,
+  // si aún no tiene ninguna, tras la última de los splits anteriores de la liga.
+  const handleAddRace = async () => {
+    if (isAddingRace) return;
+    const nombre = nuevaCarrera.trim();
+    const split = splits.find(s => s.id === selectedSplitId);
+    if (!split || !nombre) return;
+    const numeros = (lista: any[]) => lista.map((c: any) => Number(c.numero_carrera)).filter(Number.isFinite);
+    const previos = splits.filter(s => s.tipo !== "individual" && Number(s.orden ?? 0) < Number(split.orden ?? 0)).flatMap(s => s.circuitos);
+    const numero = Math.max(0, ...numeros(split.circuitos.length ? split.circuitos : previos)) + 1;
+    const id = slug(nombre);
+    if (!id) { setMsg("Escribe un nombre de carrera válido."); return; }
+    setIsAddingRace(true);
+    setMsg("");
+    try {
+      await runAuditedAdminMutation({
+        ref: doc(db, `splits/${split.id}/circuitos`, id),
+        action: "race_add",
+        summary: `Añadir ${nombre} al calendario de ${split.nombre}`,
+        apply: current => {
+          if (current) throw new Error(`${split.nombre} ya tiene una carrera «${current.nombre || id}». Usa otro nombre, por ejemplo el del circuito.`);
+          return { nombre, numero_carrera: numero, completado: false, acta_cerrada: false, economia_procesada: false, resultados: [] };
+        },
+      });
+      setNuevaCarrera("");
+      setMsg(`${nombre} añadida a ${split.nombre} como GP ${numero}.`);
+    } catch (err: any) {
+      setMsg("Error añadiendo la carrera: " + err.message + " (no se aplicó ningún cambio)");
+    } finally {
+      setIsAddingRace(false);
+    }
+  };
+
   const handleSaveSchedule = async () => {
     return runOnce(async () => {
     if (!selectedSplitId || !selectedCircuitoId) return;
+    const nombre = nombreCircuito.trim();
+    if (!nombre) { setMsg("Escribe el nombre del circuito. No se aplicó ningún cambio."); return; }
     setIsSavingSchedule(true);
     setMsg("");
     try {
@@ -394,7 +434,8 @@ export function AdminDashboard() {
         summary: `Programación de la carrera ${selectedCircuitoId}`,
         apply: current => {
           if (!current) throw new Error("La carrera no existe. No se aplicó ningún cambio.");
-          return mergeDoc(current, { fecha: fechaVal, hora: horaVal, numero_carrera: numeroCarrera });
+          // El nombre se puede corregir; el identificador del documento no cambia, así no se pierden referencias.
+          return mergeDoc(current, { nombre, fecha: fechaVal, hora: horaVal, numero_carrera: numeroCarrera });
         },
       });
       // El vídeo se guarda por el servicio auditado (transacción + registro antes/después).
@@ -993,6 +1034,8 @@ export function AdminDashboard() {
           <AdminRivalriesPanel splits={splits} />
         ) : adminTab === "economy" ? (
           <EconomyAdminPanel splits={splits} />
+        ) : adminTab === "balances" ? (
+          <SaldosHistoricosPanel splits={splits} />
         ) : adminTab === "roster" ? (
           <div className="space-y-6">
             <AdminTeamManager splitId={selectedSplitId} teams={currentRawSplit?.equipos || []} roster={currentRawSplit?.roster || []} splits={splits} onSelectSplit={(id: string) => setSelectedSplitId(id)} />
@@ -1163,8 +1206,6 @@ export function AdminDashboard() {
             )}
 
           </div>
-        ) : adminTab === "paddock" ? (
-          <PaddockAdminPanel splits={splits} />
         ) : adminTab === "production" ? (
           <SplitIntroPanel splits={splits} />
         ) : adminTab === "suggestions" ? (
@@ -1322,6 +1363,25 @@ export function AdminDashboard() {
           </div>
         </div>
 
+        {/* AÑADIR CARRERA AL CALENDARIO (p. ej. un split creado al pactar, que nace sin calendario) */}
+        {selectedSplitId && (
+          <div className="bg-white/[0.03] border border-white/10 rounded-sm p-3 mb-4">
+            <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">
+              Añadir carrera a {splits.find(s => s.id === selectedSplitId)?.nombre ?? selectedSplitId}
+            </label>
+            <div className="flex gap-2 max-w-2xl">
+              <input type="text" value={nuevaCarrera} onChange={(e) => setNuevaCarrera(e.target.value)} placeholder="Nombre del circuito"
+                className="flex-1 bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors"
+              />
+              <button type="button" onClick={handleAddRace} disabled={!nuevaCarrera.trim() || isAddingRace} aria-busy={isAddingRace || undefined}
+                className="border border-white/10 text-white/80 min-h-11 rounded-lg px-3 text-[12px] font-bold md:min-h-0 md:rounded-sm md:py-1.5 md:text-[9px] md:uppercase md:tracking-wider transition-all flex items-center justify-center gap-1.5 hover:bg-white/[0.06] cursor-pointer disabled:opacity-40"
+              >
+                {isAddingRace ? <Loader2 className="w-3 h-3 animate-spin" /> : "Añadir"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* PROGRAMACIÓN DEL CIRCUITO */}
         <div className="bg-surface-2 border border-line rounded-sm p-3 mb-4">
           <div className="flex items-center gap-2 mb-3 border-b border-line pb-2">
@@ -1329,6 +1389,12 @@ export function AdminDashboard() {
             <h3 className="font-bold text-[10px] uppercase tracking-wider text-ink">Programación — {getCircuitName()}</h3>
           </div>
           <div className="grid grid-cols-1 max-w-2xl gap-3">
+            <div>
+              <label className="block text-[9px] text-white/40 uppercase font-mono mb-1 font-bold">Nombre del circuito</label>
+              <input type="text" value={nombreCircuito} onChange={(e) => setNombreCircuito(e.target.value)}
+                className="w-full bg-white/[0.02] border border-white/10 min-h-11 rounded-lg px-2.5 text-white outline-none md:min-h-0 md:rounded-sm md:py-1.5 md:text-xs focus:border-[#e10600] transition-colors"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div>
                 <label className="block text-[9px] text-ink-muted uppercase font-mono mb-1 font-bold">Nº carrera</label>
@@ -1747,7 +1813,6 @@ export function AdminDashboard() {
 
 
 
-        {/* Paddock */}
 
           </>
         )}

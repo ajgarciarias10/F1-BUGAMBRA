@@ -5,3 +5,5 @@ export { Badge, StatusPill, type BadgeProps, type BadgeTone } from "./Badge";
 export { PageHeader, type PageHeaderProps } from "./PageHeader";
 export { EmptyState, type EmptyStateProps } from "./EmptyState";
 export { Notice, type NoticeProps, type NoticeTone } from "./Notice";
+export { SegmentedControl, Segment, type SegmentProps } from "./SegmentedControl";
+export { PillFilter, type PillFilterProps } from "./PillFilter";

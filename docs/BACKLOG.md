@@ -4,21 +4,25 @@ What is open right now. Details per feature go in `docs/trabajo/<slug>/`. Remove
 
 ## Redesign (`docs/trabajo/redesign/`)
 
-The owner approved `docs/redesign/prototipo-gemini/` on 2026-10-22 and wants it to become the real app. Decisions: `docs/redesign/prototipo-gemini/decisiones.md`.
+The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign/plan-app.md`. Integration branch and Vercel preview: `feature/rediseno-app`. Owner decisions: `docs/redesign/prototipo-gemini/decisiones.md`.
 
-- [ ] 00 Owner: merge `main` into `feature/stitch-redesign` (it lacks `bc5f6e3` and later work) before any ticket below branches from it
-- [ ] 08 Retire Paddock and driver-of-the-day vote (behaviour, owner decision; before 04 and 05)
-- [ ] 03 Foundation: tokens, primitives, shell (Codex mid-tier; merges before 04 and 05)
-- [ ] 04 User and public screens (Claude; after 03 and 08)
-- [ ] 05 Admin screens (Claude, economy paths untouched; after 03 and 08)
-- [ ] 11 Commissioner without a team (role routing)
-- [ ] 09 TV with the league's Twitch channels through the official API (needs the owner's Twitch app credentials)
-- [ ] 10 Race act: positions 1-20, qualifying "did not run", position after a penalty (owner must confirm the data model first)
-- [ ] 12 Seasons: Origins by duos, Temporada 1 total and every split (after 04; owner must confirm the season standing rule)
+- [x] 08 Retire Paddock and vote (in the preview)
+- [x] 03 Foundation tokens and type (in the preview)
+- [x] Wave 1: 13 data layer · 14 visual pieces · 15 shell and routes (in the preview)
+- [ ] Wave 2: 16 home and championship · 17 teams and my driver · 18 races · 19 role homes, profile, login · 20 TV (needs the owner's Twitch credentials)
+  - 16-19 launched 2026-10-23 with Antigravity and stopped minutes later with no changes (Antigravity quota is the scarcest); worktrees `~/projects/F1-nueva-{campeonato,equipos,carreras,inicio}` ready; relaunch when Claude (17:50 UTC) or Codex (18:31 UTC) is back, asking TypeSafe again
+- [ ] Wave 3, one at a time: 21 my team · 22 market · 23 admin races · 24 admin economy · 25 admin rest
+- [ ] 26 Switch every route and retire the old screens
+- [x] 27 Save each team's balance after every processed race (in the preview)
+- [ ] Live pill bug (production too): `PublicHome.tsx` treats decapi's «tonicotitular is offline» as live because it only checks the exact text «offline» (found in ticket 15; the new shell is not affected)
+- [ ] `apps/api` typecheck fails on the base (`auth.ts:25` TS2769, `domain/race-winner-image.ts:49,52` TS18048), found in ticket 27
+- [x] 28 Tool to rebuild that balance for races processed before 27 (in the preview; the owner runs it from the admin with the workbook checkpoints)
+- [ ] 02 TypeSafe measures every quota group, Argon and Claude/GPT included, and Codex's real weekly figure (`docs/trabajo/orquestacion/tickets/02-measure-every-quota.md`, code in CleverTracker)
+- [ ] TypeSafe reports OpenCode as available (no meter) but on this server it has 0 credentials and never picked up ticket 14; fix OpenCode's setup or tell TypeSafe (CleverTracker repo)
+- [ ] `RaceWinnersImagePanel.tsx` still publishes the winners image to `paddock_posts`, which no screen shows since 08: decide where it goes or retire it
+- [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
 - [ ] Assign Antonio Ceferi as Alfa Romero's sporting director in Equipos y usuarios (owner, live data)
-- [ ] Rename Split 3 GP 16 from España to Italia (Imola) with the new circuit-name field (owner, live data)
-- [ ] Decide fate of `GuestDashboard.tsx` and `AestheticLogin.tsx` (no references found outside their own files)
-- [ ] Vercel does not build `feature/stitch-redesign` automatically; check Settings > Git (ignored build step, branch filter, connection)
+- [ ] Rename Split 3 GP 16 from España to Italia (Imola) with the circuit-name field (owner, live data)
 
 ## Economy and data (rules in `AGENTS.md`)
 

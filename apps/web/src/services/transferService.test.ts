@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 // Adaptador de Firestore en memoria: impone lecturas antes de escrituras y commit atómico.
 // Se ejecutan los servicios reales, incluidas sus referencias y cálculos económicos.
-const state = { docs: new Map<string, any>(), failCommit: false, sequence: 0, retryBeforeCommit: null as null | (() => void) };
+const state = { docs: new Map<string, any>(), failCommit: false, sequence: 0, allowBatches: false, retryBeforeCommit: null as null | (() => void) };
 (globalThis as any).__transferTest = state;
 const firestore = `
 const state = globalThis.__transferTest;
@@ -50,8 +50,16 @@ export async function runTransaction(db, callback) {
 }
 export const query = (r, ...filters) => ({ ...r, filters });
 export const where = (...args) => args;
-export const writeBatch = () => { throw Error('Unexpected non-transactional write'); };
-export const updateDoc = writeBatch, setDoc = writeBatch, deleteDoc = writeBatch, addDoc = writeBatch;
+const unexpectedWrite = () => { throw Error('Unexpected non-transactional write'); };
+export const writeBatch = db => {
+  if (!state.allowBatches) return unexpectedWrite();
+  const writes = [];
+  return {
+    update: (r, data) => writes.push([r, data]),
+    commit: () => runTransaction(db, async tx => { for (const [r, data] of writes) tx.update(r, data); }),
+  };
+};
+export const updateDoc = unexpectedWrite, setDoc = unexpectedWrite, deleteDoc = unexpectedWrite, addDoc = unexpectedWrite;
 `;
 const bundle = await build({
   stdin: { contents: `export * from './transferService'; export * from './adminMutationService'; export * from './economyService'; export * from './auctionService'; export * from './splitRestoreService'; export { crearSplit, derivarAperturas, aplicarAperturas } from './splitBuilder';`, resolveDir: fileURLToPath(new URL(".", import.meta.url)) },
@@ -68,7 +76,7 @@ const path = (split: string, team: string, pilot = "p") => `splits/${split}/equi
 const budget = (split: string, team: string) => state.docs.get(`splits/${split}/equipos/${team}`).presupuesto;
 const pacto = { splitId: "s1", nextSplitId: "s2", equipoOrigenId: "a", pilotoId: "p", equipoDestinoId: "b", precio: 20, tipo: "clausula", circuitoId: null };
 beforeEach(() => {
-  state.docs = new Map(); state.failCommit = false; state.retryBeforeCommit = null;
+  state.docs = new Map(); state.failCommit = false; state.retryBeforeCommit = null; state.allowBatches = false;
   for (const split of ["s1", "s2"]) {
     state.docs.set(`splits/${split}`, { nombre: split });
     for (const team of ["a", "b", "agente_libre"]) state.docs.set(`splits/${split}/equipos/${team}`, { nombre: team, presupuesto: 100 });
@@ -463,4 +471,173 @@ test("un piloto que disputa su rivalidad por incomparecencia de su rival cobra e
   assert.equal(processed.processed > 0, true, processed.message);
   // Qualy P1 (1M) + Race P1 (2M) = +3M
   assert.equal(budget("s1", "a"), 103);
+});
+
+test("pactar sin split siguiente lo crea vacío; el pacto y su anulación cuadran en los dos splits", async () => {
+  for (const key of [...state.docs.keys()]) if (key.startsWith("splits/s2")) state.docs.delete(key);
+  state.docs.set("splits/s1", { nombre: "Split 3", orden: 3, temporadaId: "temporada_1" });
+  const creado = await services.asegurarSplitSiguiente("s1");
+  assert.deepEqual(creado, { id: "split_4", nombre: "Split 4", creado: true });
+  const split4 = state.docs.get("splits/split_4");
+  assert.equal(split4.orden, 4);
+  assert.equal(split4.temporadaId, "temporada_1");
+  assert.equal(split4.activo, false);
+  assert.equal(budget("split_4", "b"), 100);
+  assert.equal(state.docs.get("splits/split_4/equipos/b").presupuesto_origen_splitId, "s1");
+  assert.equal(state.docs.has("splits/split_4/equipos/agente_libre"), true);
+  assert.equal([...state.docs.keys()].some(key => key.startsWith("splits/split_4/circuitos")), false);
+
+  await services.guardarPacto({ ...pacto, nextSplitId: "split_4" });
+  assert.equal(budget("s1", "b"), 80);
+  assert.equal(budget("split_4", "b"), 80);
+  assert.equal(state.docs.get(path("split_4", "b")).nombre, "Piloto");
+
+  const antes = structuredClone([...state.docs]);
+  assert.deepEqual(await services.asegurarSplitSiguiente("s1"), { id: "split_4", nombre: "Split 4", creado: false });
+  assert.deepEqual([...state.docs], antes);
+
+  await services.anularPacto("s1", "a", "p", "split_4");
+  assert.equal(budget("s1", "b"), 100);
+  assert.equal(budget("split_4", "b"), 100);
+  assert.equal(state.docs.has(path("split_4", "b")), false);
+});
+
+test("sin orden en el split de origen no se crea ningún split siguiente", async () => {
+  const antes = structuredClone([...state.docs]);
+  await assert.rejects(services.asegurarSplitSiguiente("s1"), /no tiene orden/);
+  assert.deepEqual([...state.docs], antes);
+});
+
+function balanceRaceFixture(count = 1) {
+  state.docs.get("splits/s1").economia_config = { pole: 8, vuelta_rapida: 6, participacion: 0, sin_sancionados: 0, puntos_factor: 0 };
+  for (let i = 1; i <= count; i++) {
+    state.docs.set(`splits/s1/circuitos/c${i}`, {
+      nombre: `C${i}`, numero_carrera: i, acta_cerrada: true, completado: true,
+      resultados: [{ pilotoId: "p", equipoId: "a", qualyPos: 1, racePos: 1, fastestLap: true, isClean: true }],
+    });
+  }
+}
+
+const raceBalances = (id = "c1") => state.docs.get(`splits/s1/circuitos/${id}`).economia_saldos;
+
+test("saldos por GP: guarda el saldo real e incluye el mercado entre carreras sin atribuirlo al GP", async () => {
+  balanceRaceFixture(2);
+  const first = await services.procesarEconomiaCarrera("s1", "c1", "C1");
+  assert.ok(first.processed > 0, first.message);
+  assert.deepEqual(raceBalances().a, { antes: 100, ingresos: 14, despues: 114 });
+  assert.equal(budget("s1", "a"), raceBalances().a.despues);
+  const ledger = [...state.docs.values()].filter(d => d.splitId === "s1" && d.circuitoId === "c1");
+  assert.equal(ledger.reduce((sum, d) => sum + d.cantidad, 0), raceBalances().a.ingresos);
+  assert.ok(ledger.some(d => d.tipo === "pole"));
+  assert.ok(ledger.some(d => d.tipo === "vuelta_rapida"));
+
+  // Un movimiento de mercado posterior no reescribe el saldo histórico del GP.
+  state.docs.get("splits/s1/equipos/a").presupuesto -= 20;
+  const second = await services.procesarEconomiaCarrera("s1", "c2", "C2");
+  assert.ok(second.processed > 0, second.message);
+  assert.deepEqual(raceBalances("c2").a, { antes: 94, ingresos: 14, despues: 108 });
+  assert.deepEqual(raceBalances().a, { antes: 100, ingresos: 14, despues: 114 });
+});
+
+test("saldos por GP: registra también equipos sin ingresos y excluye agentes libres", async () => {
+  balanceRaceFixture();
+  delete state.docs.get("splits/s1/equipos/agente_libre").presupuesto;
+  const result = await services.procesarEconomiaCarrera("s1", "c1", "C1");
+  assert.ok(result.processed > 0, result.message);
+  assert.deepEqual(raceBalances(), {
+    a: { antes: 100, ingresos: 14, despues: 114 },
+    b: { antes: 100, ingresos: 0, despues: 100 },
+  });
+  assert.equal(budget("s1", "b"), 100);
+});
+
+test("saldos por GP: conserva los saldos negativos sin redondear ni bloquear el ingreso", async () => {
+  balanceRaceFixture();
+  state.docs.get("splits/s1/equipos/a").presupuesto = -100.25;
+  state.docs.get("splits/s1/equipos/b").presupuesto = -5;
+  const result = await services.procesarEconomiaCarrera("s1", "c1", "C1");
+  assert.ok(result.processed > 0, result.message);
+  assert.deepEqual(raceBalances(), {
+    a: { antes: -100.25, ingresos: 14, despues: -86.25 },
+    b: { antes: -5, ingresos: 0, despues: -5 },
+  });
+  assert.equal(budget("s1", "a"), -86.25);
+  assert.equal(budget("s1", "b"), -5);
+});
+
+test("saldos por GP: un reintento relee saldos y repetir la liquidación no duplica ingresos", async () => {
+  balanceRaceFixture();
+  let retries = 0;
+  state.retryBeforeCommit = () => {
+    retries++;
+    state.docs.get("splits/s1/equipos/a").presupuesto = 73;
+    state.docs.get("splits/s1/equipos/b").presupuesto = 47;
+  };
+  const result = await services.procesarEconomiaCarrera("s1", "c1", "C1");
+  assert.ok(result.processed > 0, result.message);
+  assert.equal(retries, 1);
+  assert.deepEqual(raceBalances(), {
+    a: { antes: 73, ingresos: 14, despues: 87 },
+    b: { antes: 47, ingresos: 0, despues: 47 },
+  });
+  assert.equal(budget("s1", "a"), 87);
+  const settled = structuredClone([...state.docs]);
+  assert.equal((await services.procesarEconomiaCarrera("s1", "c1", "C1")).processed, 0);
+  assert.deepEqual([...state.docs], settled);
+});
+
+test("saldos por GP: revertir elimina la fotografía junto con los abonos y respeta movimientos posteriores", async () => {
+  balanceRaceFixture();
+  assert.ok((await services.procesarEconomiaCarrera("s1", "c1", "C1")).processed > 0);
+  // Fotografía explícita para que el control negativo pruebe la eliminación por sí sola.
+  state.docs.get("splits/s1/circuitos/c1").economia_saldos = {
+    a: { antes: 100, ingresos: 14, despues: 114 }, b: { antes: 100, ingresos: 0, despues: 100 },
+  };
+  state.docs.get("splits/s1/equipos/a").presupuesto += 9;
+  const settled = structuredClone([...state.docs]);
+  state.failCommit = true;
+  assert.equal((await services.revertirEconomiaCarrera("s1", "c1")).ok, false);
+  assert.deepEqual([...state.docs], settled);
+  state.failCommit = false;
+  const result = await services.revertirEconomiaCarrera("s1", "c1");
+  assert.equal(result.ok, true, result.message);
+  assert.equal(Object.hasOwn(state.docs.get("splits/s1/circuitos/c1"), "economia_saldos"), false);
+  assert.equal(state.docs.get("splits/s1/circuitos/c1").economia_procesada, false);
+  assert.equal(budget("s1", "a"), 109);
+  assert.equal([...state.docs.keys()].some(key => key.startsWith("transacciones/")), false);
+  assert.ok([...state.docs.values()].some(d => d.action === "race_economy_reversal"));
+  assert.equal((await services.revertirEconomiaCarrera("s1", "c1")).ok, false);
+  assert.ok((await services.procesarEconomiaCarrera("s1", "c1", "C1")).processed > 0);
+  assert.deepEqual(raceBalances().a, { antes: 109, ingresos: 14, despues: 123 });
+});
+
+test("saldos por GP: un fallo al procesar no deja fotografía, abonos ni movimientos parciales", async () => {
+  balanceRaceFixture();
+  const original = structuredClone([...state.docs]);
+  state.failCommit = true;
+  const failed = await services.procesarEconomiaCarrera("s1", "c1", "C1");
+  assert.equal(failed.processed, 0);
+  assert.match(failed.message, /Injected commit failure/);
+  assert.deepEqual([...state.docs], original);
+  state.failCommit = false;
+  assert.ok((await services.procesarEconomiaCarrera("s1", "c1", "C1")).processed > 0);
+  assert.deepEqual(raceBalances().a, { antes: 100, ingresos: 14, despues: 114 });
+});
+
+test("saldos por GP: el retroactivo guarda una fotografía acumulada por carrera y equipo", async () => {
+  balanceRaceFixture(2);
+  // Solo el retroactivo usa lotes para preparar precios y circuitos antes de liquidar.
+  state.allowBatches = true;
+  const result = await services.procesarEconomiaRetroactivaSplit("s1");
+  assert.equal(result.ok, 2, result.message);
+  assert.deepEqual(raceBalances(), {
+    a: { antes: 100, ingresos: 14, despues: 114 }, b: { antes: 100, ingresos: 0, despues: 100 },
+  });
+  assert.deepEqual(raceBalances("c2"), {
+    a: { antes: 114, ingresos: 14, despues: 128 }, b: { antes: 100, ingresos: 0, despues: 100 },
+  });
+  assert.equal(budget("s1", "a"), 128);
+  const settled = structuredClone([...state.docs]);
+  assert.equal((await services.procesarEconomiaRetroactivaSplit("s1")).ok, 0);
+  assert.deepEqual([...state.docs], settled);
 });

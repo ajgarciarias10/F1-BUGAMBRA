@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>F1 Bugambra</title>
     <meta name="description" content="Clasificación, equipos, mercado y señal en directo de la liga F1 Bugambra." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet" />
 
     <!-- El handshake con Firestore (DNS + TLS) cuesta cientos de ms en móvil.
          Abriéndolo ya, se solapa con la descarga y el parseo del JavaScript en
@@ -16,7 +19,7 @@
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#f1f4f7" />
+    <meta name="theme-color" content="#f4f2ee" />
     <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="F1 Bugambra" />
 
@@ -39,7 +42,7 @@
           if (t === "dark") { d.classList.add("dark"); d.style.colorScheme = "dark"; }
           d.dataset.theme = t === "dark" ? "dark" : "light";
           var m = document.querySelector('meta[name="theme-color"]');
-          if (m && t === "dark") m.setAttribute("content", "#0b1120");
+          if (m && t === "dark") m.setAttribute("content", "#0b0c10");
         } catch (e) {}
       })();
     </script>

@@ -23,7 +23,7 @@ export function Badge({ tone = "neutral", dot = false, className, children, ...p
   return (
     <span
       {...props}
-      className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold leading-5 tracking-wide", TONE[tone], className)}
+      className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold leading-5 tracking-wide", TONE[tone], className)}
     >
       {dot && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
       {children}

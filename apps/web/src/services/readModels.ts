@@ -3,10 +3,9 @@
 // calcula economía ni infiere datos que el admin no haya registrado.
 import type {
   AvisoOficial, Circuito, DecisionFia, Equipo, LedgerSource, PilotInRoster, RaceResult,
-  RaceResultStatus, SplitView, Transaccion, VotingStatus,
+  RaceResultStatus, SplitView, Transaccion,
 } from "../types";
 import { ECONOMY_INCOME_SOURCES, sumClausePriceAdjustments } from "../utils/economyIncomeBreakdown";
-import { getPilotDayCandidates } from "../utils/pilotDayVoting";
 import { buildRaceShareUrl } from "../utils/raceShareUrl";
 import { getYoutubeEmbedUrl, getYoutubeThumbnailUrl } from "../utils/youtube";
 
@@ -213,54 +212,6 @@ export function fastestLapVideoOf(circuito: Pick<Circuito, "hotlap_url">): Faste
   const embedUrl = circuito.hotlap_url ? getYoutubeEmbedUrl(circuito.hotlap_url) : "";
   if (!embedUrl) return { status: "pending", thumbnailUrl: null, embedUrl: null };
   return { status: "available", thumbnailUrl: getYoutubeThumbnailUrl(circuito.hotlap_url!), embedUrl };
-}
-
-// ─── ARCHIVO DE VOTACIONES ────────────────────────────────────────────────────
-
-export interface VotingArchiveItem {
-  circuitId: string;
-  circuitName: string;
-  status: VotingStatus;
-  candidates: string[];
-  /** Votos por piloto; no expone los uid de los votantes. */
-  tally: Record<string, number>;
-  winnerId: string | null;
-  /** null si no se conoce el uid del usuario (visitante). */
-  myVote: string | null;
-  hasVoted: boolean;
-  shareUrl: string;
-}
-
-export function votingStatusOf(c: Pick<Circuito, "completado" | "piloto_dia_abierta" | "piloto_dia_cerrado">): VotingStatus {
-  if (c.piloto_dia_cerrado === true) return "closed";
-  if (c.completado === true && c.piloto_dia_abierta === true) return "open";
-  return "unavailable";
-}
-
-export function buildVotingShareUrl(origin: string, splitId: string, circuitId: string, tab = "comunidad"): string {
-  const url = new URL(buildRaceShareUrl(origin, splitId, circuitId));
-  url.searchParams.set("tab", tab);
-  return url.toString();
-}
-
-export function buildVotingArchive(
-  splitId: string, circuitos: readonly Circuito[], origin: string, viewerUid?: string | null,
-): VotingArchiveItem[] {
-  return circuitos
-    .filter(c => votingStatusOf(c) !== "unavailable")
-    .sort((a, b) => Number(b.numero_carrera ?? 0) - Number(a.numero_carrera ?? 0))
-    .map(c => {
-      const votes = c.piloto_dia_votantes ?? {};
-      const tally: Record<string, number> = {};
-      for (const pilotId of Object.values(votes)) tally[pilotId] = (tally[pilotId] ?? 0) + 1;
-      const myVote = viewerUid ? votes[viewerUid] ?? null : null;
-      return {
-        circuitId: c.id, circuitName: c.nombre, status: votingStatusOf(c),
-        candidates: c.piloto_dia_candidatos ?? getPilotDayCandidates(c.resultados),
-        tally, winnerId: c.piloto_dia_cerrado ? c.piloto_dia_ganador ?? null : null,
-        myVote, hasVoted: myVote !== null, shareUrl: buildVotingShareUrl(origin, splitId, c.id),
-      };
-    });
 }
 
 // ─── INICIO DEL JEQUE ─────────────────────────────────────────────────────────

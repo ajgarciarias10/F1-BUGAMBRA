@@ -3,7 +3,7 @@
 ## Operaciones desde administración
 
 - **Fichar en este split / Alta directa**: incorpora al piloto libre a la plantilla actual. Cobra una sola vez, registra el movimiento y conserva la ficha anterior. **Deshacer alta** compensa ese cobro y restaura la ficha anterior; los ingresos ajenos a la operación se conservan. Si hubo actividad posterior, debe deshacerse primero.
-- **Pactar próximo split**: mantiene al piloto en su equipo de competición y escribe su destino en el siguiente split. El importe se carga en el split de origen. Debe existir el split de destino. Cambiar el pacto compensa el anterior antes de aplicar el nuevo, dentro de la misma transacción.
+- **Pactar próximo split**: mantiene al piloto en su equipo de competición y escribe su destino en el siguiente split. El importe se carga en el split de origen. Si el split de destino aún no existe, se crea vacío al confirmar el pacto (sin calendario, mismas escuderías y saldo actual como disponible heredado); el calendario se añade después con «Añadir carrera» y, al terminar el split de origen, «Inicializar» lo completa. Cambiar el pacto compensa el anterior antes de aplicar el nuevo, dentro de la misma transacción.
 - **Deshacer pacto**: restaura la fotografía anterior del destino y compensa el movimiento económico en una sola transacción. Se conserva el identificador del split de destino para que reordenar splits no cambie qué se revierte.
 - **Liberar**: pasa la ficha a agentes libres; no es una devolución del fichaje. No permite borrar un pacto pendiente sin anularlo antes.
 - **Ajustar saldo**: introduce un movimiento positivo o negativo y su motivo. Sirve para correcciones administrativas y conciliación histórica; no modifica el precio de los pilotos.
@@ -22,6 +22,10 @@ El valor `-110` ya no activa ninguna excepción: es un precio negativo normal. L
 ## Liquidaciones y aperturas
 
 Procesar una carrera y revertirla utiliza transacciones. La reversión identifica equipos por ID, compensa los movimientos originales y recupera los valores anteriores de los pilotos. Solo puede revertirse la última carrera liquidada. Si faltan los movimientos originales, se informa del problema sin inventar una devolución.
+
+Cada nueva liquidación guarda en el documento del circuito `economia_saldos: { [equipoId]: { antes, ingresos, despues } }`, con importes en millones. Incluye todas las escuderías, también las que no ingresan nada; excluye el contenedor de agentes libres. `antes` es el presupuesto leído dentro de la transacción, `ingresos` es exactamente el total abonado por ese GP y `despues` es su suma, sin cambiar los premios ni redondear el saldo. Se conservan los saldos negativos existentes. Los abonos, movimientos y saldos del circuito se confirman juntos; un fallo de commit no deja cambios parciales y un reintento vuelve a leer el presupuesto vigente.
+
+Los fichajes, pactos y ajustes entre carreras ya están incluidos en `antes` del siguiente GP; no se atribuyen a sus ingresos ni reescriben la fotografía anterior. Revertir elimina `economia_saldos` en la misma transacción que compensa los abonos, conservando los movimientos ajenos al GP. El procesado retroactivo utiliza esa misma liquidación en secuencia y guarda una fotografía por carrera, sin volver a abonar carreras ya procesadas. Las carreras antiguas pueden carecer del campo: su ausencia no significa saldo cero y este cambio no reconstruye saldos históricos ni modifica datos reales.
 
 El antiguo reset destructivo se sustituye por la reversión secuencial de liquidaciones: conserva fichajes, pactos y ajustes. Si una carrera falla al revertirse, se detiene y muestra el error; las ya revertidas quedan identificadas por su estado.
 

@@ -116,13 +116,13 @@ export function MobileBottomTabs({
             onClick={() => setSheetOpen(false)}
             aria-label="Cerrar"
           />
-          <div className="tabbar-sheet absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
+          <div className="tabbar-sheet absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-bg pb-[env(safe-area-inset-bottom)]">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">Más secciones</span>
               <button
                 onClick={() => setSheetOpen(false)}
                 aria-label="Cerrar"
-                className="-mr-2 grid h-11 w-11 place-items-center rounded-lg text-ink-muted active:bg-surface-3"
+                className="-mr-2 grid h-11 w-11 place-items-center rounded-full text-ink-muted active:bg-surface-3"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -135,7 +135,7 @@ export function MobileBottomTabs({
                   <button
                     key={tab.id}
                     onClick={() => select(tab.id)}
-                    className={`flex min-h-14 w-full items-center gap-4 rounded-lg px-4 text-left transition-colors ${
+                    className={`flex min-h-14 w-full items-center gap-4 rounded-full px-4 text-left transition-colors ${
                       active ? "bg-brand-soft text-brand" : "text-ink-2 active:bg-surface-3"
                     }`}
                   >
@@ -150,7 +150,7 @@ export function MobileBottomTabs({
       )}
 
       <nav
-        className="tabbar fixed inset-x-0 bottom-0 z-[65] border-t acrylic-bar pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="tabbar fixed inset-x-0 bottom-0 z-[65] border-t border-line bg-bg pb-[env(safe-area-inset-bottom)] md:hidden"
         aria-label="Navegación principal"
       >
         <div className="flex items-stretch">
@@ -169,7 +169,7 @@ export function MobileBottomTabs({
               >
                 {active && <span className="absolute inset-x-3 top-0 h-0.5 rounded-b bg-brand" />}
                 <Icon className="h-5 w-5" />
-                <span className="w-full break-words text-center text-[10px] font-semibold leading-tight">
+                <span className="w-full break-words text-center text-xs font-semibold leading-tight">
                   {SHORT_LABELS[tab.id] || tab.label}
                 </span>
               </button>
@@ -187,7 +187,7 @@ export function MobileBottomTabs({
             >
               {overflowActive && <span className="absolute inset-x-3 top-0 h-0.5 rounded-b bg-brand" />}
               <Ellipsis className="h-5 w-5" />
-              <span className="text-[10px] font-semibold leading-tight">Más</span>
+              <span className="text-xs font-semibold leading-tight">Más</span>
             </button>
           )}
         </div>

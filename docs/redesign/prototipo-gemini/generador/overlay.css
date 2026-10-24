@@ -1,0 +1,385 @@
+
+    /* ==========================================================================
+       CAPA DE PULIDO (22-10-2026)
+       Un solo estilo para toda la web: tipografía Titillium, colores reales de
+       las escuderías, menos cajas dentro de cajas y cabecera con iconos.
+       ========================================================================== */
+    :root {
+      --font-base: "Titillium Web", "Segoe UI", system-ui, -apple-system, sans-serif;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 18px;
+      --team-zenith: #b8902f;
+      --team-zenith-dark: #0f0c06;
+      --team-alfa: #2c5aa0;
+      --team-alfa-dark: #08111f;
+      --team-roses: #e0307a;
+      --team-roses-dark: #14050c;
+    }
+
+    :root[data-theme="dark"] {
+      --bg-base: #0b0c10;
+      --bg-surface: #14161c;
+      --bg-elevated: #1c1f27;
+      --text-main: #f4f5f7;
+      --text-muted: #a0a6b2;
+      --border-color: #252933;
+      --shadow-card: none;
+    }
+
+    :root[data-theme="light"] {
+      --bg-base: #f4f2ee;
+      --bg-surface: #ffffff;
+      --bg-elevated: #ebe8e2;
+      --text-main: #15151e;
+      --text-muted: #55555f;
+      --border-color: #e0ddd6;
+      --shadow-card: none;
+    }
+
+    [hidden] { display: none !important; }
+
+    body {
+      font-family: var(--font-base);
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: 0.005em;
+    }
+
+    /* ── Títulos: una sola escala ── */
+    .page-title, .section-title, .hero-compact-title h1, .f1-team-title, .f1-driver-alias {
+      font-family: var(--font-base);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .page-title { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1; }
+    .section-title { font-size: 1.35rem; text-transform: uppercase; }
+    .eyebrow {
+      display: block;
+      font-size: var(--fs-xs);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      width: 100%;
+    }
+
+    /* ── Secciones sin caja: solo título y contenido sobre el fondo ── */
+    .section-card {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      margin-bottom: var(--sp-6);
+      box-shadow: none;
+    }
+    .section-header {
+      border-bottom: 0;
+      padding-bottom: 0;
+      margin-bottom: var(--sp-4);
+    }
+
+    /* Superficies: tablas, KPI y tarjetas sencillas, sin borde marcado */
+    .card, .clean-table-panel, .kpi-card, .next-gp-card, .f1-subnav-bar {
+      border: 0;
+      border-radius: var(--radius-md);
+      box-shadow: none;
+    }
+    .clean-table-panel { padding: var(--sp-2) var(--sp-5); }
+    .clean-table-panel .clean-table-panel { padding: 0; background: transparent; }
+
+    /* ── Botones: píldora, sin sombras ── */
+    .btn {
+      border-radius: var(--radius-pill);
+      padding: 0 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .btn-sm { min-height: 40px; padding: 0 1.1rem; }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-secondary {
+      background: transparent;
+      border-color: var(--border-color);
+    }
+    .btn-secondary:hover { border-color: var(--text-muted); }
+
+    /* ── Cabecera ── */
+    .site-header {
+      background-color: var(--bg-base);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .header-inner { padding: 0.5rem var(--sp-4); min-height: 64px; }
+    .menu-btn {
+      width: 44px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 50%;
+      color: var(--text-main);
+    }
+    .menu-btn:hover { background-color: var(--bg-elevated); }
+    .burger { display: inline-flex; flex-direction: column; gap: 5px; width: 20px; }
+    .burger span { display: block; height: 1.6px; background: currentColor; border-radius: 2px; }
+    .burger span:nth-child(2) { width: 14px; }
+    .theme-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1.6px solid currentColor;
+      background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+    }
+    .brand-logo { font-size: 1.15rem; letter-spacing: 0.02em; gap: 0.6rem; }
+    .brand-mark { font-style: italic; padding: 0.1rem 0.5rem; border-radius: 6px; }
+    .live-pill:not(.is-live) { display: none; }
+    .live-pill { min-height: 36px; border: 0; }
+    .account-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-height: 44px;
+      padding: 0 0.35rem 0 0.35rem;
+      border-radius: var(--radius-pill);
+      font-weight: 700;
+      font-size: var(--fs-sm);
+    }
+    .account-btn:hover { background-color: var(--bg-elevated); }
+    .account-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background-color: var(--accent-f1);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      font-weight: 900;
+    }
+    .account-avatar img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+
+    /* ── Menú lateral ── */
+    .zara-drawer { padding: var(--sp-4) var(--sp-5) var(--sp-5); background-color: var(--bg-base); }
+    .zara-header { border-bottom: 0; padding-bottom: var(--sp-3); }
+    .zara-section-label { margin-top: var(--sp-5); letter-spacing: 0.16em; }
+    .zara-link {
+      font-size: 1.6rem;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      text-transform: none;
+      padding: 0.35rem 0;
+      border-bottom: 0;
+      transform: none;
+    }
+    .zara-link small { font-weight: 400; letter-spacing: 0.02em; opacity: 0; transition: opacity 0.15s ease; }
+    .zara-link:hover, .zara-link.is-active { transform: none; border-bottom: 0; }
+    .zara-link:hover small, .zara-link.is-active small { opacity: 1; }
+    .zara-link.is-active span:first-child { font-weight: 700; }
+    .zara-link.is-active span:first-child::before {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-f1);
+      margin: 0 0.6rem 0.25em 0;
+      vertical-align: middle;
+    }
+    .zara-footer { border-top: 0; }
+
+    /* ── Portada ── */
+    .hero-full {
+      border: 0;
+      border-radius: var(--radius-lg);
+      padding: clamp(1.5rem, 4vw, 3rem);
+      background:
+        radial-gradient(120% 140% at 100% 0%, rgba(225, 6, 0, 0.28) 0%, transparent 55%),
+        var(--bg-surface);
+    }
+    .hero-compact {
+      border: 0;
+      background: transparent;
+      padding: var(--sp-2) 0 var(--sp-4);
+      margin-bottom: var(--sp-4);
+      border-bottom: 1px solid var(--border-color);
+      border-radius: 0;
+    }
+    .hero-compact-title { flex-direction: column; align-items: flex-start; gap: 0.15rem; }
+    .hero-compact-title h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); text-transform: none; }
+    .badge-pill, .status-chip { border-radius: var(--radius-pill); }
+    .next-gp-card { background-color: rgba(0, 0, 0, 0.25); }
+    :root[data-theme="light"] .next-gp-card { background-color: var(--bg-base); }
+    .cd-box { border: 0; background: transparent; padding: 0; }
+    .cd-num { font-size: 2rem; font-weight: 700; line-height: 1; }
+
+    .scroll-tabs { border-bottom: 1px solid var(--border-color); gap: var(--sp-4); padding-bottom: 0; }
+    .tab-btn, .subnav-tab { text-transform: none; letter-spacing: 0; font-size: 1rem; font-weight: 600; padding: 0 0.15rem; }
+    .tab-btn[aria-selected="true"], .subnav-tab.is-active { font-weight: 700; }
+    .f1-subnav-bar { background: transparent; padding: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; }
+    .only-mobile { display: none; }
+    @media (max-width: 640px) { .only-mobile { display: inline; } }
+
+    .pill-filter { text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); font-weight: 600; background: transparent; }
+
+    /* ── Tablas ── */
+    .standings-table th {
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+    }
+    .standings-table td { padding-top: 0.8rem; padding-bottom: 0.8rem; font-size: 0.95rem; }
+    .pos-podium {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background-color: var(--text-main);
+      color: var(--bg-base);
+      font-weight: 900;
+    }
+    .driver-avatar {
+      width: 38px;
+      height: 38px;
+      overflow: hidden;
+      border-width: 2px;
+      background-color: var(--bg-elevated);
+    }
+    .driver-avatar img, .f1-mini-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 50% 12%;
+      display: block;
+    }
+    .driver-name { font-weight: 700; }
+    .team-logo-mini {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      overflow: hidden;
+      background: #000;
+      display: inline-flex;
+      flex-shrink: 0;
+    }
+    .team-logo-mini img, .f1-team-logo-circle img, .poster-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .gap-pill { background: transparent; border: 0; font-variant-numeric: tabular-nums; }
+
+    /* ── Tarjetas de piloto con foto real ── */
+    .team-surface-zenith, .team-surface-alfa, .team-surface-roses {
+      background-size: 6px 6px, 100% 100%;
+    }
+    .team-surface-zenith {
+      background-image:
+        radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.2px),
+        linear-gradient(115deg, var(--team-zenith-dark) 30%, #6b5114 80%, var(--team-zenith) 120%);
+    }
+    .team-surface-alfa {
+      background-image:
+        radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.2px),
+        linear-gradient(115deg, var(--team-alfa-dark) 30%, #16335f 80%, var(--team-alfa) 120%);
+    }
+    .team-surface-roses {
+      background-image:
+        radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.2px),
+        linear-gradient(115deg, var(--team-roses-dark) 30%, #6d1239 80%, var(--team-roses) 120%);
+    }
+    .f1-driver-card, .f1-team-card { border: 0; box-shadow: none; }
+    .f1-driver-card { min-height: 250px; padding: var(--sp-5) 0 0 var(--sp-5); }
+    .f1-driver-alias { font-size: 1.9rem; text-transform: none; line-height: 1; }
+    .f1-driver-teamname { text-transform: none; letter-spacing: 0.01em; font-size: var(--fs-sm); opacity: 0.85; }
+    .f1-ovr-outline { font-size: 3.2rem; -webkit-text-stroke: 1.4px rgba(255, 255, 255, 0.9); }
+    .f1-tier-tag { border-radius: var(--radius-pill); background: rgba(255, 255, 255, 0.14); border: 0; }
+    .f1-team-logo-circle { overflow: hidden; border-width: 1.5px; border-color: rgba(255, 255, 255, 0.5); background: #000; }
+    .f1-driver-card { position: relative; }
+    .f1-driver-card > .f1-driver-cutout { position: absolute; top: 0; right: 0; bottom: 0; width: 48%; height: auto; align-self: stretch; }
+    .f1-driver-cutout { position: relative; overflow: hidden; border-radius: var(--radius-md); }
+    .f1-driver-photo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 50% 15%;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 35%);
+      mask-image: linear-gradient(90deg, transparent 0%, #000 35%);
+    }
+
+    /* ── Tarjetas de escudería: pilotos en la mitad inferior ── */
+    .f1-team-title { font-size: 1.9rem; text-transform: none; }
+    .f1-inline-driver-pill { background: transparent; border: 0; padding: 0; gap: 0.45rem; font-size: var(--fs-sm); }
+    .f1-mini-avatar { width: 26px; height: 26px; overflow: hidden; }
+    .f1-team-poster-bleed { padding: 0; min-height: 0; background: transparent; border-top: 0; }
+    .team-lineup { display: flex; height: 190px; overflow: hidden; }
+    .team-lineup img {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      object-fit: cover;
+      object-position: 50% 12%;
+      -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent 100%);
+      mask-image: linear-gradient(180deg, #000 70%, transparent 100%);
+    }
+    .f1-team-Bottom-strip { background: transparent; border-top: 1px solid rgba(255, 255, 255, 0.12); text-transform: none; letter-spacing: 0; font-weight: 700; padding: var(--sp-3) var(--sp-5); }
+
+    /* ── Carteles del paddock ── */
+    .poster-card { border: 0; border-radius: var(--radius-md); overflow: hidden; background-color: var(--bg-surface); }
+    .poster-banner { position: relative; padding: var(--sp-5) var(--sp-4) var(--sp-4); min-height: 120px; display: flex; flex-direction: column; justify-content: flex-end; }
+    .poster-banner h3 { text-transform: none !important; font-size: 1.35rem !important; line-height: 1.15; }
+    .poster-logo {
+      position: absolute;
+      top: var(--sp-3);
+      right: var(--sp-3);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 1.5px solid rgba(255, 255, 255, 0.4);
+    }
+    .poster-meta { border-top: 0; }
+
+    /* ── KPI de inicio ── */
+    .kpi-card { padding: var(--sp-5); gap: 0.35rem; }
+    .kpi-label { letter-spacing: 0.1em; font-weight: 700; }
+    .kpi-value { font-size: 2rem; font-weight: 700; }
+
+    /* ── Avisos flotantes ── */
+    .toast-msg { border: 0; border-radius: var(--radius-pill); background-color: var(--text-main); color: var(--bg-base); padding: 0.7rem 1.2rem; }
+
+    /* ── Barra inferior móvil ── */
+    .mobile-bottom-nav { background-color: var(--bg-base); border-top: 1px solid var(--border-color); }
+    .mob-nav-item { font-size: 0.72rem; font-weight: 600; text-transform: none; letter-spacing: 0; }
+
+    /* ── Móvil: que nada se salga de la pantalla ── */
+    @media (max-width: 640px) {
+      .header-inner { padding: 0.35rem 0.75rem; gap: 0.25rem; }
+      .account-name { display: none; }
+      .brand-logo { font-size: 1rem; }
+      .main-container { padding-left: 1rem; padding-right: 1rem; }
+      .clean-table-panel { padding: 0 0.75rem; }
+      .f1-driver-card { min-height: 210px; }
+      .f1-driver-alias { font-size: 1.6rem; }
+      .proto-bar { flex-wrap: wrap; }
+    }
+
+    /* Titillium en 900 queda tosco: el máximo de la web es 700. */
+    b, strong, h1, h2, h3, h4, th, .pts-strong, .brand-logo, .brand-mark, .f1-ovr-outline, .f1-tier-tag,
+    .kpi-label, .badge-pill, .status-chip, .eyebrow, .pos-cell { font-weight: 700; }
+    [style*="font-weight:900"], [style*="font-weight: 900"], [style*="font-weight:800"], [style*="font-weight: 800"] { font-weight: 700 !important; }
+
+    .fia-surface { background: linear-gradient(115deg, #1a0302 30%, #7a0300 85%, #e10600 130%); color: #fff; }
+    .kpi-team { display: inline-flex; align-items: center; gap: 0.5rem; font-size: var(--fs-md); }
+    .kpi-unit { font-size: var(--fs-md); font-weight: 600; color: var(--text-muted); }
+    @media (max-width: 640px) {
+      /* Las tablas con muchas columnas se deslizan; la clasificación ya oculta las suyas. */
+      .standings-table:not(:has(.hide-on-mobile)) { min-width: 620px; }
+    }
+
+    /* Ningún bloque empuja el ancho de la página: lo que no cabe se desliza dentro. */
+    .main-container, .main-container > *, .section-card, .sub-grid-2 > *, .kpi-grid > *, .paddock-grid > * { min-width: 0; }
+    .section-card, .clean-table-panel { overflow-x: auto; }

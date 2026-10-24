@@ -24,7 +24,7 @@ export interface NoticeProps {
 export function Notice({ tone = "info", title, children, action, className }: NoticeProps) {
   const { box, text, Icon } = TONE[tone];
   return (
-    <div role={tone === "danger" ? "alert" : "status"} className={cn("flex gap-3 rounded-card border p-4 text-sm text-ink shadow-fluent-1", box, className)}>
+    <div role={tone === "danger" ? "alert" : "status"} className={cn("flex gap-3 rounded-card border-l-2 p-4 text-sm text-ink", box, className)}>
       <Icon aria-hidden="true" className={cn("mt-0.5 h-5 w-5 shrink-0", text)} />
       <div className="min-w-0 flex-1">
         {title && <p className={cn("font-bold", text)}>{title}</p>}

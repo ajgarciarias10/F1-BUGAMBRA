@@ -13,7 +13,6 @@ import { MobileBottomTabs } from "./MobileBottomTabs";
 const FomLive = lazy(() => import("./FomLive").then(m => ({ default: m.FomLive })));
 const TeamsView = lazy(() => import("./TeamsView").then(m => ({ default: m.TeamsView })));
 const RaceResultsView = lazy(() => import("./RaceResultsView").then(m => ({ default: m.RaceResultsView })));
-const PaddockForum = lazy(() => import("./PaddockForum").then(m => ({ default: m.PaddockForum })));
 
 const tabFallback = (
   <div role="status" className="flex items-center justify-center gap-2 py-20 text-sm text-ink-muted">
@@ -23,7 +22,7 @@ const tabFallback = (
 import { InstallButton } from "./InstallApp";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 
-type Tab = "clasificacion" | "equipos" | "resultados" | "paddock" | "tv";
+type Tab = "clasificacion" | "equipos" | "resultados" | "tv";
 
 export function PublicHome() {
   const { user, userData } = useAuth();
@@ -31,7 +30,7 @@ export function PublicHome() {
   const { usuarios } = useUsuarios();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const activeTab: Tab = ["clasificacion", "equipos", "resultados", "paddock", "tv"].includes(requestedTab || "")
+  const activeTab: Tab = ["clasificacion", "equipos", "resultados", "tv"].includes(requestedTab || "")
     ? requestedTab as Tab : "clasificacion";
   const activeSplitId = searchParams.get("temporada") || "";
   const contentHeading = useRef<HTMLHeadingElement>(null);
@@ -133,7 +132,6 @@ export function PublicHome() {
     { id: "clasificacion", label: "Clasificación" },
     { id: "equipos", label: "Equipos" },
     { id: "resultados", label: "Resultados" },
-    { id: "paddock", label: "Paddock" },
     { id: "tv", label: "TV" },
   ];
 
@@ -199,11 +197,10 @@ export function PublicHome() {
               <p className="mt-3 md:mt-5 max-w-xl text-sm md:text-base text-ink-muted leading-relaxed">
                 {isHistoricalSplit
                   ? "Resultados, campeones y estadísticas del archivo histórico de la liga."
-                  : "Sigue las carreras, elige tu equipo y comenta la jugada con la parrilla. Puedes explorar la liga sin registrarte."}
+                  : "Sigue las carreras, elige tu equipo y mira los directos de la liga. Puedes explorarla sin registrarte."}
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 <button onClick={() => { setActiveTab("resultados"); contentHeading.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className={buttonClass({ variant: "primary" })}>Ver resultados →</button>
-                <button onClick={() => setActiveTab("paddock")} className={buttonClass({ variant: "secondary" })}>Qué se comenta</button>
                 {isLive && (
                   <button onClick={() => setActiveTab("tv")} className={buttonClass({ variant: "danger" })}>
                     <Radio aria-hidden="true" className="h-4 w-4" /> Ver en vivo
@@ -245,7 +242,7 @@ export function PublicHome() {
           <div className="mt-3 grid gap-4 text-sm leading-relaxed text-ink-muted sm:grid-cols-3">
             <p><strong className="block text-ink">1. Sigue la competición</strong>Cada split es una etapa de la liga. En Clasificación ves quién lidera; en Resultados, qué pasó en cada carrera.</p>
             <p><strong className="block text-ink">2. Encuentra tu equipo</strong>Los pilotos compiten y los jeques gestionan las escuderías. En Equipos puedes conocer a la parrilla.</p>
-            <p><strong className="block text-ink">3. Vive el paddock</strong>Es el muro de la comunidad: bienvenidas, pronósticos y comentarios. <Link to={dashboardLink} className="font-bold text-brand underline underline-offset-4">{user ? "Ir a mi panel" : "Entrar para participar"}</Link>.</p>
+            <p><strong className="block text-ink">3. Mira la liga en directo</strong>En TV tienes el directo y los vídeos de cada carrera. <Link to={dashboardLink} className="font-bold text-brand underline underline-offset-4">{user ? "Ir a mi panel" : "Entrar en la liga"}</Link>.</p>
           </div>
         </details>}
         {(dataError || (slow && (loading || fromCache))) && (
@@ -300,7 +297,6 @@ export function PublicHome() {
                 getPilotPhoto={getPilotPhoto}
               />
             )}
-            {activeTab === "paddock" && <PaddockForum readOnly={!user} />}
             {activeTab === "tv" && <FomLive />}
             </Suspense>}
           </>

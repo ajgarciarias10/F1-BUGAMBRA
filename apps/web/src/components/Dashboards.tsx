@@ -13,11 +13,10 @@ import { RaceResultsView } from "./RaceResultsView";
 import { FomLive } from "./FomLive";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { MobileBottomTabs } from "./MobileBottomTabs";
-import { Shield, Lock, Store, Home, Wallet, Trophy, Flag, Gauge, MessagesSquare, User, MonitorPlay, Lightbulb, Users, Sun, Moon, CalendarDays, Megaphone, ArrowRight, type LucideIcon } from "lucide-react";
+import { Shield, Lock, Store, Home, Wallet, Trophy, Flag, Gauge, User, MonitorPlay, Lightbulb, Users, Sun, Moon, CalendarDays, Megaphone, ArrowRight, type LucideIcon } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
 import { Card, Button, StatusPill, Notice, EmptyState, PageHeader, buttonClass, cn } from "./ui";
 import { TelemetryView } from "./FomLive";
-import { ComunidadView } from "./PaddockForum";
 import { buildJequeHome, type JequeHome } from "../services/readModels";
 import { fetchLatestOfficialNotice } from "../services/readModelService";
 import { formatearMillones } from "../services/auctionService";
@@ -67,11 +66,11 @@ interface TabDef { id: string; label: string; icon?: LucideIcon }
 
 const TAB_ICONS: Record<string, LucideIcon> = {
   inicio: Home, escuderia: Wallet, championship: Trophy, resultados: Flag, telemetria: Gauge,
-  comunidad: MessagesSquare, equipos: Users, market: Store, tv: MonitorPlay, profile: User, suggestions: Lightbulb,
+  equipos: Users, market: Store, tv: MonitorPlay, profile: User, suggestions: Lightbulb,
 };
 
 /** Ids antiguos que aún pueden llegar en enlaces compartidos. */
-const LEGACY_TABS: Record<string, string> = { paddock: "comunidad", economia: "escuderia" };
+const LEGACY_TABS: Record<string, string> = { paddock: "inicio", comunidad: "inicio", economia: "escuderia" };
 
 interface AppNavProps {
   title: string;
@@ -369,7 +368,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
     && (split.mercado_cerrado_por_plantillas || split.temporada_iniciada || split.completado));
   useEffect(() => {
     if (!loadingSplits && activeTab === "market" && (!marketSplit || selectedMarketClosed)) {
-      setActiveTab("comunidad");
+      setActiveTab("inicio");
       setMarketSplitId("");
     }
   }, [loadingSplits, activeTab, marketSplit?.id, selectedMarketClosed, setActiveTab]);
@@ -391,7 +390,7 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
             <PageHeader eyebrow={`Hola, ${userData?.nombre || "bienvenido"}`} title="Inicio" description="Lo importante de tu liga, de un vistazo." />
             <InicioView split={activeSplit} teamId={userData?.escuderia_id} showBalance={canViewBudget} onGo={setActiveTab} />
             {activeSplit?.mercado_cerrado_por_plantillas && (
-              <Notice tone="ok" className="mt-4" title={`Plantillas completas en ${activeSplit.nombre}`}>Las bienvenidas de los equipos ya están en Comunidad.</Notice>
+              <Notice tone="ok" className="mt-4" title={`Plantillas completas en ${activeSplit.nombre}`}>El mercado de este split ya está cerrado.</Notice>
             )}
           </>
         )}
@@ -423,12 +422,6 @@ function BaseDashboard({ role, tabs, canViewBudget, renderExtraTabs }: BaseDashb
             )}
             <MarketDeadlineView />
           </div>
-        )}
-        {activeTab === "comunidad" && (
-          <>
-            <PageHeader title="Comunidad" description="Paddock, votación al mejor piloto y archivo de votaciones." />
-            <ComunidadView splits={validSplits} defaultSplitId={resolvedTeamsSplitId} />
-          </>
         )}
         {activeTab === "equipos" && (
           <>
@@ -489,7 +482,6 @@ export function JequeDashboard() {
     { id: "championship", label: "Campeonato" },
     { id: "resultados", label: "Carreras" },
     { id: "telemetria", label: "Telemetría" },
-    { id: "comunidad", label: "Comunidad" },
     { id: "market", label: "Mercado" },
     { id: "equipos", label: "Equipos" },
     { id: "tv", label: "TV" },
@@ -514,7 +506,6 @@ export function PilotoDashboard() {
     { id: "championship", label: "Campeonato" },
     { id: "resultados", label: "Carreras" },
     { id: "telemetria", label: "Telemetría" },
-    { id: "comunidad", label: "Comunidad" },
     { id: "market", label: "Mercado" },
     { id: "equipos", label: "Equipos" },
     { id: "tv", label: "TV" },
@@ -537,7 +528,6 @@ export function UsuarioDashboard() {
     { id: "championship", label: "Campeonato" },
     { id: "resultados", label: "Carreras" },
     { id: "telemetria", label: "Telemetría" },
-    { id: "comunidad", label: "Comunidad" },
     { id: "market", label: "Mercado" },
     { id: "equipos", label: "Equipos" },
     { id: "tv", label: "TV" },
