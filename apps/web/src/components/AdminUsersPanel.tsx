@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Check, Loader2, UserRound } from "lucide-react";
-import { doc, setDoc } from "firebase/firestore";
 import { usePilotos, useSplits, useUsuarios } from "../hooks/useData";
-import { db } from "../services/firebase";
+import { asignarUsuario } from "../services/usuariosService";
 
 import { useSingleFlight } from "../hooks/useSingleFlight";
 export function AdminUsersPanel() {
@@ -26,16 +25,8 @@ export function AdminUsersPanel() {
     setSavingUid(uid);
     setMessage("");
     try {
-       if ((rol === "jeque" || rol === "director_deportivo") && !equipoId) {
-         throw new Error("Asigna una escudería al responsable para que aparezca junto al equipo.");
-      }
       const pilot = pilotos.find(item => item.id === pilotoId);
-      await setDoc(doc(db, "usuarios", uid), {
-        piloto_id: pilotoId || null,
-        escuderia_id: equipoId || null,
-        rol,
-        ...(pilot?.nombre ? { nombre_piloto: pilot.nombre } : {}),
-      }, { merge: true });
+      await asignarUsuario(uid, { rol, pilotoId, equipoId, nombrePiloto: pilot?.nombre });
        setMessage(rol === "jeque" || rol === "director_deportivo" ? "Responsable y escudería asignados correctamente." : "Asociación guardada correctamente.");
     } catch (error: any) {
       setMessage(`Error: ${error.message}`);

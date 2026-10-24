@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, increment, runTransaction, serverTimestamp } from "firebase/firestore";
+import { collection, deleteField, doc, getDocs, increment, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { clausulaInicialDe, mantenerInicialDe } from "./economyService";
 import { economyRules } from "../utils/economyRules";
@@ -258,5 +258,63 @@ export async function deshacerAlta(splitId: string, equipoId: string, pilotoId: 
         cantidad: Math.abs(delta), esIngreso: delta >= 0, descripcion: `Anulación de fichaje: ${pilotoId}`, fecha: serverTimestamp(),
       });
     }
+  });
+}
+
+/**
+ * Saca al piloto de su escudería y lo deja como agente libre en ese mismo split.
+ *
+ * No mueve dinero, y es deliberado: en este modelo el gasto va atado al PACTO,
+ * no a la ficha. Cobrar o devolver aquí el `precio_compra` inventaría un
+ * movimiento que nadie hizo —una ficha puede estar mal puesta sin que se haya
+ * pagado nunca por ella—. Quien mueve dinero es pactar y deshacer el pacto.
+ */
+export async function liberarPiloto(splitId: string, equipoId: string, pilotoId: string, nombre: string, equipoNombre: string) {
+  const origenRef = doc(db, `splits/${splitId}/equipos/${equipoId}/pilotos`, pilotoId);
+  await runTransaction(db, async transaction => {
+    const ficha = await transaction.get(origenRef);
+    if (!ficha.exists()) throw new Error(`${nombre} ya no está en ${equipoNombre}.`);
+    if (ficha.data().pending_equipoId) throw new Error("Deshaz primero el pacto pendiente para recuperar su importe.");
+    transaction.set(doc(db, `splits/${splitId}/equipos`, "agente_libre"), { nombre: "Agentes libres" }, { merge: true });
+    transaction.set(doc(db, `splits/${splitId}/equipos/agente_libre/pilotos`, pilotoId), {
+      ...ficha.data(),
+      equipoId:                "agente_libre",
+      precio_compra:           0,
+      mantener_actual:         0,
+      clausula_actual:         0,
+      mantener_inicial_split:  0,
+      clausula_inicial_split:  0,
+      precio_carrera_anterior: 0,
+      historial_precios:       {},
+      tipo_fichaje:            "subasta",
+      congelado:               false,
+      congelado_en:            null,
+      pending_equipoId:        null,
+      pending_precio_compra:   null,
+      pending_tipo_fichaje:    null,
+      pending_fichas_previas:  null,
+    });
+    transaction.delete(origenRef);
+  });
+}
+
+/**
+ * Fija a mano la cláusula del piloto (o, con `importe` null, retira el ajuste y recupera la
+ * automática). No mueve saldo: deja un apunte de 0 M en el libro con el motivo.
+ */
+export async function ajustarClausula(p: { splitId: string; equipoId: string; equipoNombre: string; pilotoId: string; nombre: string; importe: number | null; motivo: string }) {
+  const retirar = p.importe === null;
+  const ref = doc(db, `splits/${p.splitId}/equipos/${p.equipoId}/pilotos`, p.pilotoId);
+  await runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error("La ficha ya no existe.");
+    const anterior = snap.data();
+    const nuevo = retirar ? (anterior.clausula_sin_ajuste ?? anterior.clausula_actual ?? 0) : p.importe;
+    tx.update(ref, { clausula_actual: nuevo,
+      clausula_manual: retirar ? deleteField() : p.importe,
+      clausula_sin_ajuste: retirar ? deleteField() : (anterior.clausula_sin_ajuste ?? anterior.clausula_actual ?? 0) });
+    tx.set(doc(collection(db, "transacciones")), { splitId: p.splitId, equipoId: p.equipoId,
+      equipo: p.equipoNombre, piloto: p.nombre, tipo: "ajuste", cantidad: 0, esIngreso: true,
+      descripcion: `Cláusula: ${anterior.clausula_actual ?? 0}M → ${nuevo}M${retirar ? " (ajuste retirado)" : ""}. ${p.motivo}`, fecha: serverTimestamp() });
   });
 }

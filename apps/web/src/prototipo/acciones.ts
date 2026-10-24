@@ -6,13 +6,22 @@
  */
 import { collection, getDoc, getDocs, doc } from "firebase/firestore";
 import { db } from "../services/firebase";
-import { anularPacto, asegurarSplitSiguiente, deshacerAlta, guardarPacto } from "../services/transferService";
-import { procesarEconomiaCarrera } from "../services/economyService";
+import { ajustarClausula, anularPacto, asegurarSplitSiguiente, deshacerAlta, guardarPacto, liberarPiloto } from "../services/transferService";
+import { ficharPiloto, procesarEconomiaCarrera } from "../services/economyService";
+import { processRace } from "../services/raceProcessor";
+import { registerFiaDecision } from "../services/readModelService";
+import { guardarLogoEquipo } from "../services/perfilService";
+import { asignarUsuario, listarUsuarios } from "../services/usuariosService";
+import { canPilotParticipateInRace } from "../services/readModels";
+import { planActaCerrada } from "../utils/adminMutationPlans";
+import { resultadosDelActa, type EntradaActa } from "../utils/actaResultados";
 import { applyTeamEconomyCorrection, runAuditedAdminBatch } from "../services/adminMutationService";
 import { planBooleanFlag } from "../utils/adminMutationPlans";
 import { guardarRivalidades, leerPlantillaSplit } from "../services/rivalidadesService";
 import { crearSugerencia } from "../services/sugerenciasService";
 import { equipoDelPrototipo, pilotoDelPrototipo } from "./perfil";
+
+const normalizar = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
 export interface Resultado { ok: boolean; mensaje?: string }
 
@@ -84,15 +93,20 @@ export async function corregirPrecio(p: { splitId: string; slug: string; precio:
   return { ok: resultado.applied, mensaje: resultado.message };
 }
 
-/** Procesa la economía del GP número `n` de la temporada, como el botón del panel. */
-export async function procesarEconomia(p: { splitId: string; n: number }): Promise<Resultado> {
-  const circuitos = await circuitosPorOrden(p.splitId);
+/** El GP número `n` del diseño, su posición en el split y los circuitos del split en orden. */
+async function circuitoPorNumero(splitId: string, n: number) {
+  const circuitos = await circuitosPorOrden(splitId);
   const primero = Number(circuitos[0]?.numero_carrera);
   // El diseño numera los GP seguidos en la temporada (13–18 en el Split 3); Firestore, igual o desde 1.
-  const indice = circuitos.findIndex(c => Number(c.numero_carrera) === p.n);
-  const i = indice >= 0 ? indice : p.n - primero;
-  const circuito = circuitos[i];
-  if (!circuito) return { ok: false, mensaje: `No encuentro el GP ${p.n} en este split.` };
+  const indice = circuitos.findIndex(c => Number(c.numero_carrera) === n);
+  const i = indice >= 0 ? indice : n - primero;
+  if (!circuitos[i]) throw new Error(`No encuentro el GP ${n} en este split.`);
+  return { circuito: circuitos[i], i, circuitos };
+}
+
+/** Procesa la economía del GP número `n` de la temporada, como el botón del panel. */
+export async function procesarEconomia(p: { splitId: string; n: number }): Promise<Resultado> {
+  const { circuito, i, circuitos } = await circuitoPorNumero(p.splitId, p.n);
   if (circuito.economia_procesada) return { ok: false, mensaje: "Ese GP ya está procesado." };
   const resultado = await procesarEconomiaCarrera(p.splitId, circuito.id, circuito.nombre, undefined, circuitos.slice(0, i).map(c => c.id));
   return { ok: resultado.processed > 0, mensaje: resultado.message };
@@ -130,4 +144,126 @@ export async function proponer(p: { categoria: string; titulo: string }, autor: 
     usuario_nombre: autor.nombre, usuario_uid: autor.uid, usuario_email: autor.email, usuario_rol: autor.rol,
   });
   return { ok: true, mensaje: "Propuesta enviada al comisario." };
+}
+
+// ─── Segunda parte: acta, FIA, fichajes fuera de subasta, saldo, fichas, usuarios y logo ───
+
+/** Una fila de la tabla del acta, tal cual la rellena el admin en el diseño. */
+export interface FilaActa { slug: string; q: string; c: string; vr: boolean; limpio: boolean; sancion: string }
+
+/**
+ * Guarda los resultados del GP con la misma validación y el mismo servicio que el panel y,
+ * si `cerrar`, cierra el acta (sin acta cerrada no se puede procesar la economía).
+ */
+export async function guardarActa(p: { splitId: string; n: number; filas: FilaActa[]; cerrar: boolean }): Promise<Resultado> {
+  const [{ circuito }, plantilla] = await Promise.all([circuitoPorNumero(p.splitId, p.n), leerPlantillaSplit(p.splitId)]);
+  if (circuito.acta_cerrada) return { ok: false, mensaje: "El acta de este GP ya está cerrada. Para corregirla, reábrela en el panel completo." };
+  const entradas: EntradaActa[] = [];
+  for (const f of p.filas) {
+    const piloto = plantilla.roster.find(x => pilotoDelPrototipo(x.pilotoId) === f.slug);
+    const nombre = piloto?.nombre || f.slug;
+    if (!piloto) return { ok: false, mensaje: `${nombre} no está en la plantilla de este split.` };
+    const noCorrio = [f.q, f.c].filter(v => v === "NC").length;
+    if (noCorrio === 2) continue;
+    if (noCorrio === 1) return { ok: false, mensaje: `${nombre}: marca «No corrió» en clasificación y en carrera, o pon sus dos puestos.` };
+    if (f.sancion === "DSQ") return { ok: false, mensaje: `${nombre}: la descalificación se registra en el panel completo.` };
+    entradas.push({
+      pilotoId: piloto.pilotoId, nombre, qualyPos: f.q,
+      // Con sanción, cuenta el puesto que fija la FIA; un DNF no tiene puesto.
+      racePos: f.sancion || (f.c === "DNF" ? undefined : f.c), isDnf: f.c === "DNF" && !f.sancion,
+      fastestLap: f.vr, isClean: f.limpio,
+    });
+  }
+  const numero = Number(circuito.numero_carrera);
+  const faltan = plantilla.roster.filter(x => x.equipoId !== "agente_libre" && canPilotParticipateInRace(x as any, numero) && !p.filas.some(f => f.slug === pilotoDelPrototipo(x.pilotoId)));
+  if (faltan.length) return { ok: false, mensaje: `Faltan en el acta: ${faltan.map(x => x.nombre || x.pilotoId).join(", ")}.` };
+  if (!entradas.length) return { ok: false, mensaje: "No hay pilotos que hayan corrido esta carrera." };
+  await processRace(p.splitId, circuito.id, resultadosDelActa(entradas));
+  if (!p.cerrar) return { ok: true, mensaje: `Resultados del GP ${p.n} guardados. El acta sigue abierta.` };
+  const ref = doc(db, `splits/${p.splitId}/circuitos`, circuito.id);
+  await runAuditedAdminBatch({
+    refs: [ref], action: "acta_cerrada_close", summary: `Acta cerrada en ${circuito.id}`,
+    apply: currents => ({ writes: { [ref.path]: planActaCerrada(currents[ref.path], true).after } }),
+  });
+  return { ok: true, mensaje: `Resultados guardados y acta del GP ${p.n} cerrada. Ya se puede procesar su economía.` };
+}
+
+/** Registra una decisión FIA ya anunciada. No cobra la multa: queda escrita en el efecto. */
+export async function decisionFia(p: { splitId: string; n: number; piloto: string; motivo: string; efecto: string; multa: string }): Promise<Resultado> {
+  if (!p.piloto.trim() || !p.motivo.trim()) return { ok: false, mensaje: "Indica el piloto y el motivo." };
+  const [{ circuito }, plantilla] = await Promise.all([circuitoPorNumero(p.splitId, p.n), leerPlantillaSplit(p.splitId)]);
+  const buscado = normalizar(p.piloto);
+  const piloto = plantilla.roster.find(x => normalizar(x.nombre || "") === buscado || pilotoDelPrototipo(x.pilotoId) === buscado);
+  if (!piloto) return { ok: false, mensaje: `No encuentro a «${p.piloto}» en la plantilla de este split.` };
+  await registerFiaDecision(p.splitId, circuito.id, {
+    id: `fia_${circuito.id}_${Date.now()}`, pilotoId: piloto.pilotoId, tipo: "Sanción", motivo: p.motivo.trim(),
+    efecto_deportivo: [p.efecto.trim(), p.multa.trim() && `multa ${p.multa.trim()} (sin cobrar)`].filter(Boolean).join(" · "),
+  });
+  return { ok: true, mensaje: `Decisión FIA registrada para ${piloto.nombre || p.piloto}.` };
+}
+
+/** Fichaje fuera de la subasta, como el «Alta» del panel: el piloto sale del catálogo global. */
+export async function fichar(p: { splitId: string; piloto: string; equipo: string; precio: number }): Promise<Resultado> {
+  if (!Number.isFinite(p.precio)) return { ok: false, mensaje: "Escribe un precio válido." };
+  if (p.equipo === "agente_libre") return { ok: false, mensaje: "Elige una escudería: a agentes libres no se ficha." };
+  const [catalogo, equipo] = await Promise.all([getDocs(collection(db, "pilotos")), escuderiaFirestore(p.splitId, p.equipo)]);
+  const buscado = normalizar(p.piloto);
+  const piloto = catalogo.docs.find(x => normalizar(String(x.data().nombre || "")) === buscado || pilotoDelPrototipo(x.id) === buscado);
+  if (!piloto) return { ok: false, mensaje: `«${p.piloto}» no está en el catálogo de pilotos. Créalo antes en el panel completo.` };
+  const r = await ficharPiloto({
+    splitId: p.splitId, teamId: equipo.id, teamName: equipo.data().nombre || equipo.id,
+    pilotoId: piloto.id, pilotName: piloto.data().nombre || piloto.id, tipo: "fichaje", precio: p.precio,
+  });
+  return { ok: r.success, mensaje: r.message };
+}
+
+export async function ajustarSaldo(p: { splitId: string; equipo: string; importe: number; motivo: string }): Promise<Resultado> {
+  if (!Number.isFinite(p.importe) || p.importe === 0) return { ok: false, mensaje: "Escribe un importe distinto de 0 (negativo para restar)." };
+  if (!p.motivo.trim()) return { ok: false, mensaje: "Escribe el motivo del ajuste." };
+  const equipo = await escuderiaFirestore(p.splitId, p.equipo);
+  const saldo = equipo.data().presupuesto;
+  if (saldo == null) return { ok: false, mensaje: `No se puede ajustar ${equipo.data().nombre}: falta un saldo registrado.` };
+  const r = await applyTeamEconomyCorrection({ splitId: p.splitId, teamId: equipo.id, expectedBalance: saldo, reason: p.motivo.trim(), manualBudgetAdjustment: p.importe });
+  return { ok: r.applied, mensaje: r.message };
+}
+
+export async function liberar(p: { splitId: string; slug: string }): Promise<Resultado> {
+  const { equipo, ficha } = await fichaFirestore(p.splitId, p.slug);
+  if (equipo.id === "agente_libre") return { ok: false, mensaje: "Ya es agente libre." };
+  const nombre = ficha.data().nombre || p.slug;
+  await liberarPiloto(p.splitId, equipo.id, ficha.id, nombre, equipo.data().nombre || equipo.id);
+  return { ok: true, mensaje: `${nombre} ya es agente libre. Ningún presupuesto se ha movido.` };
+}
+
+/** `importe` null retira el ajuste manual y vuelve a la cláusula automática. */
+export async function clausula(p: { splitId: string; slug: string; importe: number | null; motivo: string }): Promise<Resultado> {
+  if (p.importe !== null && !Number.isFinite(p.importe)) return { ok: false, mensaje: "Escribe un importe válido o déjalo vacío para volver a la automática." };
+  if (!p.motivo.trim()) return { ok: false, mensaje: "Escribe el motivo del ajuste de cláusula." };
+  const { equipo, ficha } = await fichaFirestore(p.splitId, p.slug);
+  await ajustarClausula({ splitId: p.splitId, equipoId: equipo.id, equipoNombre: equipo.data().nombre || equipo.id, pilotoId: ficha.id, nombre: ficha.data().nombre || p.slug, importe: p.importe, motivo: p.motivo.trim() });
+  return { ok: true, mensaje: "Cláusula actualizada." };
+}
+
+/** Cuentas reales para la tabla de usuarios del diseño, con los ids del diseño. */
+export async function usuarios(): Promise<Resultado & { usuarios?: { uid: string; nombre: string; email: string; rol: string; equipo: string; pilotoId: string }[] }> {
+  const lista = await listarUsuarios();
+  return {
+    ok: true,
+    usuarios: lista.map(u => ({
+      uid: u.uid, nombre: String(u.nombre || u.email || u.uid), email: String(u.email || ""), rol: String(u.rol || "usuario"),
+      equipo: equipoDelPrototipo(String(u.escuderia_id || "")) || "", pilotoId: String(u.piloto_id || ""),
+    })).sort((a, b) => a.nombre.localeCompare(b.nombre)),
+  };
+}
+
+export async function guardarUsuario(p: { splitId: string; uid: string; rol: string; equipo: string; pilotoId: string }): Promise<Resultado> {
+  const equipoId = p.equipo ? (await escuderiaFirestore(p.splitId, p.equipo)).id : "";
+  await asignarUsuario(p.uid, { rol: p.rol, pilotoId: p.pilotoId, equipoId });
+  return { ok: true, mensaje: "Cuenta guardada." };
+}
+
+export async function logo(p: { splitId: string; equipo: string; url: string }): Promise<Resultado> {
+  const equipo = await escuderiaFirestore(p.splitId, p.equipo);
+  await guardarLogoEquipo(p.splitId, equipo.id, p.url.trim());
+  return { ok: true, mensaje: p.url.trim() ? "Logo actualizado." : "Logo retirado." };
 }

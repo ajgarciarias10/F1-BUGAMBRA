@@ -143,6 +143,15 @@ const bugambraAcciones = {
   procesarEconomia: accion("procesarEconomia"),
   rivalidades: accion("rivalidades"),
   alternarMercado: accion("alternarMercado"),
+  guardarActa: accion("guardarActa"),
+  decisionFia: accion("decisionFia"),
+  fichar: accion("fichar"),
+  ajustarSaldo: accion("ajustarSaldo"),
+  liberar: accion("liberar"),
+  clausula: accion("clausula"),
+  usuarios: accion("usuarios"),
+  guardarUsuario: accion("guardarUsuario"),
+  logo: accion("logo"),
   proponer: (p: { categoria: string; titulo: string }) => unaVez(async () => {
     if (!actual) return { ok: false, mensaje: "Entra con tu cuenta para enviar propuestas." };
     const { proponer } = await import("./acciones");

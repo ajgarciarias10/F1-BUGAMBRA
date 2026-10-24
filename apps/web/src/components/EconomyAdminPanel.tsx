@@ -11,7 +11,7 @@ import { Loader2, Trash2, RefreshCw, ArrowRightLeft, FileText } from "lucide-rea
 import { resolveTransferView, type TransferView } from "../utils/transferView";
 import { previsualizarAjustePrecio } from "../utils/presupuesto";
 import { ECONOMY_INCOME_SOURCES, sumEconomyIncomeTransactions, sumEconomyMarketTransactions, sumClausePriceAdjustments, type EconomyIncomeBreakdown } from "../utils/economyIncomeBreakdown";
-import { guardarPacto, anularPacto, deshacerAlta, asegurarSplitSiguiente } from "../services/transferService";
+import { guardarPacto, anularPacto, deshacerAlta, asegurarSplitSiguiente, liberarPiloto as liberarFicha, ajustarClausula } from "../services/transferService";
 import { applyTeamEconomyCorrection } from "../services/adminMutationService";
 import { economyRules } from "../utils/economyRules";
 import { FiaFinancialReportModal } from "./FiaFinancialReportModal";
@@ -521,32 +521,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
 
     setDeletingId(pilot.id);
     try {
-      const origenRef = doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
-      await runTransaction(db, async transaction => {
-        const ficha = await transaction.get(origenRef);
-        if (!ficha.exists()) throw new Error(`${pilot.nombre} ya no está en ${pilot.equipoNombre}.`);
-        if (ficha.data().pending_equipoId) throw new Error("Deshaz primero el pacto pendiente para recuperar su importe.");
-        transaction.set(doc(db, `splits/${pilot.splitId}/equipos`, "agente_libre"), { nombre: "Agentes libres" }, { merge: true });
-        transaction.set(doc(db, `splits/${pilot.splitId}/equipos/agente_libre/pilotos`, pilot.id), {
-          ...ficha.data(),
-          equipoId:                "agente_libre",
-          precio_compra:           0,
-          mantener_actual:         0,
-          clausula_actual:         0,
-          mantener_inicial_split:  0,
-          clausula_inicial_split:  0,
-          precio_carrera_anterior: 0,
-          historial_precios:       {},
-          tipo_fichaje:            "subasta",
-          congelado:               false,
-          congelado_en:            null,
-          pending_equipoId:        null,
-          pending_precio_compra:   null,
-          pending_tipo_fichaje:    null,
-          pending_fichas_previas:  null,
-        });
-        transaction.delete(origenRef);
-      });
+      await liberarFicha(pilot.splitId, pilot.equipoId, pilot.id, pilot.nombre, pilot.equipoNombre);
       setProcessLog([`${pilot.nombre} ya figura como agente libre en ${splitNombre}. Su ficha en ${pilot.equipoNombre} se ha retirado. Ningún presupuesto se ha movido.`]);
       await loadData(pilot.splitId);
     } catch (err: any) {
@@ -1125,19 +1100,7 @@ export function EconomyAdminPanel({ splits }: { splits: any[] }) {
                               const motivo = prompt("Motivo del ajuste de cláusula:");
                               if (!motivo?.trim()) return;
                               try {
-                                const ref = doc(db, `splits/${pilot.splitId}/equipos/${pilot.equipoId}/pilotos`, pilot.id);
-                                await runTransaction(db, async tx => {
-                                  const snap = await tx.get(ref);
-                                  if (!snap.exists()) throw new Error("La ficha ya no existe.");
-                                  const anterior = snap.data();
-                                  const nuevo = retirar ? (anterior.clausula_sin_ajuste ?? anterior.clausula_actual ?? 0) : importe;
-                                  tx.update(ref, { clausula_actual: nuevo,
-                                    clausula_manual: retirar ? deleteField() : importe,
-                                    clausula_sin_ajuste: retirar ? deleteField() : (anterior.clausula_sin_ajuste ?? anterior.clausula_actual ?? 0) });
-                                  tx.set(doc(collection(db, "transacciones")), { splitId: pilot.splitId, equipoId: pilot.equipoId,
-                                    equipo: pilot.equipoNombre, piloto: pilot.nombre, tipo: "ajuste", cantidad: 0, esIngreso: true,
-                                    descripcion: `Cláusula: ${anterior.clausula_actual ?? 0}M → ${nuevo}M${retirar ? " (ajuste retirado)" : ""}. ${motivo}`, fecha: serverTimestamp() });
-                                });
+                                await ajustarClausula({ splitId: pilot.splitId, equipoId: pilot.equipoId, equipoNombre: pilot.equipoNombre, pilotoId: pilot.id, nombre: pilot.nombre, importe: retirar ? null : importe, motivo });
                                 await loadData(pilot.splitId);
                               } catch (error: any) { setProcessLog([error.message]); }
                             });

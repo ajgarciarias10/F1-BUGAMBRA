@@ -30,6 +30,7 @@ import { SplitIntroPanel } from "./SplitIntroPanel";
 import { useMarketLifecycleStatus } from "./MarketLifecycleProvider";
 import { RaceWinnersImagePanel } from "./RaceWinnersImagePanel";
 import { buildHistoricalRaceCorrectionPlan, HistoricalRaceCorrectionPlan } from "../utils/historicalRaceCorrectionPlan";
+import { resultadosDelActa } from "../utils/actaResultados";
 
 import { useSingleFlight } from "../hooks/useSingleFlight";
 const SplitBuilderPanel = lazy(() => import("./SplitBuilderPanel").then(module => ({ default: module.SplitBuilderPanel })));
@@ -922,50 +923,7 @@ export function AdminDashboard() {
     setLoading(true);
     setMsg("");
     try {
-       const finalResults: RaceResult[] = splitPilots.map((p: any) => {
-         const item = results[p.pilotoId] || {};
-         const enteredQualy = typeof item.qualyPos === "number" ? item.qualyPos : parseInt(item.qualyPos as any);
-         const enteredRace = typeof item.racePos === "number" ? item.racePos : parseInt(item.racePos as any);
-         const isDnf = item.isDnf === true;
-         if (isNaN(enteredQualy) || enteredQualy <= 0) {
-           throw new Error(`Falta la posición de clasificación de ${p.nombre}.`);
-         }
-         if (!isDnf && (isNaN(enteredRace) || enteredRace <= 0)) {
-          throw new Error(`Falta la posición de carrera de ${p.nombre}.`);
-        }
-
-         return {
-           pilotoId: p.pilotoId,
-           pilotoNombre: p.nombre,
-           qualyPos: enteredQualy,
-           racePos: isDnf ? 99 : enteredRace,
-           isDnf,
-           isDnfOwnError: isDnf && item.isDnfOwnError === true,
-           fastestLap: item.fastestLap === true,
-           isClean: item.isClean !== false,
-         } as RaceResult;
-       });
-
-       if (finalResults.filter(result => result.qualyPos === 1).length !== 1) {
-         throw new Error("Debe seleccionarse exactamente una pole.");
-       }
-       if (finalResults.filter(result => result.fastestLap).length !== 1) {
-         throw new Error("Debe seleccionarse exactamente una vuelta rápida.");
-       }
-
-      const duplicatePositions = (field: "qualyPos" | "racePos") => {
-        const counts = new Map<number, number>();
-        finalResults.forEach(result => {
-          const position = result[field];
-          if (position !== 99) counts.set(position, (counts.get(position) || 0) + 1);
-        });
-        return [...counts.entries()].filter(([, count]) => count > 1).map(([position]) => position);
-      };
-       const duplicateQualy = duplicatePositions("qualyPos");
-      const duplicateRace = duplicatePositions("racePos");
-      if (duplicateQualy.length || duplicateRace.length) {
-        throw new Error(`Hay posiciones duplicadas: ${duplicateQualy.length ? `qualy ${duplicateQualy.join(", ")}` : ""}${duplicateQualy.length && duplicateRace.length ? " y " : ""}${duplicateRace.length ? `carrera ${duplicateRace.join(", ")}` : ""}.`);
-      }
+       const finalResults = resultadosDelActa(splitPilots.map((p: any) => ({ ...results[p.pilotoId], pilotoId: p.pilotoId, nombre: p.nombre })));
 
       await processRace(selectedSplitId, selectedCircuitoId, finalResults);
       setMsg(isEditingFinished ? "Resultados corregidos exitosamente." : "Resultados procesados exitosamente.");
