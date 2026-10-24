@@ -29,6 +29,17 @@ cambiar("</head>", `  <link rel="manifest" href="/manifest.webmanifest" />
 cambiar("</body>", `  <script type="module" src="/src/prototipo/sesion.ts"></script>
 </body>`);
 
+// La app vive en «/» con rutas «#»: una dirección antigua (/nueva/portada, /login…) se corrige
+// antes de pintar, conservando la sección, y las fotos van con ruta absoluta para no depender de ella.
+cambiar("<head>", `<head>
+  <script>
+    (function () {
+      var p = location.pathname.replace(/^\\/nueva(?=\\/|$)/, "").replace(/^\\/+|\\/+$/g, "");
+      if (location.pathname !== "/") history.replaceState(null, "", "/" + (location.hash || (p ? "#" + p.replace(/\\//g, "-").replace(/^entrar$/, "login") : "")));
+    })();
+  </script>`);
+cambiar("? `img/piloto-${p.slug}.jpg`", "? `/img/piloto-${p.slug}.jpg`");
+
 // ── Fuera la barra de prototipo (rol, estado de datos, saldo y directo simulados) ──
 cambiar(/\n *<!-- BARRA DE PROTOTIPO[\s\S]*?<\/aside>\n/, "\n");
 cambiar(`      position: sticky;

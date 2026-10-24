@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
+  <script>
+    (function () {
+      var p = location.pathname.replace(/^\/nueva(?=\/|$)/, "").replace(/^\/+|\/+$/g, "");
+      if (location.pathname !== "/") history.replaceState(null, "", "/" + (location.hash || (p ? "#" + p.replace(/\//g, "-").replace(/^entrar$/, "login") : "")));
+    })();
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>F1 Bugambra · Liga F1 25</title>
@@ -3738,7 +3744,7 @@
     const LOGOS_EQUIPO = { zenith: '/img/logo-zenith.jpg', alfa: '/img/logo-alfa-romero.jpg', roses: '/img/logo-roses.jpg' };
 
     function fotoPiloto(p) {
-      return p && FOTOS_PILOTO.includes(p.slug) ? `img/piloto-${p.slug}.jpg` : null;
+      return p && FOTOS_PILOTO.includes(p.slug) ? `/img/piloto-${p.slug}.jpg` : null;
     }
 
     /** Avatar redondo: foto si existe, iniciales si no. */
