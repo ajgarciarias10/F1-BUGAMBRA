@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="960" viewBox="0 0 960 960">
+<rect width="960" height="960" fill="#eee9da"/><path d="M700 0H960V960H450Z" fill="#d9d9d9"/><path d="M0 730L960 390V465L0 805Z" fill="#d00a28"/>
+<text x="65" y="95" font-family="sans-serif" fill="#212124" font-size="24" letter-spacing="5">F1 BUGAMBRA / CONCEPTO</text>
+<text x="60" y="240" font-family="serif" fill="#19191c" font-size="108">Costa Clara.</text>
+<text x="65" y="300" font-family="sans-serif" fill="#212124" font-size="24">LA CARRERA, EN UNA IMAGEN.</text>
+<rect x="345" y="430" width="270" height="350" fill="#19191c"/><rect x="80" y="540" width="250" height="240" fill="#be001c"/><rect x="630" y="610" width="250" height="170" fill="#5b5b5f"/>
+<g fill="#fff9eb" font-family="serif" text-anchor="middle"><text x="480" y="575" font-size="100">1</text><text x="205" y="645" font-size="70">2</text><text x="755" y="695" font-size="60">3</text></g>
+<g fill="#fff9eb" font-family="sans-serif" text-anchor="middle" font-size="25"><text x="480" y="710">Vega Sol</text><text x="205" y="710">Leo Sur</text><text x="755" y="745">Ada Mar</text></g>
+<text x="65" y="870" font-family="sans-serif" fill="#19191c" font-size="21" letter-spacing="3">BORRADOR FICTICIO · NO PUBLICADO</text>
+<text x="65" y="913" font-family="sans-serif" fill="#19191c" font-size="17">Maqueta local. No generada con Gemini.</text>
+</svg>

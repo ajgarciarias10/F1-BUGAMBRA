@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { db } from "../services/firebase";
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { useSingleFlight } from "../hooks/useSingleFlight";
 import {
   ChevronRight, ChevronDown, Trash2, Loader2,
   RefreshCw, AlertTriangle, Database, Search,
@@ -49,6 +50,7 @@ function matches(d: DocEntry, f: string) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function DatabaseExplorer() {
+  const { run: runOnce, pending: pendingOnce } = useSingleFlight();
   const [coll, setColl] = useState<Record<string, CollState>>({});
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
@@ -88,6 +90,7 @@ export function DatabaseExplorer() {
     setOpenDocs(p => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   const handleDelete = async (collPath: string, docId: string) => {
+    return runOnce(async () => {
     const key = `${collPath}/${docId}`;
     if (confirmDel !== key) {
       setConfirmDel(key);
@@ -105,7 +108,8 @@ export function DatabaseExplorer() {
     } finally {
       setDeleting(null);
     }
-  };
+  });
+};
 
   // ─── Orphan analysis ────────────────────────────────────────────────────────
 
@@ -159,17 +163,17 @@ export function DatabaseExplorer() {
   // ─── Render helpers ─────────────────────────────────────────────────────────
 
   const renderDocDetail = (entry: DocEntry) => (
-    <div className="ml-7 px-3 pb-2 pt-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-0.5 bg-black/20 border-l border-[#e10600]/10">
+    <div className="ml-7 px-3 pb-2 pt-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-0.5 bg-surface-2 border-l border-brand/10">
       {Object.entries(entry.data).map(([k, v]) => (
         <div key={k} className="flex gap-1.5 items-baseline min-w-0">
-          <span className="text-[8px] font-mono text-white/20 shrink-0">{k}:</span>
-          <span className="text-[9px] font-mono text-white/55 truncate" title={typeof v === "string" ? v : JSON.stringify(v)}>
+          <span className="text-[8px] font-mono text-ink-muted shrink-0">{k}:</span>
+          <span className="text-[9px] font-mono text-ink-2 truncate" title={typeof v === "string" ? v : JSON.stringify(v)}>
             {fmtVal(v)}
           </span>
         </div>
       ))}
       {Object.keys(entry.data).length === 0 && (
-        <span className="text-[9px] font-mono text-white/15 col-span-4">vacío</span>
+        <span className="text-[9px] font-mono text-ink-muted col-span-4">vacío</span>
       )}
     </div>
   );
@@ -184,33 +188,33 @@ export function DatabaseExplorer() {
     const pl = 12 + indent * 16;
 
     return (
-      <div key={docKey} className="border-b border-white/[0.025] last:border-0">
-        <div className="flex items-center gap-1.5 py-1 hover:bg-white/[0.02] group" style={{ paddingLeft: `${pl}px`, paddingRight: "8px" }}>
-          <button onClick={() => toggleDoc(docKey)} className="shrink-0 text-white/20 hover:text-white/50">
+      <div key={docKey} className="border-b border-line last:border-0">
+        <div className="flex items-center gap-1.5 py-1 hover:bg-surface-2 group" style={{ paddingLeft: `${pl}px`, paddingRight: "8px" }}>
+          <button onClick={() => toggleDoc(docKey)} className="shrink-0 text-ink-muted hover:text-ink-2">
             {isOpen ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
           </button>
-          <span className="text-[9px] font-mono text-[#e10600]/60 w-40 shrink-0 truncate" title={entry.id}>{entry.id}</span>
+          <span className="text-[9px] font-mono text-brand/60 w-40 shrink-0 truncate" title={entry.id}>{entry.id}</span>
           <div className="flex flex-1 flex-wrap gap-x-4 gap-y-0 min-w-0 overflow-hidden">
             {summaryFields.map(f => (
               <span key={f} className="text-[9px] font-mono whitespace-nowrap">
-                <span className="text-white/20">{f}: </span>
+                <span className="text-ink-muted">{f}: </span>
                 <span className={
-                  entry.data[f] === true ? "text-green-400/70" :
-                  entry.data[f] === false ? "text-red-400/50" :
-                  "text-white/55"
+                  entry.data[f] === true ? "text-ok" :
+                  entry.data[f] === false ? "text-danger" :
+                  "text-ink-2"
                 }>
                   {fmtVal(entry.data[f])}
                 </span>
               </span>
             ))}
           </div>
-          <button
+          <button aria-busy={pendingOnce || undefined}
             onClick={() => handleDelete(collPath, entry.id)}
-            disabled={isDel}
+            disabled={(isDel) || pendingOnce}
             className={`ml-1 shrink-0 flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono transition-all ${
               isConfirm
-                ? "opacity-100 bg-[#e10600]/15 text-[#e10600]/80 border border-[#e10600]/30"
-                : "opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400/80"
+                ? "opacity-100 bg-brand/15 text-brand/80 border border-brand/30"
+                : "opacity-0 group-hover:opacity-100 text-ink-muted hover:text-danger"
             }`}
           >
             {isDel ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Trash2 className="w-2.5 h-2.5" />}
@@ -229,27 +233,27 @@ export function DatabaseExplorer() {
 
     return (
       <div
-        className="flex items-center gap-2 py-1.5 hover:bg-white/[0.015] group cursor-pointer border-b border-white/[0.03]"
+        className="flex items-center gap-2 py-1.5 hover:bg-surface-2 group cursor-pointer border-b border-line"
         style={{ paddingLeft: `${pl}px`, paddingRight: "8px" }}
         onClick={() => toggleColl(path)}
       >
-        <span className="shrink-0 text-white/25">
+        <span className="shrink-0 text-ink-muted">
           {s.loading
-            ? <Loader2 className="w-3 h-3 animate-spin text-amber-400/70" />
+            ? <Loader2 className="w-3 h-3 animate-spin text-warn" />
             : s.open
               ? <ChevronDown className="w-3 h-3" />
               : <ChevronRight className="w-3 h-3" />}
         </span>
-        <span className="text-[10px] font-mono font-bold text-white/65">{label}</span>
+        <span className="text-[10px] font-mono font-bold text-ink-2">{label}</span>
         {s.loaded && (
-          <span className="text-[9px] font-mono text-white/25">
+          <span className="text-[9px] font-mono text-ink-muted">
             ({filter && filtered.length !== s.docs.length ? `${filtered.length}/` : ""}{s.docs.length})
           </span>
         )}
         {s.loaded && (
           <button
             onClick={e => { e.stopPropagation(); loadColl(path); }}
-            className="ml-auto opacity-0 group-hover:opacity-100 text-white/20 hover:text-white/60 p-0.5 transition-opacity"
+            className="ml-auto opacity-0 group-hover:opacity-100 text-ink-muted hover:text-ink-2 p-0.5 transition-opacity"
             title="Recargar"
           >
             <RefreshCw className="w-2.5 h-2.5" />
@@ -271,7 +275,7 @@ export function DatabaseExplorer() {
         {s.open && s.loaded && (
           <div>
             {filtered.length === 0
-              ? <p className="text-[9px] font-mono text-white/15 py-1.5" style={{ paddingLeft: `${pl + 16}px` }}>
+              ? <p className="text-[9px] font-mono text-ink-muted py-1.5" style={{ paddingLeft: `${pl + 16}px` }}>
                   {s.docs.length === 0 ? "Sin documentos" : "Sin resultados"}
                 </p>
               : filtered.map(d => renderDocRow(path, d, indent + 1))}
@@ -290,31 +294,31 @@ export function DatabaseExplorer() {
     const isDel = deleting === `splits/${splitEntry.id}`;
 
     return (
-      <div key={splitEntry.id} className="border-b border-white/[0.025] last:border-0">
-        <div className="flex items-center gap-1.5 py-1 hover:bg-white/[0.02] group pl-7 pr-2">
-          <button onClick={() => toggleDoc(splitKey)} className="shrink-0 text-white/20 hover:text-white/50">
+      <div key={splitEntry.id} className="border-b border-line last:border-0">
+        <div className="flex items-center gap-1.5 py-1 hover:bg-surface-2 group pl-7 pr-2">
+          <button onClick={() => toggleDoc(splitKey)} className="shrink-0 text-ink-muted hover:text-ink-2">
             {isOpen ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
           </button>
-          <span className="text-[9px] font-mono text-[#e10600]/60 w-20 shrink-0">{splitEntry.id}</span>
+          <span className="text-[9px] font-mono text-brand/60 w-20 shrink-0">{splitEntry.id}</span>
           <div className="flex flex-1 gap-4 flex-wrap min-w-0">
             {(SUMMARY.splits ?? []).map(f => (
               <span key={f} className="text-[9px] font-mono whitespace-nowrap">
-                <span className="text-white/20">{f}: </span>
+                <span className="text-ink-muted">{f}: </span>
                 <span className={
-                  splitEntry.data[f] === true ? "text-green-400/70" :
-                  splitEntry.data[f] === false ? "text-red-400/50" :
-                  "text-white/55"
+                  splitEntry.data[f] === true ? "text-ok" :
+                  splitEntry.data[f] === false ? "text-danger" :
+                  "text-ink-2"
                 }>
                   {fmtVal(splitEntry.data[f])}
                 </span>
               </span>
             ))}
           </div>
-          <button
+          <button aria-busy={pendingOnce || undefined}
             onClick={() => handleDelete("splits", splitEntry.id)}
-            disabled={isDel}
+            disabled={(isDel) || pendingOnce}
             className={`ml-1 shrink-0 flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono transition-all ${
-              isConfirm ? "opacity-100 bg-[#e10600]/15 text-[#e10600]/80 border border-[#e10600]/30" : "opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400/80"
+              isConfirm ? "opacity-100 bg-brand/15 text-brand/80 border border-brand/30" : "opacity-0 group-hover:opacity-100 text-ink-muted hover:text-danger"
             }`}
           >
             {isDel ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Trash2 className="w-2.5 h-2.5" />}
@@ -323,13 +327,13 @@ export function DatabaseExplorer() {
         </div>
 
         {isOpen && (
-          <div className="border-l border-[#e10600]/10 ml-8">
+          <div className="border-l border-brand/10 ml-8">
             {/* Raw doc fields */}
-            <div className="px-3 py-1.5 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-0.5 bg-black/15 border-b border-white/[0.03]">
+            <div className="px-3 py-1.5 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-0.5 bg-surface-2 border-b border-line">
               {Object.entries(splitEntry.data).map(([k, v]) => (
                 <div key={k} className="flex gap-1.5 items-baseline min-w-0">
-                  <span className="text-[8px] font-mono text-white/20 shrink-0">{k}:</span>
-                  <span className="text-[9px] font-mono text-white/45 truncate" title={typeof v === "string" ? v : JSON.stringify(v)}>
+                  <span className="text-[8px] font-mono text-ink-muted shrink-0">{k}:</span>
+                  <span className="text-[9px] font-mono text-ink-muted truncate" title={typeof v === "string" ? v : JSON.stringify(v)}>
                     {fmtVal(v)}
                   </span>
                 </div>
@@ -353,7 +357,7 @@ export function DatabaseExplorer() {
         {s.open && s.loaded && (
           <div>
             {filtered.length === 0
-              ? <p className="text-[9px] font-mono text-white/15 py-1.5 pl-8">Sin splits</p>
+              ? <p className="text-[9px] font-mono text-ink-muted py-1.5 pl-8">Sin splits</p>
               : filtered.map(renderSplitNode)}
           </div>
         )}
@@ -364,17 +368,17 @@ export function DatabaseExplorer() {
   // ─── Orphan analysis panel ──────────────────────────────────────────────────
 
   const renderOrphanPanel = () => (
-    <div className="border border-white/[0.07] bg-[#080808]">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.04]">
+    <div className="border border-line bg-surface">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-line">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="w-3 h-3 text-amber-400/70" />
-          <span className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-wider">Análisis de inconsistencias</span>
-          <span className="text-[9px] font-mono text-white/20">— cruza roster ↔ pilotos ↔ usuarios</span>
+          <AlertTriangle className="w-3 h-3 text-warn" />
+          <span className="text-[10px] font-mono font-bold text-ink-2 uppercase tracking-wider">Análisis de inconsistencias</span>
+          <span className="text-[9px] font-mono text-ink-muted">— cruza roster ↔ pilotos ↔ usuarios</span>
         </div>
         <button
           onClick={runOrphanCheck}
           disabled={orphanLoading}
-          className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400/80 text-[9px] font-mono uppercase tracking-wider hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+          className="px-2.5 py-1 bg-warn-soft border border-warn/40 text-warn text-[9px] font-mono uppercase tracking-wider hover:bg-warn-soft transition-colors flex items-center gap-1.5 disabled:opacity-50"
         >
           {orphanLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
           Analizar
@@ -382,7 +386,7 @@ export function DatabaseExplorer() {
       </div>
 
       {!orphans && !orphanLoading && (
-        <p className="text-[9px] font-mono text-white/15 px-3 py-2">
+        <p className="text-[9px] font-mono text-ink-muted px-3 py-2">
           Pulsa Analizar para detectar docs huérfanos y pilotos sin roster.
         </p>
       )}
@@ -391,17 +395,17 @@ export function DatabaseExplorer() {
         <div className="p-3 space-y-4">
           {/* Roster orphans */}
           <div>
-            <p className="text-[9px] font-mono text-white/30 uppercase tracking-wider mb-1.5">
+            <p className="text-[9px] font-mono text-ink-muted uppercase tracking-wider mb-1.5">
               Entradas en roster sin doc en pilotos/ o usuarios/ ({orphans.rosterOrphans.length})
             </p>
             {orphans.rosterOrphans.length === 0
-              ? <p className="text-[9px] font-mono text-green-400/60 pl-2">✓ Sin huérfanos</p>
+              ? <p className="text-[9px] font-mono text-ok pl-2">✓ Sin huérfanos</p>
               : orphans.rosterOrphans.map((o, i) => (
-                <div key={i} className="flex items-center gap-3 px-2 py-1 bg-amber-500/5 border-b border-amber-500/[0.06] text-[9px] font-mono">
-                  <span className="text-amber-400/60 w-16 shrink-0">{o.splitId}</span>
-                  <span className="text-white/45 w-40 shrink-0 truncate" title={o.pid}>{o.pid}</span>
-                  <span className="text-white/70 w-24 shrink-0">{o.nombre}</span>
-                  <span className="text-amber-400/50">{o.issue}</span>
+                <div key={i} className="flex items-center gap-3 px-2 py-1 bg-warn-soft border-b border-warn/40 text-[9px] font-mono">
+                  <span className="text-warn w-16 shrink-0">{o.splitId}</span>
+                  <span className="text-ink-muted w-40 shrink-0 truncate" title={o.pid}>{o.pid}</span>
+                  <span className="text-ink-2 w-24 shrink-0">{o.nombre}</span>
+                  <span className="text-warn">{o.issue}</span>
                 </div>
               ))
             }
@@ -409,16 +413,16 @@ export function DatabaseExplorer() {
 
           {/* Unrosted pilots */}
           <div>
-            <p className="text-[9px] font-mono text-white/30 uppercase tracking-wider mb-1.5">
+            <p className="text-[9px] font-mono text-ink-muted uppercase tracking-wider mb-1.5">
               Pilotos (usuarios/) sin roster en ningún split ({orphans.unrostedPilots.length})
             </p>
             {orphans.unrostedPilots.length === 0
-              ? <p className="text-[9px] font-mono text-green-400/60 pl-2">✓ Todos tienen roster</p>
+              ? <p className="text-[9px] font-mono text-ok pl-2">✓ Todos tienen roster</p>
               : orphans.unrostedPilots.map((o, i) => (
-                <div key={i} className="flex items-center gap-3 px-2 py-1 bg-white/[0.02] border-b border-white/[0.03] text-[9px] font-mono">
-                  <span className="text-white/40 w-40 shrink-0 truncate" title={o.id}>{o.id}</span>
-                  <span className="text-white/70 w-28 shrink-0">{o.nombre}</span>
-                  <span className="text-white/30">{o.email}</span>
+                <div key={i} className="flex items-center gap-3 px-2 py-1 bg-surface-2 border-b border-line text-[9px] font-mono">
+                  <span className="text-ink-muted w-40 shrink-0 truncate" title={o.id}>{o.id}</span>
+                  <span className="text-ink-2 w-28 shrink-0">{o.nombre}</span>
+                  <span className="text-ink-muted">{o.email}</span>
                 </div>
               ))
             }
@@ -436,28 +440,28 @@ export function DatabaseExplorer() {
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Database className="w-3.5 h-3.5 text-[#e10600]" />
-          <span className="text-[10px] font-mono font-black uppercase tracking-widest text-white/70">
+          <Database className="w-3.5 h-3.5 text-brand" />
+          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-ink-2">
             Explorer de base de datos
           </span>
-          <span className="text-[9px] font-mono text-white/20 hidden sm:block">
+          <span className="text-[9px] font-mono text-ink-muted hidden sm:block">
             — clic para cargar · clic papelera = confirmar · 2º clic = borrar
           </span>
         </div>
         <div className="relative">
-          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
+          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
           <input
             type="text"
             placeholder="Filtrar docs…"
             value={filter}
             onChange={e => setFilter(e.target.value)}
-            className="bg-white/[0.03] border border-white/10 pl-6 pr-3 py-1 text-[10px] font-mono text-white outline-none focus:border-[#e10600]/60 w-44"
+            className="bg-surface-2 border border-line pl-6 pr-3 py-1 text-[10px] font-mono text-ink outline-none focus:border-brand/60 w-44"
           />
         </div>
       </div>
 
       {/* Collection tree */}
-      <div className="border border-white/[0.07] bg-[#080808]">
+      <div className="border border-line bg-surface">
         {renderSplitsSection()}
         {["usuarios", "plantilla", "pilotos", "suggestions"].map(p => renderPlainCollection(p, 0))}
       </div>

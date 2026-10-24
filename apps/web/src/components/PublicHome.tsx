@@ -2,7 +2,9 @@ import { useState, useMemo, useEffect, useRef, Suspense, lazy } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useSplits, useUsuarios } from "../hooks/useData";
 import { useAuth } from "../contexts/AuthContext";
-import { Sun, Moon, Radio, Crown } from "lucide-react";
+import { Sun, Moon, Radio, Crown, Loader2, Users, Trophy } from "lucide-react";
+import { useTheme } from "../hooks/useTheme";
+import { Badge, Button, Card, EmptyState, Notice, buttonClass } from "./ui";
 import { TotalStandings } from "./TotalStandings";
 import { MobileBottomTabs } from "./MobileBottomTabs";
 
@@ -11,27 +13,16 @@ import { MobileBottomTabs } from "./MobileBottomTabs";
 const FomLive = lazy(() => import("./FomLive").then(m => ({ default: m.FomLive })));
 const TeamsView = lazy(() => import("./TeamsView").then(m => ({ default: m.TeamsView })));
 const RaceResultsView = lazy(() => import("./RaceResultsView").then(m => ({ default: m.RaceResultsView })));
-const PaddockForum = lazy(() => import("./PaddockForum").then(m => ({ default: m.PaddockForum })));
 
 const tabFallback = (
-  <div className="py-20 text-center text-[13px] text-black/30 dark:text-white/30">Cargando…</div>
+  <div role="status" className="flex items-center justify-center gap-2 py-20 text-sm text-ink-muted">
+    <Loader2 aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" />Cargando…
+  </div>
 );
 import { InstallButton } from "./InstallApp";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 
-type Tab = "clasificacion" | "equipos" | "resultados" | "paddock" | "tv";
-
-function useTheme() {
-  const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem("f1-theme") !== "light"; } catch { return true; }
-  });
-  const toggle = () => setDark(d => {
-    const next = !d;
-    try { localStorage.setItem("f1-theme", next ? "dark" : "light"); } catch {}
-    return next;
-  });
-  return { dark, toggle };
-}
+type Tab = "clasificacion" | "equipos" | "resultados" | "tv";
 
 export function PublicHome() {
   const { user, userData } = useAuth();
@@ -39,7 +30,7 @@ export function PublicHome() {
   const { usuarios } = useUsuarios();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const activeTab: Tab = ["clasificacion", "equipos", "resultados", "paddock", "tv"].includes(requestedTab || "")
+  const activeTab: Tab = ["clasificacion", "equipos", "resultados", "tv"].includes(requestedTab || "")
     ? requestedTab as Tab : "clasificacion";
   const activeSplitId = searchParams.get("temporada") || "";
   const contentHeading = useRef<HTMLHeadingElement>(null);
@@ -141,31 +132,31 @@ export function PublicHome() {
     { id: "clasificacion", label: "Clasificación" },
     { id: "equipos", label: "Equipos" },
     { id: "resultados", label: "Resultados" },
-    { id: "paddock", label: "Paddock" },
     { id: "tv", label: "TV" },
   ];
 
   return (
-    <div className={`${dark ? "dark broadcast-shell" : ""} min-h-[100dvh] bg-[#d6d6d6] text-[#101010] dark:text-white font-sans overflow-x-hidden relative`}>
-      {dark && <div className="broadcast-grid absolute inset-x-0 top-0 h-[44rem] pointer-events-none" />}
-
+    <div className="min-h-[100dvh] bg-transparent text-ink font-sans overflow-x-hidden relative">
       {/* ── NAV ── */}
-      <header className="fixed top-0 inset-x-0 z-50 min-h-14 md:min-h-16 border-b border-black/10 dark:border-white/10 bg-[#d6d6d6]/95 dark:bg-[#09090b]/95 backdrop-blur-xl flex items-center justify-between px-3 md:px-10 gap-2 md:gap-4 safe-top safe-x">
-        <div className="flex items-center gap-2.5 min-w-0 shrink">
-          <span className="grid place-items-center w-9 h-9 shrink-0 bg-[#e10600] text-white font-black italic text-sm">F1</span>
-          <span className="font-black tracking-[-0.03em] uppercase text-base truncate">Bugambra</span>
-        </div>
+      <header className="fixed top-0 inset-x-0 z-50 min-h-14 md:min-h-16 border-b acrylic-bar flex items-center justify-between px-3 md:px-10 gap-2 md:gap-4 safe-top safe-x">
+        <Link to="/" className="flex items-center gap-2.5 min-w-0 shrink" aria-label="F1 Bugambra, inicio">
+          <img src="/bugambra-logo.png" alt="" width={40} height={40} className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-lg border border-line-strong bg-surface object-contain shadow-fluent-1" />
+          <span className="min-w-0 leading-none">
+            <span className="block truncate text-base font-semibold tracking-tight">Bugambra</span>
+            <span className="mt-1 hidden text-[11px] font-medium text-ink-muted sm:block">Liga F1</span>
+          </span>
+        </Link>
 
-        <nav aria-label="Secciones de la liga" className="hidden md:flex items-center gap-6">
+        <nav aria-label="Secciones de la liga" className="hidden md:flex items-center gap-1 min-w-0 overflow-x-auto hide-scrollbar">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
               aria-current={activeTab === t.id ? "page" : undefined}
-                className={`relative py-5 text-[11px] font-black tracking-[0.12em] uppercase transition-colors ${
+              className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-semibold transition-colors ${
                 activeTab === t.id
-                  ? "text-[#0a0a0a] dark:text-white after:absolute after:bottom-0 after:inset-x-0 after:h-1 after:bg-[#e10600]"
-                  : "text-[#111827]/75 dark:text-white/70 hover:text-[#111827] dark:hover:text-white"
+                  ? "bg-brand-soft text-brand"
+                  : "text-ink-muted hover:bg-info/10 hover:text-ink"
               }`}
             >
               {t.label}
@@ -176,81 +167,69 @@ export function PublicHome() {
         <div className="flex items-center gap-1 md:gap-2 shrink-0">
           <button
             onClick={toggle}
-            className="grid h-11 w-11 place-items-center text-[#0a0a0a]/40 dark:text-white/40 hover:text-[#0a0a0a]/80 dark:hover:text-white/80 transition-colors"
+            className="fluent-press grid h-11 w-11 place-items-center rounded-lg border border-line bg-surface/80 text-ink-2 hover:bg-surface"
             aria-label={dark ? "Activar tema claro" : "Activar tema oscuro"}
+            aria-pressed={dark}
           >
             {dark ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
           </button>
-          <Link
-            to={dashboardLink}
-            className="flex min-h-10 items-center rounded-full md:rounded-none bg-[#0a0a0a] dark:bg-white px-4 text-[12px] font-bold text-white dark:text-black transition-all hover:bg-[#e10600] dark:hover:bg-[#e10600] dark:hover:text-white whitespace-nowrap md:text-[10px] md:font-black md:uppercase md:tracking-[0.14em]"
-          >
+          <Link to={dashboardLink} className={buttonClass({ variant: "primary" })}>
             {user ? "Mi Panel" : "Acceder"}
           </Link>
         </div>
       </header>
 
-      {/* ── HERO ──
-          En móvil se recorta a una tarjeta compacta: el titular gigante de
-          escritorio ocupaba una pantalla entera antes de llegar al contenido. */}
+      {/* ── HERO ── */}
       <section className="relative pt-appbar md:pt-28 px-3 md:px-10 max-w-[90rem] mx-auto safe-x">
-        <div className="m-card relative min-h-[17rem] sm:min-h-[24rem] md:min-h-[34rem] overflow-hidden bg-[#151518] border border-white/10 text-white flex items-end">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_30%,rgba(225,6,0,0.38),transparent_28%),linear-gradient(115deg,#111114_25%,rgba(17,17,20,0.72)_58%,#2a0909)]" />
-          <div className="absolute right-[-7%] top-[4%] text-[11rem] sm:text-[16rem] md:text-[25rem] font-black italic leading-none text-white/[0.035] select-none">F1</div>
-          <div className="absolute top-4 left-4 md:top-8 md:left-8 flex items-center gap-2 rounded-full md:rounded-none bg-[#e10600] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide">
-            <Radio className="w-3.5 h-3.5" /> {isHistoricalSplit ? "Archivo histórico" : "Temporada en curso"}
-          </div>
-
-          <div className="relative z-10 w-full p-4 sm:p-8 md:p-12 grid md:grid-cols-[1fr_auto] items-end gap-5 md:gap-8">
+        <div className="acrylic relative overflow-hidden rounded-card border-t-[3px] border-t-brand">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_92%_10%,var(--c-brand-soft),transparent_60%)]" />
+          <div className="relative grid md:grid-cols-[1fr_auto] items-end gap-5 md:gap-8 p-5 sm:p-8 md:p-12">
             <div className="max-w-3xl">
-              <p className="text-[11px] font-bold tracking-wide text-white/55 mb-2 md:mb-4 md:uppercase md:font-black md:tracking-[0.24em]">
+              <Badge tone={isHistoricalSplit ? "neutral" : "ok"} dot>
+                {isHistoricalSplit ? "Archivo histórico" : "Temporada en curso"}
+              </Badge>
+              <p className="mt-4 text-sm font-medium text-ink-muted">
                 En portada · {currentSplit?.nombre || "F1 Bugambra"}
               </p>
-              <h1 className="text-[2rem] sm:text-5xl md:text-[5.5rem] font-black uppercase leading-[0.9] md:leading-[0.84] tracking-[-0.04em] md:tracking-[-0.065em]">
-                {isHistoricalSplit ? <>El legado<br /><span className="text-[#e10600]">ya está escrito</span></> : <>La competición<br /><span className="text-[#e10600]">empieza aquí</span></>}
+              <h1 className="mt-2 text-[2rem] sm:text-5xl md:text-6xl font-bold leading-[1.02] tracking-tight">
+                {isHistoricalSplit ? <>El legado<br /><span className="text-brand">ya está escrito</span></> : <>La competición<br /><span className="text-brand">empieza aquí</span></>}
               </h1>
-              <p className="mt-3 md:mt-6 max-w-xl text-[13px] md:text-base text-white/60 leading-relaxed">
+              <p className="mt-3 md:mt-5 max-w-xl text-sm md:text-base text-ink-muted leading-relaxed">
                 {isHistoricalSplit
                   ? "Resultados, campeones y estadísticas del archivo histórico de la liga."
-                  : "Sigue las carreras, elige tu equipo y comenta la jugada con la parrilla. Puedes explorar la liga sin registrarte."}
+                  : "Sigue las carreras, elige tu equipo y mira los directos de la liga. Puedes explorarla sin registrarte."}
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button onClick={() => { setActiveTab("resultados"); contentHeading.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-4 text-sm font-bold text-black hover:bg-white/85">Ver resultados →</button>
-                <button onClick={() => setActiveTab("paddock")} className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/30 px-4 text-sm font-bold text-white hover:bg-white/10">Qué se comenta</button>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button onClick={() => { setActiveTab("resultados"); contentHeading.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className={buttonClass({ variant: "primary" })}>Ver resultados →</button>
+                {isLive && (
+                  <button onClick={() => setActiveTab("tv")} className={buttonClass({ variant: "danger" })}>
+                    <Radio aria-hidden="true" className="h-4 w-4" /> Ver en vivo
+                  </button>
+                )}
               </div>
-              {isLive && (
-                <button
-                  onClick={() => setActiveTab("tv")}
-                  className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 rounded-xl bg-[#e10600] px-5 text-sm font-bold text-white transition-colors hover:bg-[#ff241c] active:scale-[0.98] sm:w-auto md:rounded-none md:text-[11px] md:font-black md:uppercase md:tracking-[0.12em]"
-                >
-                  <Radio className="w-4 h-4 fill-current" /> Ver en vivo
-                </button>
-              )}
             </div>
 
-            {/* La ficha del próximo evento se oculta en móvil: la misma
-                información aparece completa en el widget de carrera. */}
-            <div className="hidden sm:block w-full md:w-72 border-t-2 border-[#e10600] bg-black/45 backdrop-blur-sm p-5">
-              <p className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
-              <p className="mt-3 text-xl font-black uppercase tracking-tight">{nextRace?.nombre || (isHistoricalSplit ? "Temporada cerrada" : "Por anunciar")}</p>
-              <div className="flex justify-between items-end mt-5 pt-4 border-t border-white/10">
-                <span className="text-[10px] uppercase text-white/45">{currentSplit?.nombre || `${validSplits.length} temporadas`}</span>
-                <span className="text-3xl font-black italic text-white/15">{String(nextRace?.numero_carrera ?? "--").padStart(2, "0")}</span>
+            {/* Ficha de evento: en móvil se muestra como una línea bajo el hero. */}
+            <div className="hidden w-full rounded-xl border border-line bg-surface-2/70 bg-[image:var(--grad-info)] p-5 shadow-fluent-1 sm:block md:w-72">
+              <p className="text-xs font-semibold text-ink-muted">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
+              <p className="mt-3 text-xl font-bold tracking-tight">{nextRace?.nombre || (isHistoricalSplit ? "Temporada cerrada" : "Por anunciar")}</p>
+              <div className="flex justify-between items-end mt-5 pt-4 border-t border-line">
+                <span className="text-xs text-ink-muted">{currentSplit?.nombre || `${validSplits.length} temporadas`}</span>
+                <span className="text-3xl font-bold tabular-nums text-brand">{String(nextRace?.numero_carrera ?? "--").padStart(2, "0")}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Versión móvil de la ficha de evento: una línea, sin robarle pantalla. */}
-        <div className="sm:hidden mt-3 flex items-center gap-3 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.04] px-4 py-3">
-          <span className="text-2xl font-black italic tabular-nums text-[#e10600]">
+        <Card tone="solid" pad="none" className="mt-3 flex items-center gap-3 px-4 py-3 sm:hidden">
+          <span className="text-2xl font-bold tabular-nums text-brand">
             {String(nextRace?.numero_carrera ?? "--").padStart(2, "0")}
           </span>
           <div className="min-w-0">
-            <p className="text-[11px] text-black/45 dark:text-white/45">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
-            <p className="truncate text-sm font-bold">{nextRace?.nombre || (isHistoricalSplit ? "Temporada cerrada" : "Por anunciar")}</p>
+            <p className="text-[11px] text-ink-muted">{isHistoricalSplit ? "Último evento" : "Próximo evento"}</p>
+            <p className="truncate text-sm font-semibold">{nextRace?.nombre || (isHistoricalSplit ? "Temporada cerrada" : "Por anunciar")}</p>
           </div>
-        </div>
+        </Card>
       </section>
 
       <MobileBottomTabs tabs={tabs} activeTab={activeTab} onTab={(id) => setActiveTab(id as Tab)} scrollToTop={false} />
@@ -258,29 +237,32 @@ export function PublicHome() {
       {/* ── CONTENT ── */}
       <main className="relative max-w-[90rem] mx-auto px-3 md:px-10 pt-8 md:py-14 pb-tabbar md:pb-14 safe-x">
         <h2 ref={contentHeading} tabIndex={-1} className="rail-title mb-5 md:mb-6 scroll-mt-28">{tabs.find(tab => tab.id === activeTab)?.label}</h2>
-        {activeTab === "clasificacion" && <details className="mb-5 rounded-xl border border-black/15 bg-white/50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
-          <summary className="min-h-8 cursor-pointer text-sm font-bold">¿Primera vez? La liga en 30 segundos</summary>
-          <div className="mt-3 grid gap-4 text-sm leading-relaxed text-black/70 dark:text-white/70 sm:grid-cols-3">
-            <p><strong className="block text-black dark:text-white">1. Sigue la competición</strong>Cada split es una etapa de la liga. En Clasificación ves quién lidera; en Resultados, qué pasó en cada carrera.</p>
-            <p><strong className="block text-black dark:text-white">2. Encuentra tu equipo</strong>Los pilotos compiten y los jeques gestionan las escuderías. En Equipos puedes conocer a la parrilla.</p>
-            <p><strong className="block text-black dark:text-white">3. Vive el paddock</strong>Es el muro de la comunidad: bienvenidas, pronósticos y comentarios. <Link to={dashboardLink} className="font-bold text-[#e10600] underline underline-offset-4">{user ? "Ir a mi panel" : "Entrar para participar"}</Link>.</p>
+        {activeTab === "clasificacion" && <details className="mb-5 rounded-card border border-line bg-surface/80 p-4 shadow-fluent-1">
+          <summary className="flex min-h-11 cursor-pointer items-center rounded-md text-sm font-semibold">¿Primera vez? La liga en 30 segundos</summary>
+          <div className="mt-3 grid gap-4 text-sm leading-relaxed text-ink-muted sm:grid-cols-3">
+            <p><strong className="block text-ink">1. Sigue la competición</strong>Cada split es una etapa de la liga. En Clasificación ves quién lidera; en Resultados, qué pasó en cada carrera.</p>
+            <p><strong className="block text-ink">2. Encuentra tu equipo</strong>Los pilotos compiten y los jeques gestionan las escuderías. En Equipos puedes conocer a la parrilla.</p>
+            <p><strong className="block text-ink">3. Mira la liga en directo</strong>En TV tienes el directo y los vídeos de cada carrera. <Link to={dashboardLink} className="font-bold text-brand underline underline-offset-4">{user ? "Ir a mi panel" : "Entrar en la liga"}</Link>.</p>
           </div>
         </details>}
         {(dataError || (slow && (loading || fromCache))) && (
-          <div role="status" className="mb-6 rounded-xl border border-amber-600/50 bg-amber-100 p-5 text-amber-950 dark:border-amber-300/40 dark:bg-[#302515] dark:text-amber-100">
-            <p className="font-bold">{dataError ? "No se han podido cargar todos los datos" : "No hemos podido confirmar los datos con el servidor"}</p>
-            <p className="mt-2 text-sm">{dataError ? "Comprueba tu conexión y vuelve a intentarlo. Si continúa, contacta con la administración de la liga." : "La conexión está tardando más de lo habitual. Comprueba tu red; la actualización continuará automáticamente."} {validSplits.length > 0 ? "La información visible puede estar incompleta o desactualizada." : "Esto no significa que no haya temporadas."}</p>
-            <button onClick={retry} className="mt-4 min-h-11 rounded-lg bg-amber-950 px-4 text-sm font-bold text-white dark:bg-amber-200 dark:text-amber-950">Reintentar carga</button>
-          </div>
+          <Notice
+            tone="warn"
+            className="mb-6"
+            title={dataError ? "No se han podido cargar todos los datos" : "No hemos podido confirmar los datos con el servidor"}
+            action={<Button variant="primary" onClick={retry}>Reintentar carga</Button>}
+          >
+            {dataError ? "Comprueba tu conexión y vuelve a intentarlo. Si continúa, contacta con la administración de la liga." : "La conexión está tardando más de lo habitual. Comprueba tu red; la actualización continuará automáticamente."} {validSplits.length > 0 ? "La información visible puede estar incompleta o desactualizada." : "Esto no significa que no haya temporadas."}
+          </Notice>
         )}
         {loading || (fromCache && validSplits.length === 0 && !dataError && !slow) ? (
-          <div role="status" className="text-black/70 dark:text-white/75 text-sm py-16 text-center">
-            Cargando temporadas y clasificación…
+          <div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-ink-muted">
+            <Loader2 aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" />Cargando temporadas y clasificación…
           </div>
         ) : (dataError || fromCache) && validSplits.length === 0 ? (
-          <p className="py-8 text-sm text-black/75 dark:text-white/80">Los datos de la liga todavía no están disponibles en este dispositivo.</p>
+          <EmptyState title="Datos no disponibles" description="Los datos de la liga todavía no están disponibles en este dispositivo." />
         ) : validSplits.length === 0 ? (
-          <p className="py-8 text-sm text-black/75 dark:text-white/80">Todavía no hay temporadas publicadas. Vuelve más adelante.</p>
+          <EmptyState icon={Trophy} title="Aún no hay temporadas" description="Todavía no hay temporadas publicadas. Vuelve más adelante." />
         ) : (
           <>
             {activeTab === "clasificacion" && (
@@ -315,7 +297,6 @@ export function PublicHome() {
                 getPilotPhoto={getPilotPhoto}
               />
             )}
-            {activeTab === "paddock" && <PaddockForum readOnly={!user} />}
             {activeTab === "tv" && <FomLive />}
             </Suspense>}
           </>
@@ -336,30 +317,37 @@ function InstallPromoCard() {
   if (installed) return null;
 
   return (
-    <div className="mt-10 flex flex-col gap-4 rounded-2xl md:rounded-none border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-5 sm:flex-row sm:items-center sm:justify-between">
+    <Card tone="solid" className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
-        <img src="/icons/icon-192.png" alt="" className="h-12 w-12 shrink-0 rounded-xl md:rounded-none" />
+        <img src="/icons/icon-192.png" alt="" className="h-12 w-12 shrink-0 rounded-xl" />
         <div>
-          <p className="text-base font-black uppercase tracking-tight">Llévate la liga en el móvil</p>
-          <p className="mt-0.5 text-[13px] text-black/50 dark:text-white/50">
+          <p className="text-base font-semibold tracking-tight">Llévate la liga en el móvil</p>
+          <p className="mt-0.5 text-sm text-ink-muted">
             Instálala gratis desde el navegador. Sin Play Store ni App Store.
           </p>
         </div>
       </div>
-      <InstallButton className="justify-center text-black dark:text-white sm:shrink-0" />
-    </div>
+      <InstallButton className="justify-center text-ink sm:shrink-0" />
+    </Card>
   );
 }
 
 // ── HELPERS ────────────────────────────────────────────────────────────────────
 
 function standingsRatingTone(rating: number) {
-  if (rating >= 90) return "border-red-500/45 bg-red-500/10 text-red-600 dark:text-red-200";
-  if (rating >= 80) return "border-amber-500/45 bg-amber-500/10 text-amber-700 dark:text-amber-100";
-  return "border-black/15 dark:border-white/15 bg-black/[0.04] dark:bg-white/[0.06] text-black/65 dark:text-white/75";
+  if (rating >= 90) return "border-danger/50 bg-danger-soft text-danger";
+  if (rating >= 80) return "border-warn/50 bg-warn-soft text-warn";
+  return "border-line bg-surface-3 text-ink-2";
 }
 
+const PODIUM_TEXT = ["text-warn", "text-ink-2", "text-warn"];
+
 // ── STANDINGS ──────────────────────────────────────────────────────────────────
+
+const SPLIT_PILL = "fluent-press min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold";
+const SPLIT_PILL_ON = "btn-primary-fluent bg-brand text-brand-ink shadow-fluent-1";
+const SPLIT_PILL_OFF = "border border-line bg-surface/80 text-ink-2 hover:border-info/50 hover:bg-surface";
+const TH = "text-xs font-semibold text-ink-muted";
 
 function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandings, teamStandings, currentSplit, getPilotPhoto }: any) {
   const [view, setView] = useState<"pilotos" | "constructores">("pilotos");
@@ -376,22 +364,16 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
 
       {/* Controles: en móvil el selector de temporada es un carrusel deslizable
           en vez de un bloque de botones que se apila y empuja la tabla abajo. */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06] pb-5 md:pb-6">
+      <div className="flex flex-col justify-between gap-4 border-b border-line pb-5 md:flex-row md:items-center md:pb-6">
         <div className="min-w-0">
-          <span className="mb-2 block text-[11px] font-semibold text-[#0a0a0a]/40 dark:text-white/40 md:font-mono md:uppercase md:tracking-[0.4em] md:text-[9px] md:text-[#0a0a0a]/20 md:dark:text-white/20">
-            Temporada
-          </span>
-          <div className="m-rail hide-scrollbar gap-2 md:gap-0.5">
+          <span className="mb-2 block text-xs font-semibold text-ink-muted">Temporada</span>
+          <div className="m-rail hide-scrollbar gap-2" role="group" aria-label="Temporada">
             {validSplits.map((s: any) => (
               <button
                 key={s.id}
                 onClick={() => onSelectSplit(s.id)}
                 aria-pressed={currentSplitId === s.id}
-                className={`min-h-11 rounded-full md:rounded-none px-4 text-[12px] font-bold md:text-[10px] md:font-black md:tracking-[0.2em] md:uppercase transition-all ${
-                  currentSplitId === s.id
-                    ? "bg-[#e10600] text-white"
-                    : "bg-[#0a0a0a]/[0.06] dark:bg-white/[0.07] text-[#0a0a0a]/60 dark:text-white/60 hover:bg-[#0a0a0a]/[0.1] dark:hover:bg-white/[0.12] hover:text-[#0a0a0a]/90 dark:hover:text-white/90"
-                }`}
+                className={`${SPLIT_PILL} ${currentSplitId === s.id ? SPLIT_PILL_ON : SPLIT_PILL_OFF}`}
               >
                 {s.nombre}
               </button>
@@ -399,11 +381,7 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
             <button
               onClick={() => onSelectSplit("general")}
               aria-pressed={currentSplitId === "general"}
-              className={`min-h-11 rounded-full md:rounded-none px-4 text-[12px] font-bold md:text-[10px] md:font-black md:tracking-[0.2em] md:uppercase transition-all ${
-                currentSplitId === "general"
-                  ? "bg-[#e10600] text-white"
-                  : "bg-[#0a0a0a]/[0.06] dark:bg-white/[0.07] text-[#0a0a0a]/60 dark:text-white/60 hover:bg-[#0a0a0a]/[0.1] dark:hover:bg-white/[0.12] hover:text-[#0a0a0a]/90 dark:hover:text-white/90"
-              }`}
+              className={`${SPLIT_PILL} ${currentSplitId === "general" ? SPLIT_PILL_ON : SPLIT_PILL_OFF}`}
             >
               Mundial
             </button>
@@ -411,15 +389,16 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
         </div>
 
         {currentSplitId !== "general" && (
-          <div className="grid grid-cols-2 md:flex overflow-hidden rounded-xl md:rounded-none border border-[#0a0a0a]/[0.12] dark:border-white/[0.12] self-stretch md:self-auto shrink-0">
+          <div role="group" aria-label="Tipo de clasificación" className="grid shrink-0 grid-cols-2 gap-1 self-stretch rounded-lg border border-line bg-surface-2/70 p-1 md:flex md:self-auto">
             {(["pilotos", "constructores"] as const).map(v => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`min-h-11 px-4 text-[12px] font-bold md:text-[10px] md:font-bold md:tracking-[0.2em] md:uppercase transition-all ${
+                aria-pressed={view === v}
+                className={`min-h-11 rounded-md px-4 text-sm font-semibold transition-colors ${
                   view === v
-                    ? "bg-[#0a0a0a] text-white dark:bg-white dark:text-black"
-                    : "text-[#0a0a0a]/45 dark:text-white/45 hover:text-[#0a0a0a]/80 dark:hover:text-white/80"
+                    ? "bg-surface text-ink shadow-fluent-1"
+                    : "text-ink-muted hover:bg-info/10 hover:text-ink"
                 }`}
               >
                 {v === "pilotos" ? "Pilotos" : currentSplit?.tipo === "individual" ? "Dúos" : "Constructores"}
@@ -436,73 +415,74 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
 
       {/* Tabla pilotos */}
       {currentSplitId !== "general" && view === "pilotos" && (
-        <div className="sport-panel overflow-hidden">
+        <Card as="section" aria-label="Clasificación de pilotos" pad="none" className="overflow-hidden">
           {/* La cabecera de columnas solo tiene sentido con la rejilla de
               escritorio; en móvil cada fila es una tarjeta autoexplicativa. */}
-          <div className="hidden md:grid grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 px-4 py-3 bg-black/[0.035] dark:bg-white/[0.035] border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">#</span>
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">Piloto</span>
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">Escudería</span>
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase text-right">Pts</span>
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase text-right">OVR</span>
+          <div className="hidden grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-x-4 border-b border-line bg-surface-2/70 px-4 py-3 md:grid">
+            <span className={TH}>#</span>
+            <span className={TH}>Piloto</span>
+            <span className={TH}>Escudería</span>
+            <span className={`${TH} text-right`}>Pts</span>
+            <span className={`${TH} text-right`}>OVR</span>
           </div>
 
-          <div className="divide-y divide-[#0a0a0a]/[0.06] dark:divide-white/[0.06]">
+          <ul className="divide-y divide-line">
             {pilotStandings.map((p: any, i: number) => {
               const team = eqMap[p.equipoId];
               const photo = getPilotPhoto(p.pilotoId);
               const isFirst = i === 0;
-              const podiumClass = i === 0 ? "text-[#a87900] dark:text-yellow-300" : i === 1 ? "text-[#667085] dark:text-slate-300" : i === 2 ? "text-[#9a4d19] dark:text-orange-300" : "text-[#0a0a0a]/30 dark:text-white/30";
-              const nameClass = i === 0 ? "text-[#a87900] dark:text-yellow-300" : i === 1 ? "text-[#667085] dark:text-slate-300" : i === 2 ? "text-[#9a4d19] dark:text-orange-300" : "text-[#0a0a0a]/85 dark:text-white/85";
+              const podiumClass = PODIUM_TEXT[i] ?? "text-ink-muted";
+              const nameClass = PODIUM_TEXT[i] ?? "text-ink";
               const gap = leaderPts > 0 && !isFirst ? leaderPts - (p.puntos_piloto || 0) : 0;
               const ovr = currentSplit?.tipo === "individual" ? "--" : Number(p.rating_piloto) > 0 ? p.rating_piloto : 70;
 
               return (
-                <div
+                <li
                   key={p.pilotoId}
-                  className={`m-row flex md:grid md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] gap-3 md:gap-x-4 px-3 md:px-3 py-3 md:py-4 items-center transition-colors hover:bg-[#0a0a0a]/[0.02] dark:hover:bg-white/[0.02] relative ${
-                    isFirst ? "bg-[#0a0a0a]/[0.03] dark:bg-white/[0.03]" : ""
+                  className={`m-row reveal relative flex items-center gap-3 px-3 py-3 transition-colors hover:bg-info/5 md:grid md:grid-cols-[2.5rem_1fr_12rem_6rem_5rem] md:gap-x-4 md:py-3.5 ${
+                    isFirst ? "bg-warn-soft/40" : ""
                   }`}
                 >
-                  {isFirst && <div className="absolute left-0 top-0 bottom-0 w-1 md:w-0.5 bg-[#e10600]" />}
+                  {isFirst && <div aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-brand" />}
 
-                  <div className="flex w-7 md:w-auto shrink-0 items-center justify-center md:justify-start">
-                    <span className={`text-lg md:text-base font-black tabular-nums leading-none ${podiumClass}`}>
+                  <div className="flex w-7 shrink-0 items-center justify-center md:w-auto md:justify-start">
+                    <span className={`text-lg font-semibold leading-none tabular-nums md:text-base ${podiumClass}`}>
                       {i + 1}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
                     {photo ? (
                       <img
                         src={photo}
-                        alt={p.nombre}
+                        alt=""
                         referrerPolicy="no-referrer"
-                        className="w-10 h-10 md:w-9 md:h-9 rounded-full md:rounded-none object-cover border border-[#0a0a0a]/[0.1] dark:border-white/[0.12] shrink-0"
+                        loading="lazy"
+                        className="h-10 w-10 shrink-0 rounded-full border border-line-strong object-cover md:h-9 md:w-9"
                       />
                     ) : (
-                      <div className="w-10 h-10 md:w-9 md:h-9 rounded-full md:rounded-none bg-[#0a0a0a]/[0.06] dark:bg-white/[0.06] border border-[#0a0a0a]/[0.1] dark:border-white/[0.12] flex items-center justify-center text-[11px] font-black text-[#0a0a0a]/35 dark:text-white/35 shrink-0">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-xs font-semibold text-ink-muted md:h-9 md:w-9">
                         {(p.nombre || "?").slice(0, 2).toUpperCase()}
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className={`font-bold md:font-black text-[15px] md:text-sm tracking-tight truncate leading-tight ${nameClass}`}>
+                      <p className={`truncate text-[15px] font-semibold leading-tight md:text-sm ${nameClass}`}>
                         {p.nombre}
                       </p>
-                      <p className="flex items-center gap-1.5 truncate text-[12px] text-[#0a0a0a]/45 dark:text-white/45 md:hidden">
-                        {team?.logo_url && <img src={team.logo_url} alt="" className="h-3.5 w-3.5 shrink-0 object-contain opacity-70" />}
+                      <p className="flex items-center gap-1.5 truncate text-xs text-ink-muted md:hidden">
+                        {team?.logo_url && <img src={team.logo_url} alt="" className="h-3.5 w-3.5 shrink-0 object-contain" />}
                         <span className="truncate">{team?.nombre || "Sin equipo"}</span>
-                        {p.rookie && <span className="shrink-0 font-semibold text-sky-500 dark:text-sky-300">· Rookie</span>}
+                        {p.rookie && <span className="shrink-0 font-semibold text-info">· Rookie</span>}
                       </p>
-                      {p.rookie && <span className="hidden md:inline text-[7px] font-black uppercase tracking-[0.18em] text-sky-500 dark:text-sky-300">Rookie</span>}
+                      {p.rookie && <span className="hidden text-[11px] font-semibold text-info md:inline">Rookie</span>}
                     </div>
                   </div>
 
-                  <div className="hidden md:flex items-center gap-2 min-w-0">
+                  <div className="hidden min-w-0 items-center gap-2 md:flex">
                     {team?.logo_url && (
-                      <img src={team.logo_url} alt={team.nombre} className="w-5 h-5 object-contain opacity-60 shrink-0" />
+                      <img src={team.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" />
                     )}
-                    <span className="text-[11px] text-[#0a0a0a]/35 dark:text-white/35 truncate font-mono">
+                    <span className="truncate text-sm text-ink-muted">
                       {team?.nombre || "—"}
                     </span>
                   </div>
@@ -510,102 +490,90 @@ function StandingsView({ validSplits, currentSplitId, onSelectSplit, pilotStandi
                   {/* Móvil: puntos y OVR juntos a la derecha, en una sola columna. */}
                   <div className="flex shrink-0 items-center gap-3 md:contents">
                     <div className="text-right">
-                      <span className={`text-xl md:text-lg font-black tabular-nums leading-none ${nameClass}`}>
+                      <span className={`text-xl font-semibold leading-none tabular-nums md:text-lg ${nameClass}`}>
                         {p.puntos_piloto || 0}
                       </span>
-                      <p className="text-[11px] leading-tight text-[#0a0a0a]/35 dark:text-white/35 md:hidden">
+                      <p className="text-xs leading-tight text-ink-muted md:hidden">
                         {gap > 0 ? `-${gap}` : "pts"}
                       </p>
                       {gap > 0 && (
-                        <p className="hidden md:block text-[9px] font-mono text-[#0a0a0a]/20 dark:text-white/20 mt-0.5">-{gap}</p>
+                        <p className="mt-0.5 hidden text-xs tabular-nums text-ink-muted md:block">-{gap}</p>
                       )}
                     </div>
 
                     <div className="flex justify-end">
-                      <span className={`grid h-10 w-11 md:h-auto md:w-auto md:min-w-12 place-items-center rounded-lg md:rounded-none border px-2 md:py-1.5 text-center text-sm font-black tabular-nums ${standingsRatingTone(Number(p.rating_piloto ?? 0))}`}>
+                      <span className={`grid h-10 w-11 place-items-center rounded-lg border px-2 text-center text-sm font-semibold tabular-nums md:h-auto md:w-auto md:min-w-12 md:py-1.5 ${standingsRatingTone(Number(p.rating_piloto ?? 0))}`}>
                         {ovr}
                       </span>
                     </div>
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ul>
 
           {pilotStandings.length === 0 && (
-            <div className="py-24 text-center">
-              <p className="text-[10px] font-mono tracking-[0.4em] text-[#0a0a0a]/15 dark:text-white/15 uppercase">
-                Sin datos de temporada
-              </p>
-            </div>
+            <EmptyState icon={Users} title="Sin datos de temporada" description="Los pilotos aparecerán cuando se inscriban en este split." className="m-4 py-12" />
           )}
-        </div>
+        </Card>
       )}
 
       {/* Tabla constructores */}
       {currentSplitId !== "general" && view === "constructores" && (
-        <div className="sport-panel overflow-hidden">
-          <div className="hidden md:grid grid-cols-[2.5rem_1fr_6rem] gap-x-4 px-4 py-3 bg-black/[0.035] dark:bg-white/[0.035] border-b border-[#0a0a0a]/[0.08] dark:border-white/[0.06]">
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">#</span>
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase">{currentSplit?.tipo === "individual" ? "Dúo" : "Escudería"}</span>
-            <span className="text-[9px] font-mono tracking-[0.3em] text-[#0a0a0a]/20 dark:text-white/20 uppercase text-right">Pts</span>
+        <Card as="section" aria-label="Clasificación de constructores" pad="none" className="overflow-hidden">
+          <div className="hidden grid-cols-[2.5rem_1fr_6rem] gap-x-4 border-b border-line bg-surface-2/70 px-4 py-3 md:grid">
+            <span className={TH}>#</span>
+            <span className={TH}>{currentSplit?.tipo === "individual" ? "Dúo" : "Escudería"}</span>
+            <span className={`${TH} text-right`}>Pts</span>
           </div>
 
-          <div className="divide-y divide-[#0a0a0a]/[0.06] dark:divide-white/[0.06]">
+          <ul className="divide-y divide-line">
             {teamStandings.map((t: any, i: number) => {
               const isFirst = i === 0;
               return (
-                <div
+                <li
                   key={t.id}
-                  className={`m-row grid grid-cols-[2rem_1fr_4.5rem] md:grid-cols-[2.5rem_1fr_6rem] gap-3 md:gap-x-4 px-3 py-3.5 md:py-5 items-center hover:bg-[#0a0a0a]/[0.02] dark:hover:bg-white/[0.02] transition-colors relative ${
-                    isFirst ? "bg-[#0a0a0a]/[0.03] dark:bg-white/[0.03]" : ""
+                  className={`m-row reveal relative grid grid-cols-[2rem_1fr_4.5rem] items-center gap-3 px-3 py-3.5 transition-colors hover:bg-info/5 md:grid-cols-[2.5rem_1fr_6rem] md:gap-x-4 md:py-4 ${
+                    isFirst ? "bg-warn-soft/40" : ""
                   }`}
                 >
-                  {isFirst && <div className="absolute left-0 top-0 bottom-0 w-1 md:hidden bg-[#e10600]" />}
+                  {isFirst && <div aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-brand" />}
 
-                  <span className={`text-lg md:text-base font-black tabular-nums text-center md:text-left ${
-                    isFirst ? "text-[#e10600]" : i < 3 ? "text-[#0a0a0a]/60 dark:text-white/60" : "text-[#0a0a0a]/30 dark:text-white/30"
+                  <span className={`text-center text-lg font-semibold tabular-nums md:text-left md:text-base ${
+                    PODIUM_TEXT[i] ?? "text-ink-muted"
                   }`}>
                     {i + 1}
                   </span>
 
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex min-w-0 items-center gap-3">
                     {t.logo_url ? (
-                      <img src={t.logo_url} alt={t.nombre} className="w-9 h-9 md:w-8 md:h-8 rounded-lg md:rounded-none object-contain border border-[#0a0a0a]/[0.1] dark:border-white/[0.12] shrink-0 p-1 md:p-0.5" />
+                      <img src={t.logo_url} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-line object-contain p-1 md:h-8 md:w-8" />
                     ) : (
-                      <div className="w-9 h-9 md:w-8 md:h-8 rounded-lg md:rounded-none bg-[#0a0a0a]/[0.06] dark:bg-white/[0.06] border border-[#0a0a0a]/[0.1] dark:border-white/[0.12] flex items-center justify-center text-[11px] font-black text-[#0a0a0a]/35 dark:text-white/35 shrink-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-xs font-semibold text-ink-muted md:h-8 md:w-8">
                         {t.nombre?.slice(0, 2).toUpperCase()}
                       </div>
                     )}
-                    <span className={`font-bold md:font-black text-[15px] md:text-sm tracking-tight truncate ${
-                      isFirst ? "text-[#0a0a0a] dark:text-white" : "text-[#0a0a0a]/75 dark:text-white/75"
-                    }`}>
+                    <span className={`truncate text-[15px] font-semibold md:text-sm ${isFirst ? "text-ink" : "text-ink-2"}`}>
                       {t.nombre}
                     </span>
-                    {isFirst && <Crown className="w-4 h-4 shrink-0 text-yellow-500 dark:text-yellow-400" />}
+                    {isFirst && <Crown aria-label="Líder" className="h-4 w-4 shrink-0 text-warn" />}
                   </div>
 
                   <div className="text-right">
-                    <span className={`text-xl md:text-lg font-black tabular-nums ${
-                      isFirst ? "text-[#0a0a0a] dark:text-white" : "text-[#0a0a0a]/65 dark:text-white/65"
-                    }`}>
+                    <span className={`text-xl font-semibold tabular-nums md:text-lg ${isFirst ? "text-ink" : "text-ink-2"}`}>
                       {t.puntos_constructores || 0}
                     </span>
-                    <p className="text-[11px] leading-tight text-[#0a0a0a]/35 dark:text-white/35 md:hidden">pts</p>
+                    <p className="text-xs leading-tight text-ink-muted md:hidden">pts</p>
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ul>
 
           {teamStandings.length === 0 && (
-            <div className="py-24 text-center">
-              <p className="text-[10px] font-mono tracking-[0.4em] text-[#0a0a0a]/15 dark:text-white/15 uppercase">
-                Sin datos de constructores
-              </p>
-            </div>
+            <EmptyState icon={Users} title="Sin datos de constructores" description="Las escuderías aparecerán cuando se inscriban en este split." className="m-4 py-12" />
           )}
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -27,6 +27,7 @@ interface Puja {
 
 import { desglosarEspera, parsearImporte, paraInputLocal, segundosRestantes } from "../services/auctionService";
 
+import { useSingleFlight } from "../hooks/useSingleFlight";
 const ANIMACIONES = `
 @keyframes subasta-latido { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 @keyframes subasta-flash  { 0% { opacity: 0; transform: translateY(-6px); } 15% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
@@ -41,6 +42,7 @@ const ANIMACIONES = `
 `;
 
 export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: string }) {
+  const { run: runOnce, pending: pendingOnce } = useSingleFlight();
   const { userData } = useAuth();
   const esAdmin = userData?.rol === "admin";
   // Pujar es cosa de jeques. Un piloto de plantilla también lleva `escuderia_id`, así que
@@ -183,7 +185,9 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
   // ── Acciones ───────────────────────────────────────────────────────────────
 
+  const { run: runBid } = useSingleFlight();
   const lanzarPuja = async (cifra: number) => {
+    return runBid(async () => {
     if (!miEquipo) { setAviso("No tienes escudería asignada."); return; }
     const permiso = puedePujar(miEquipo, cifra);
     if (!permiso.ok) { setAviso(permiso.motivo!); return; }
@@ -191,16 +195,19 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     const resultado = await pujar(splitId, { id: miEquipo.id, nombre: miEquipo.nombre }, cifra);
     setAviso(resultado.message);
     setOcupado(false);
+    });
   };
 
   const sacarPiloto = async () => {
+    return runOnce(async () => {
     const piloto = candidatos.find(c => c.id === pilotoElegido);
     if (!piloto) { setAviso("Elige un piloto."); return; }
     setOcupado(true);
     const resultado = await sacarPilotoASubasta(splitId, piloto, tipoElegido);
     setAviso(resultado.message);
     setOcupado(false);
-  };
+  });
+};
 
   const subidaRapida = (paso: number) => {
     const base = sala.puja_actual ?? 0;
@@ -208,6 +215,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   };
 
   const concederProrroga = async () => {
+    return runOnce(async () => {
     setOcupado(true);
     try {
       const resultado = await prorrogarSubasta(splitId);
@@ -215,9 +223,11 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     } finally {
       setOcupado(false);
     }
-  };
+  });
+};
 
   const adjudicarAhora = async () => {
+    return runOnce(async () => {
     const detalle = sala.estado === "en_curso" && restante > 0
       ? `Aún quedan ${restante.toFixed(1)} segundos de puja.`
       : "El reloj ya se ha agotado.";
@@ -235,9 +245,11 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     } finally {
       setOcupado(false);
     }
-  };
+  });
+};
 
   const deshacerSimulacion = async () => {
+    return runOnce(async () => {
     setOcupado(true);
     try {
       const resultado = await deshacerAdjudicacionSimulada(splitId);
@@ -245,7 +257,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     } finally {
       setOcupado(false);
     }
-  };
+  });
+};
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -270,6 +283,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   };
 
   const pasarAlSiguiente = async () => {
+    return runOnce(async () => {
     setOcupado(true);
     try {
       await cerrarSala(splitId, false);
@@ -278,7 +292,8 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
     } finally {
       setOcupado(false);
     }
-  };
+  });
+};
 
   // Ficha del roster para pintar la carta con sus stats reales.
   const pilotoEnAtril = (split?.roster || []).find((p: any) => p.pilotoId === sala.pilotoId);
@@ -286,24 +301,24 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
   const fotoDelPiloto = (pilotoId: string) =>
     (split?.roster || []).find((p: any) => p.pilotoId === pilotoId)?.foto_url || "";
 
-  const filaOpcion = "w-full min-h-14 flex items-center justify-between gap-3 px-4 py-3 border-b border-white/[0.05] text-left transition-colors";
+  const filaOpcion = "w-full min-h-14 flex items-center justify-between gap-3 px-4 py-3 border-b border-line text-left transition-colors";
 
   return (
-    <section className="border border-white/10 bg-white/[0.03] p-5 space-y-5">
+    <section className="border border-line bg-surface-2 p-5 space-y-5">
       <style>{ANIMACIONES}</style>
 
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-[#e10600]/10 text-[#e10600]"><Gavel className="w-5 h-5" /></div>
+        <div className="p-2 bg-brand/10 text-brand"><Gavel className="w-5 h-5" /></div>
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="font-black uppercase tracking-tight text-lg">Sala de subasta</h2>
-            <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 ${
-              sala.modo === "real" ? "bg-[#e10600]/20 text-[#e10600]" : "bg-sky-500/20 text-sky-300"
+            <h2 className="font-bold uppercase tracking-tight text-lg">Sala de subasta</h2>
+            <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-2 py-0.5 ${
+              sala.modo === "real" ? "bg-brand/20 text-brand" : "bg-info-soft text-info"
             }`}>
               {sala.modo === "real" ? "En vivo · mueve dinero" : "Simulacro"}
             </span>
           </div>
-          <p className="text-xs text-white/45 mt-1 max-w-2xl">
+          <p className="text-xs text-ink-muted mt-1 max-w-2xl">
             No hay precio de salida ni turnos: cualquier jeque puede poner la primera cifra y activar el
             reloj. Desde ahí todos pueden seguir pujando, incluso quien lleve la máxima, y cada
             puja suma {sala.prorroga_segundos}s al reloj.
@@ -313,61 +328,61 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
       {/* ── Controles de admin ── */}
       {esAdmin && (
-        <div className="border border-white/[0.06] bg-black/30 p-4 space-y-3">
+        <div className="border border-line bg-surface-2 p-4 space-y-3">
           <div className="flex items-baseline justify-between gap-3 flex-wrap">
-            <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/25">Mesa de control</p>
+            <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-ink-muted">Mesa de control</p>
             {sala.apertura_programada != null && (
-              <p className="text-[9px] font-mono text-white/30">
+              <p className="text-[9px] font-mono text-ink-muted">
                 Cita: {new Date(sala.apertura_programada).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                {sala.modo === "simulacro" && <span className="text-sky-300/60"> · el simulacro no espera</span>}
+                {sala.modo === "simulacro" && <span className="text-info"> · el simulacro no espera</span>}
               </p>
             )}
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
             <label className="space-y-1">
-              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Modo</span>
+              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-ink-muted">Modo</span>
               <select value={sala.modo} disabled={sala.simulacion_reversiones.length > 0}
                 onChange={e => configurarSala(splitId, { modo: e.target.value as any })}
-                className="min-h-11 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
+                className="min-h-11 rounded-lg border border-line bg-surface px-2 text-ink outline-none focus:border-brand md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
                 <option value="simulacro">Simulacro</option>
                 <option value="real">Real</option>
               </select>
             </label>
             <label className="space-y-1">
-              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Tiempo (s)</span>
+              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-ink-muted">Tiempo (s)</span>
               <input type="number" min={10} max={600} defaultValue={sala.duracion_segundos} key={`d-${sala.duracion_segundos}`}
                 onBlur={e => configurarSala(splitId, { duracion_segundos: Math.max(10, Number(e.target.value) || 60) })}
-                className="min-h-11 w-20 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
+                className="min-h-11 w-20 rounded-lg border border-line bg-surface px-2 text-ink outline-none focus:border-brand md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
             </label>
             <label className="space-y-1">
-              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Prórroga (s)</span>
+              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-ink-muted">Prórroga (s)</span>
               <input type="number" min={0} max={120} defaultValue={sala.prorroga_segundos} key={`p-${sala.prorroga_segundos}`}
                 onBlur={e => configurarSala(splitId, { prorroga_segundos: Math.max(0, Number(e.target.value) || 0) })}
-                className="min-h-11 w-20 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
+                className="min-h-11 w-20 rounded-lg border border-line bg-surface px-2 text-ink outline-none focus:border-brand md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
             </label>
             <label className="space-y-1">
-              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Abre el mercado</span>
+              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-ink-muted">Abre el mercado</span>
               <input type="datetime-local" defaultValue={paraInputLocal(sala.apertura_programada)}
                 key={`a-${sala.apertura_programada}`}
                 onBlur={e => configurarSala(splitId, {
                   apertura_programada: e.target.value ? new Date(e.target.value).getTime() : null,
                 })}
-                className="min-h-11 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
+                className="min-h-11 rounded-lg border border-line bg-surface px-2 text-ink outline-none focus:border-brand md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
             </label>
             <label className="space-y-1">
-              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Plazas</span>
+              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-ink-muted">Plazas</span>
               <input type="number" min={1} max={8} defaultValue={sala.plazas_por_equipo} key={`z-${sala.plazas_por_equipo}`}
                 onBlur={e => configurarSala(splitId, { plazas_por_equipo: Math.max(1, Number(e.target.value) || 4) })}
-                className="min-h-11 w-16 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
+                className="min-h-11 w-16 rounded-lg border border-line bg-surface px-2 text-ink outline-none focus:border-brand md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]" />
             </label>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
             <label className="space-y-1 flex-1 min-w-[180px]">
-              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Piloto</span>
+              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-ink-muted">Piloto</span>
               <select value={pilotoElegido} onChange={e => setPilotoElegido(e.target.value)}
-                className="min-h-11 w-full rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
+                className="min-h-11 w-full rounded-lg border border-line bg-surface px-2 text-ink outline-none focus:border-brand md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
                 <option value="">— elige —</option>
                 {candidatos.map(c => (
                   <option key={c.id} value={c.id}>
@@ -377,38 +392,40 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               </select>
             </label>
             <label className="space-y-1">
-              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30">Operación</span>
+              <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-ink-muted">Operación</span>
               <select value={tipoElegido} onChange={e => setTipoElegido(e.target.value as TipoOperacion)}
-                className="min-h-11 rounded-lg border border-white/15 bg-black px-2 text-white outline-none focus:border-[#e10600] md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
+                className="min-h-11 rounded-lg border border-line bg-surface px-2 text-ink outline-none focus:border-brand md:min-h-0 md:rounded-none md:py-1.5 md:font-mono md:text-[10px]">
                 <option value="subasta">Subasta</option>
                 <option value="clausula">Cláusula</option>
                 <option value="mantener">Mantener</option>
               </select>
             </label>
-            <button onClick={sacarPiloto} disabled={ocupado || !pilotoElegido}
-              className="inline-flex items-center gap-2 border border-[#e10600]/50 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-[#e10600] disabled:opacity-30">
+            <button aria-busy={pendingOnce || undefined} onClick={sacarPiloto} disabled={(ocupado || !pilotoElegido) || pendingOnce}
+              className="inline-flex items-center gap-2 border border-brand/50 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-bold uppercase tracking-wider text-brand disabled:opacity-30">
               {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gavel className="w-3.5 h-3.5" />}
               Sacar a subasta
             </button>
-            <button onClick={adjudicarAhora}
-              disabled={ocupado || sala.estado === "inactiva" || sala.estado === "adjudicada"}
-              className="border border-emerald-400/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 disabled:opacity-30">
+            <button aria-busy={pendingOnce || undefined} onClick={adjudicarAhora}
+              disabled={(ocupado || sala.estado === "inactiva" || sala.estado === "adjudicada") || pendingOnce}
+              className="border border-ok/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-bold uppercase tracking-wider text-ok disabled:opacity-30">
               Adjudicar ya
             </button>
-            <button onClick={concederProrroga}
-              disabled={ocupado || sala.estado !== "en_curso" || sala.prorroga_segundos <= 0}
-              className="border border-amber-300/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-300 disabled:opacity-30">
+            <button aria-busy={pendingOnce || undefined} onClick={concederProrroga}
+              disabled={(ocupado || sala.estado !== "en_curso" || sala.prorroga_segundos <= 0) || pendingOnce}
+              className="border border-warn/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-bold uppercase tracking-wider text-warn disabled:opacity-30">
               Dar prórroga +{sala.prorroga_segundos}s
             </button>
             {sala.simulacion_reversiones.length > 0 && (
-              <button onClick={deshacerSimulacion} disabled={ocupado}
-                className="border border-sky-300/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-300 disabled:opacity-30">
+              <button aria-busy={pendingOnce || undefined} onClick={deshacerSimulacion} disabled={(ocupado) || pendingOnce}
+                className="border border-info/40 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-bold uppercase tracking-wider text-info disabled:opacity-30">
                 Deshacer simulacro ({sala.simulacion_reversiones.length})
               </button>
             )}
-            <button onClick={async () => { setOcupado(true); await cerrarSala(splitId); setAviso("Sala vaciada."); setOcupado(false); }}
-              disabled={ocupado}
-              className="border border-white/15 min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-black uppercase tracking-wider text-white/40 disabled:opacity-30">
+            <button aria-busy={pendingOnce || undefined} onClick={async () => {
+    return runOnce(async () => { setOcupado(true); await cerrarSala(splitId); setAviso("Sala vaciada."); setOcupado(false); });
+}}
+              disabled={(ocupado) || pendingOnce}
+              className="border border-line min-h-11 rounded-lg px-3 md:min-h-0 md:rounded-none md:py-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-muted disabled:opacity-30">
               Vaciar sala
             </button>
           </div>
@@ -417,30 +434,30 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
       {/* ── Cuenta atrás hasta la apertura ── */}
       {!mercadoAbierto && (
-        <div className="border border-white/[0.06] bg-black/40 py-10 px-5 text-center">
-          <p className="text-[9px] font-mono uppercase tracking-[0.35em] text-white/30">El mercado abre en</p>
+        <div className="border border-line bg-surface-2 py-10 px-5 text-center">
+          <p className="text-[9px] font-mono uppercase tracking-[0.35em] text-ink-muted">El mercado abre en</p>
           <div className="mt-4 flex items-end justify-center gap-3 sm:gap-6"
             style={inminente ? { animation: "subasta-latido 1s ease-in-out infinite" } : undefined}>
             {([["días", espera.dias], ["horas", espera.horas], ["min", espera.minutos], ["seg", espera.segundos]] as const)
               .map(([etiqueta, valor], indice) => (
                 (indice > 0 || espera.dias > 0) && (
                   <div key={etiqueta}>
-                    <span className={`block text-4xl sm:text-6xl font-black tabular-nums leading-none ${
-                      inminente ? "text-[#e10600]" : "text-white"
+                    <span className={`block text-4xl sm:text-6xl font-bold tabular-nums leading-none ${
+                      inminente ? "text-brand" : "text-ink"
                     }`}>
                       {String(valor).padStart(2, "0")}
                     </span>
-                    <span className="block mt-1 text-[8px] font-mono uppercase tracking-[0.3em] text-white/25">{etiqueta}</span>
+                    <span className="block mt-1 text-[8px] font-mono uppercase tracking-[0.3em] text-ink-muted">{etiqueta}</span>
                   </div>
                 )
               ))}
           </div>
-          <p className="mt-5 text-[10px] font-mono text-white/35">
+          <p className="mt-5 text-[10px] font-mono text-ink-muted">
             {new Date(sala.apertura_programada!).toLocaleString("es-ES", {
               weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
             })}
           </p>
-          <p className="mt-1 text-[9px] font-mono uppercase tracking-[0.25em] text-white/20">
+          <p className="mt-1 text-[9px] font-mono uppercase tracking-[0.25em] text-ink-muted">
             La sala se abre sola · no hace falta recargar
           </p>
         </div>
@@ -448,11 +465,11 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
       {/* ── El atril ── */}
       {!mercadoAbierto ? null : sala.estado === "inactiva" ? (
-        <p className="text-[10px] font-mono uppercase tracking-[0.35em] text-white/15 text-center py-12">
+        <p className="text-[10px] font-mono uppercase tracking-[0.35em] text-ink-muted text-center py-12">
           No hay ningún piloto en el atril
         </p>
       ) : (
-        <div className="m-card border border-white/[0.06] bg-black/40">
+        <div className="m-card border border-line bg-surface-2">
           <div className="grid gap-4 p-4 md:grid-cols-[minmax(0,190px)_1fr] md:gap-5 md:p-5">
 
             {/* Carta del piloto */}
@@ -467,7 +484,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   showPrice={false}
                 />
               ) : (
-                <div className="border border-white/10 bg-[#090909] grid place-items-center text-white/15 font-black text-2xl"
+                <div className="border border-line bg-surface-2 grid place-items-center text-ink-muted font-bold text-2xl"
                   style={{ aspectRatio: "2/3" }}>
                   {(sala.pilotoNombre || "?").slice(0, 2).toUpperCase()}
                 </div>
@@ -476,14 +493,14 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
             {/* Opciones de puja */}
             <div className="min-w-0">
-              <div className="flex items-baseline justify-between gap-3 bg-white/[0.06] px-4 py-2">
-                <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/50">Opciones de puja</span>
-                <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-[#e10600]">
+              <div className="flex items-baseline justify-between gap-3 bg-surface-3 px-4 py-2">
+                <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-ink-2">Opciones de puja</span>
+                <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-brand">
                   {sala.tipo_operacion === "clausula" ? "Cláusula" : sala.tipo_operacion === "mantener" ? "Mantener" : "Subasta"}
                 </span>
               </div>
 
-              <div className="border-x border-b border-white/[0.05]">
+              <div className="border-x border-b border-line">
                 {/* Fila destacada: pujar */}
                 <button
                   onClick={() => setPanelAbierto(true)}
@@ -491,13 +508,13 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                   style={{ animation: "subasta-fila 0.35s ease-out both" }}
                   className={`${filaOpcion} ${
                     puedoOfertar
-                      ? "bg-[#e10600] text-white hover:bg-[#ff1a09]"
-                      : "bg-white/[0.02] text-white/25 cursor-default"
+                      ? "bg-brand text-brand-ink hover:bg-brand-hover"
+                      : "bg-surface-2 text-ink-muted cursor-default"
                   }`}>
-                  <span className="text-[11px] font-black uppercase tracking-[0.15em]">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.15em]">
                     {puedoAbrir ? "Abrir la puja" : "Pujar"}
                   </span>
-                  <span className="flex items-center gap-2 font-black tabular-nums text-lg">
+                  <span className="flex items-center gap-2 font-bold tabular-nums text-lg">
                     <ChevronLeft className="w-4 h-4 opacity-60" />
                     {puedoOfertar && ofertaValida ? formatearMillones(ofertaNumero) : "—"}
                     <ChevronRight className="w-4 h-4 opacity-60" />
@@ -508,24 +525,24 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 {puedoPujar && [0.5, 1, 5].map((paso, indice) => (
                   <button key={paso} onClick={() => subidaRapida(paso)} disabled={ocupado}
                     style={{ animation: `subasta-fila 0.35s ease-out ${0.06 * (indice + 1)}s both` }}
-                    className={`${filaOpcion} bg-white/[0.02] hover:bg-white/[0.06] disabled:opacity-30`}>
-                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">Subir {formatearMillones(paso)}</span>
-                    <span className="font-black tabular-nums text-white/80">
+                    className={`${filaOpcion} bg-surface-2 hover:bg-surface-3 disabled:opacity-30`}>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-2">Subir {formatearMillones(paso)}</span>
+                    <span className="font-bold tabular-nums text-ink">
                       {formatearMillones(Math.round(((sala.puja_actual ?? 0) + paso) * 10) / 10)}
                     </span>
                   </button>
                 ))}
 
                 {soyPujadorMax && (
-                  <div className={`${filaOpcion} bg-emerald-500/10`}>
-                    <span className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-400">Vas ganando</span>
-                    <span className="font-black tabular-nums text-emerald-400">{formatearMillones(sala.puja_actual!)}</span>
+                  <div className={`${filaOpcion} bg-ok-soft`}>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-ok">Vas ganando</span>
+                    <span className="font-bold tabular-nums text-ok">{formatearMillones(sala.puja_actual!)}</span>
                   </div>
                 )}
 
                 {!miEquipo && (
-                  <div className={`${filaOpcion} bg-white/[0.02]`}>
-                    <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/25">
+                  <div className={`${filaOpcion} bg-surface-2`}>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-ink-muted">
                       Estás viendo la puja · solo pujan los jeques
                     </span>
                   </div>
@@ -533,7 +550,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               </div>
 
               {/* Datos de la subasta */}
-              <div className="mt-4 border border-white/[0.05]">
+              <div className="mt-4 border border-line">
                 {([
                   ["Piloto", sala.pilotoNombre ?? "—"],
                   ["Venía de", sala.equipo_anterior_nombre ?? "agente libre"],
@@ -544,11 +561,11 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 ] as const).map(([etiqueta, valor], indice) => (
                   <div key={etiqueta}
                     className={`flex items-center justify-between px-4 py-1.5 text-[10px] font-mono ${
-                      indice % 2 === 0 ? "bg-white/[0.015]" : ""
+                      indice % 2 === 0 ? "bg-surface-2" : ""
                     }`}>
-                    <span className="text-white/30 uppercase tracking-[0.14em]">{etiqueta}</span>
+                    <span className="text-ink-muted uppercase tracking-[0.14em]">{etiqueta}</span>
                     <span className={`tabular-nums ${
-                      etiqueta === "Oferta actual" ? "text-white font-black text-sm" : "text-white/70"
+                      etiqueta === "Oferta actual" ? "text-ink font-bold text-sm" : "text-ink-2"
                     }`}
                       style={etiqueta === "Oferta actual" && latidoCifra > 0
                         ? { animation: "subasta-cifra 0.45s ease-out" } : undefined}
@@ -565,22 +582,22 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
           {sala.estado === "en_curso" && (
             <div className="px-5 pb-5 space-y-2">
               <div className="flex items-baseline justify-between">
-                <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-white/25 flex items-center gap-1.5">
+                <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-ink-muted flex items-center gap-1.5">
                   <Timer className="w-3 h-3" /> Se agota el mercado
                 </span>
-                <span className={`font-black tabular-nums ${agonia ? "text-[#e10600] text-2xl" : "text-white/70 text-lg"}`}
+                <span className={`font-bold tabular-nums ${agonia ? "text-brand text-2xl" : "text-ink-2 text-lg"}`}
                   style={agonia ? { animation: "subasta-latido 0.5s ease-in-out infinite" } : undefined}>
                   {restante.toFixed(1)}s
                 </span>
               </div>
-              <div className="h-2 bg-white/[0.06] overflow-hidden">
+              <div className="h-2 bg-surface-3 overflow-hidden">
                 <div
-                  className={agonia ? "h-full bg-[#e10600]" : "h-full bg-emerald-400/70"}
+                  className={agonia ? "h-full bg-brand" : "h-full bg-ok-soft"}
                   style={{
                     width: `${porcentaje}%`,
                     transition: "width 120ms linear",
                     ...(agonia ? {
-                      backgroundImage: "linear-gradient(90deg,#e10600,#ff6a00,#e10600)",
+                      backgroundImage: "linear-gradient(90deg,var(--c-brand),var(--c-warn),var(--c-brand))",
                       backgroundSize: "200% 100%",
                       animation: "subasta-barrido 0.8s linear infinite",
                     } : {}),
@@ -588,7 +605,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                 />
               </div>
               {flashProrroga && (
-                <p className="text-center text-[11px] font-black uppercase tracking-[0.3em] text-amber-300"
+                <p className="text-center text-[11px] font-bold uppercase tracking-[0.3em] text-warn"
                   style={{ animation: "subasta-flash 1.8s ease-out" }}>
                   ¡Prórroga! +{sala.prorroga_segundos}s al reloj
                 </p>
@@ -598,23 +615,23 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
           {/* ── Adjudicación ── */}
           {sala.estado === "adjudicada" && adjudicacion && (
-            <div className="border-t border-white/[0.06] py-8 px-5 text-center"
+            <div className="border-t border-line py-8 px-5 text-center"
               style={{ animation: "subasta-golpe 0.7s cubic-bezier(.2,1.4,.4,1)" }}>
               {adjudicacion.desierta ? (
                 <>
-                  <p className="text-[9px] font-mono uppercase tracking-[0.35em] text-white/30">Subasta desierta</p>
-                  <p className="mt-2 text-2xl font-black uppercase">{sala.pilotoNombre} se queda libre</p>
+                  <p className="text-[9px] font-mono uppercase tracking-[0.35em] text-ink-muted">Subasta desierta</p>
+                  <p className="mt-2 text-2xl font-bold uppercase">{sala.pilotoNombre} se queda libre</p>
                 </>
               ) : (
                 <>
-                  <Trophy className="w-7 h-7 mx-auto text-amber-300" />
-                  <p className="mt-3 text-[9px] font-mono uppercase tracking-[0.35em] text-white/30">Adjudicado a</p>
-                  <p className="mt-1 text-4xl md:text-5xl font-black uppercase tracking-[-0.03em] text-amber-300">
+                  <Trophy className="w-7 h-7 mx-auto text-warn" />
+                  <p className="mt-3 text-[9px] font-mono uppercase tracking-[0.35em] text-ink-muted">Adjudicado a</p>
+                  <p className="mt-1 text-4xl md:text-5xl font-bold uppercase tracking-[-0.03em] text-warn">
                     {adjudicacion.equipoNombre}
                   </p>
-                  <p className="mt-2 text-lg font-black tabular-nums">{formatearMillones(adjudicacion.precio)}</p>
+                  <p className="mt-2 text-lg font-bold tabular-nums">{formatearMillones(adjudicacion.precio)}</p>
                   {adjudicacion.modo === "simulacro" && (
-                    <p className="mt-3 text-[9px] font-mono uppercase tracking-[0.25em] text-sky-300/70">
+                    <p className="mt-3 text-[9px] font-mono uppercase tracking-[0.25em] text-info">
                       Simulacro aplicado · piloto y presupuesto temporales
                     </p>
                   )}
@@ -623,14 +640,14 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               {esAdmin && (
                 <div className="mt-5 flex flex-wrap justify-center gap-2">
                   {sala.simulacion_reversiones.length > 0 && (
-                    <button onClick={deshacerSimulacion} disabled={ocupado}
-                      className="inline-flex items-center gap-2 border border-sky-300/40 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-sky-300 hover:border-sky-300 disabled:opacity-30">
+                    <button aria-busy={pendingOnce || undefined} onClick={deshacerSimulacion} disabled={(ocupado) || pendingOnce}
+                      className="inline-flex items-center gap-2 border border-info/40 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-info hover:border-info/40 disabled:opacity-30">
                       {ocupado && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       Deshacer adjudicación
                     </button>
                   )}
-                  <button onClick={pasarAlSiguiente} disabled={ocupado}
-                    className="inline-flex items-center gap-2 border border-white/20 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/65 hover:border-white/50 hover:text-white disabled:opacity-30">
+                  <button aria-busy={pendingOnce || undefined} onClick={pasarAlSiguiente} disabled={(ocupado) || pendingOnce}
+                    className="inline-flex items-center gap-2 border border-line px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-2 hover:border-line hover:text-ink disabled:opacity-30">
                     {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
                     Siguiente piloto
                   </button>
@@ -641,18 +658,18 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
           {/* ── Historial de pujas ── */}
           {pujas.length > 0 && (
-            <div className="border-t border-white/[0.06] max-h-44 overflow-y-auto">
+            <div className="border-t border-line max-h-44 overflow-y-auto">
               {pujas.map((puja, indice) => (
                 <div key={puja.id}
-                  className="flex items-center justify-between px-5 py-1.5 border-b border-white/[0.03] text-[10px] font-mono"
+                  className="flex items-center justify-between px-5 py-1.5 border-b border-line text-[10px] font-mono"
                   style={indice === 0 ? { animation: "subasta-entra 0.35s ease-out" } : undefined}>
-                  <span className="text-white/50">
-                    {puja.apertura && <span className="text-amber-300/70 mr-1.5">abre</span>}
-                    {puja.prorroga && <span className="text-amber-300/50 mr-1.5">+{sala.prorroga_segundos}s</span>}
+                  <span className="text-ink-2">
+                    {puja.apertura && <span className="text-warn mr-1.5">abre</span>}
+                    {puja.prorroga && <span className="text-warn mr-1.5">+{sala.prorroga_segundos}s</span>}
                     {puja.equipoNombre}
                   </span>
                   <span className="flex items-center gap-2">
-                    <span className={indice === 0 ? "text-white font-black tabular-nums" : "text-white/40 tabular-nums"}>
+                    <span className={indice === 0 ? "text-ink font-bold tabular-nums" : "text-ink-muted tabular-nums"}>
                       {formatearMillones(puja.importe)}
                     </span>
                   </span>
@@ -665,31 +682,31 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
 
       {/* ── Panel de puja ── */}
       {panelAbierto && miEquipo && enAtril && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-0 sm:items-center sm:p-4"
           style={{ animation: "subasta-velo 0.2s ease-out" }}
           onClick={() => setPanelAbierto(false)}>
           <div onClick={e => e.stopPropagation()}
             style={{ animation: "subasta-panel 0.45s cubic-bezier(.2,1.35,.4,1)" }}
-            className="w-full max-w-sm rounded-t-2xl border border-white/15 bg-[#0c0c0c] pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black/70 sm:rounded-none sm:pb-0">
+            className="w-full max-w-sm rounded-t-2xl border border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-card sm:rounded-none sm:pb-0">
 
-            <div className="flex items-center justify-between bg-[#e10600] px-4 py-2.5">
-              <span className="text-[10px] font-black uppercase tracking-[0.22em] text-white">
+            <div className="flex items-center justify-between bg-brand px-4 py-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-ink">
                 {puedoAbrir ? "Abres la puja" : "Tu puja"}
               </span>
-              <button aria-label="Cerrar" onClick={() => setPanelAbierto(false)} className="-mr-2 grid h-10 w-10 place-items-center text-white/70 hover:text-white">✕</button>
+              <button aria-label="Cerrar" onClick={() => setPanelAbierto(false)} className="-mr-2 grid h-10 w-10 place-items-center text-ink-2 hover:text-ink">✕</button>
             </div>
 
             <div className="p-5 space-y-5">
               <div className="text-center">
-                <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">{sala.pilotoNombre}</p>
-                <p className="mt-1 text-[10px] font-mono text-white/25">
+                <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-ink-muted">{sala.pilotoNombre}</p>
+                <p className="mt-1 text-[10px] font-mono text-ink-muted">
                   {sala.puja_actual == null ? "Nadie ha pujado todavía" : `Va ganando ${sala.puja_equipo_nombre} con ${formatearMillones(sala.puja_actual)}`}
                 </p>
               </div>
 
               <div className="flex items-center justify-center gap-4">
                 <button onClick={() => ajustarOferta(-0.5)}
-                  className="w-11 h-11 border border-white/15 grid place-items-center text-white/60 hover:border-[#e10600] hover:text-white transition-colors">
+                  className="w-11 h-11 border border-line grid place-items-center text-ink-2 hover:border-brand hover:text-ink transition-colors">
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <div className="text-center min-w-[7rem]">
@@ -700,11 +717,11 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
                     onBlur={() => {
                       if (Number.isFinite(ofertaNumero)) setOferta(formatearNumero(ofertaNumero));
                     }}
-                    className={`block w-28 bg-transparent text-center text-4xl font-black tabular-nums leading-none outline-none ${ofertaValida ? "text-white" : "text-[#e10600]"}`} />
-                  <span className="block mt-1 text-[8px] font-mono uppercase tracking-[0.3em] text-white/25">millones</span>
+                    className={`block w-28 bg-transparent text-center text-4xl font-bold tabular-nums leading-none outline-none ${ofertaValida ? "text-ink" : "text-brand"}`} />
+                  <span className="block mt-1 text-[8px] font-mono uppercase tracking-[0.3em] text-ink-muted">millones</span>
                 </div>
                 <button onClick={() => ajustarOferta(0.5)}
-                  className="w-11 h-11 border border-white/15 grid place-items-center text-white/60 hover:border-[#e10600] hover:text-white transition-colors">
+                  className="w-11 h-11 border border-line grid place-items-center text-ink-2 hover:border-brand hover:text-ink transition-colors">
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
@@ -712,31 +729,31 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
               <div className="flex justify-center gap-2">
                 {[1, 5, 10].map(paso => (
                   <button key={paso} onClick={() => ajustarOferta(paso)}
-                    className="min-h-11 min-w-14 rounded-xl border border-white/10 px-3 text-[13px] font-black tabular-nums text-white/70 transition-colors hover:border-white/40 hover:text-white sm:min-h-0 sm:min-w-0 sm:rounded-none sm:py-1.5 sm:text-[10px]">
+                    className="min-h-11 min-w-14 rounded-xl border border-line px-3 text-[13px] font-bold tabular-nums text-ink-2 transition-colors hover:border-line hover:text-ink sm:min-h-0 sm:min-w-0 sm:rounded-none sm:py-1.5 sm:text-[10px]">
                     +{paso}
                   </button>
                 ))}
               </div>
 
-              <div className="border-t border-white/[0.06] pt-4 space-y-1.5 text-[10px] font-mono">
-                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Mínimo</span><span className="text-white/60 tabular-nums">{minimo == null ? "Libre" : formatearMillones(minimo)}</span></div>
-                <div className="flex justify-between"><span className="text-white/30 uppercase tracking-[0.14em]">Tu saldo</span><span className="text-white/60 tabular-nums">{saldo == null ? "—" : formatearMillones(saldo)}</span></div>
+              <div className="border-t border-line pt-4 space-y-1.5 text-[10px] font-mono">
+                <div className="flex justify-between"><span className="text-ink-muted uppercase tracking-[0.14em]">Mínimo</span><span className="text-ink-2 tabular-nums">{minimo == null ? "Libre" : formatearMillones(minimo)}</span></div>
+                <div className="flex justify-between"><span className="text-ink-muted uppercase tracking-[0.14em]">Tu saldo</span><span className="text-ink-2 tabular-nums">{saldo == null ? "—" : formatearMillones(saldo)}</span></div>
                 <div className="flex justify-between">
-                  <span className="text-white/30 uppercase tracking-[0.14em]">Te quedarían</span>
-                  <span className={`tabular-nums font-black ${saldo != null && saldo - ofertaNumero < 0 ? "text-[#e10600]" : "text-emerald-400"}`}>
+                  <span className="text-ink-muted uppercase tracking-[0.14em]">Te quedarían</span>
+                  <span className={`tabular-nums font-bold ${saldo != null && saldo - ofertaNumero < 0 ? "text-brand" : "text-ok"}`}>
                     {saldo != null && Number.isFinite(ofertaNumero) ? formatearMillones(saldo - ofertaNumero) : "—"}
                   </span>
                 </div>
               </div>
 
               {!ofertaValida && (
-                <p className="text-[10px] font-mono text-[#e10600] text-center">
+                <p className="text-[10px] font-mono text-brand text-center">
                   {minimo != null && ofertaNumero < minimo ? `Hay que superar los ${formatearMillones(sala.puja_actual!)}.` : "Introduce una oferta válida dentro de tu presupuesto."}
                 </p>
               )}
 
               <button onClick={confirmarOferta} disabled={!ofertaValida || ocupado}
-                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#e10600] text-sm font-black uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#ff1a09] disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-0 sm:rounded-none sm:py-3 sm:text-[11px] sm:tracking-[0.2em]">
+                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-bold uppercase tracking-[0.12em] text-brand-ink transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-0 sm:rounded-none sm:py-3 sm:text-[11px] sm:tracking-[0.2em]">
                 {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gavel className="w-4 h-4" />}
                 Confirmar {ofertaValida ? formatearMillones(ofertaNumero) : "oferta"}
               </button>
@@ -745,7 +762,7 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
         </div>
       )}
 
-      {aviso && <p className="text-[10px] font-mono text-amber-300/80">{aviso}</p>}
+      {aviso && <p className="text-[10px] font-mono text-warn">{aviso}</p>}
 
       {/* ── Quién puede pujar ── */}
       {mercadoAbierto && equipos.length > 0 && (
@@ -753,12 +770,12 @@ export function AuctionRoom({ splits, splitId }: { splits: any[]; splitId: strin
           {equipos.map(equipo => (
             <div key={equipo.id}
               className={`border px-3 py-1.5 text-[9px] font-mono ${
-                equipo.id === sala.puja_equipo_id ? "border-amber-300/50 text-amber-300"
-                : "border-white/[0.08] text-white/45"
+                equipo.id === sala.puja_equipo_id ? "border-warn/40 text-warn"
+                : "border-line text-ink-muted"
               }`}>
               <span className="font-bold uppercase tracking-wider">{equipo.nombre}</span>
               <span className="ml-2 tabular-nums">{equipo.presupuesto == null ? "—" : formatearMillones(equipo.presupuesto)}</span>
-              <span className="ml-2 inline-flex items-center gap-1 text-white/25">
+              <span className="ml-2 inline-flex items-center gap-1 text-ink-muted">
                  <Users className="w-2.5 h-2.5" />{equipo.plantilla} pilotos
                </span>
             </div>

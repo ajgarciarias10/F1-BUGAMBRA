@@ -112,17 +112,17 @@ export function MobileBottomTabs({
       {sheetOpen && (
         <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true" aria-label="Más secciones">
           <button
-            className="absolute inset-0 h-full w-full bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 h-full w-full bg-ink/50"
             onClick={() => setSheetOpen(false)}
             aria-label="Cerrar"
           />
-          <div className="tabbar-sheet absolute inset-x-0 bottom-0 border-t border-white/15 bg-[#111114] pb-[env(safe-area-inset-bottom)]">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/45">Más secciones</span>
+          <div className="tabbar-sheet absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-bg pb-[env(safe-area-inset-bottom)]">
+            <div className="flex items-center justify-between border-b border-line px-5 py-4">
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">Más secciones</span>
               <button
                 onClick={() => setSheetOpen(false)}
                 aria-label="Cerrar"
-                className="-mr-2 grid h-10 w-10 place-items-center text-white/40 active:text-white"
+                className="-mr-2 grid h-11 w-11 place-items-center rounded-full text-ink-muted active:bg-surface-3"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -135,12 +135,12 @@ export function MobileBottomTabs({
                   <button
                     key={tab.id}
                     onClick={() => select(tab.id)}
-                    className={`flex min-h-14 w-full items-center gap-4 px-4 text-left transition-colors ${
-                      active ? "bg-[#e10600] text-white" : "text-white/70 active:bg-white/10"
+                    className={`flex min-h-14 w-full items-center gap-4 rounded-full px-4 text-left transition-colors ${
+                      active ? "bg-brand-soft text-brand" : "text-ink-2 active:bg-surface-3"
                     }`}
                   >
                     <Icon className="h-5 w-5 shrink-0" />
-                    <span className="text-sm font-black uppercase tracking-tight">{tab.label}</span>
+                    <span className="text-sm font-semibold">{tab.label}</span>
                   </button>
                 );
               })}
@@ -150,7 +150,7 @@ export function MobileBottomTabs({
       )}
 
       <nav
-        className="tabbar fixed inset-x-0 bottom-0 z-[65] border-t border-white/10 bg-[#09090b]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
+        className="tabbar fixed inset-x-0 bottom-0 z-[65] border-t border-line bg-bg pb-[env(safe-area-inset-bottom)] md:hidden"
         aria-label="Navegación principal"
       >
         <div className="flex items-stretch">
@@ -164,12 +164,12 @@ export function MobileBottomTabs({
                 aria-current={active ? "page" : undefined}
                 aria-label={tab.label}
                 className={`relative flex min-h-[3.75rem] flex-1 basis-0 flex-col items-center justify-center gap-1 px-1 transition-colors ${
-                  active ? "text-white" : "text-white/70 active:text-white"
+                  active ? "text-brand" : "text-ink-muted active:text-ink"
                 }`}
               >
-                {active && <span className="absolute inset-x-2 top-0 h-0.5 bg-[#e10600]" />}
-                <Icon className={`h-5 w-5 ${active ? "text-[#e10600]" : ""}`} />
-                <span className="w-full break-words text-center text-[10px] font-bold leading-tight">
+                {active && <span className="absolute inset-x-3 top-0 h-0.5 rounded-b bg-brand" />}
+                <Icon className="h-5 w-5" />
+                <span className="w-full break-words text-center text-xs font-semibold leading-tight">
                   {SHORT_LABELS[tab.id] || tab.label}
                 </span>
               </button>
@@ -182,12 +182,12 @@ export function MobileBottomTabs({
               aria-haspopup="dialog"
               aria-expanded={sheetOpen}
               className={`relative flex min-h-[3.75rem] flex-1 basis-0 flex-col items-center justify-center gap-1 px-1 transition-colors ${
-                overflowActive ? "text-white" : "text-white/40 active:text-white/80"
+                overflowActive ? "text-brand" : "text-ink-muted active:text-ink"
               }`}
             >
-              {overflowActive && <span className="absolute inset-x-2 top-0 h-0.5 bg-[#e10600]" />}
-              <Ellipsis className={`h-5 w-5 ${overflowActive ? "text-[#e10600]" : ""}`} />
-              <span className="text-[10px] font-black uppercase leading-none tracking-[0.02em]">Más</span>
+              {overflowActive && <span className="absolute inset-x-3 top-0 h-0.5 rounded-b bg-brand" />}
+              <Ellipsis className="h-5 w-5" />
+              <span className="text-xs font-semibold leading-tight">Más</span>
             </button>
           )}
         </div>

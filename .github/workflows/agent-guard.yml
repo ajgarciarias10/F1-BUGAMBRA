@@ -1,0 +1,27 @@
+# Ownership guard: a branch must stay inside the files its ticket owns.
+# Cheap on purpose (a few seconds of plain Node, no install), so it runs on every
+# branch push and PR. Tickets are read from origin/main, never from the branch.
+name: Agent ownership guard
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+jobs:
+  ownership:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tool/agent-guard.test.mjs
+      - name: Check the branch against its ticket
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          git branch --track "$BRANCH" "origin/$BRANCH" 2>/dev/null || true
+          node tool/agent-guard.mjs --branch "$BRANCH" --base origin/main

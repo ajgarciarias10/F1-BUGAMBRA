@@ -6,12 +6,14 @@ import {
 } from "../services/splitBuilder";
 import type { TipoFichaje } from "../types";
 
+import { useSingleFlight } from "../hooks/useSingleFlight";
 // Cierra un bloque, abre el mercado y levanta el siguiente. Todo por configuración: antes
 // cada split tenía su propio panel con los nombres a fuego y el siguiente pedía otro.
 
 type Modo = "siguiente" | "temporada";
 
 export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?: () => void }) {
+  const { run: runOnce, pending: pendingOnce } = useSingleFlight();
   const bloques = useMemo(() => [...splits]
     .filter((s: any) => s.id !== "global" && s.tipo !== "individual")
     .sort((a: any, b: any) => Number(a.orden ?? 999) - Number(b.orden ?? 999)), [splits]);
@@ -97,6 +99,7 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
   // ── Acciones ───────────────────────────────────────────────────────────────
 
   const crear = async () => {
+    return runOnce(async () => {
     const listaCircuitos = circuitos.split(/[\n,]/).map(c => c.trim()).filter(Boolean);
     if (listaCircuitos.length === 0) { add("⚠ Escribe al menos un circuito."); return; }
     const saldoArranque = Number(presupuestoArranque.replace(",", "."));
@@ -137,31 +140,32 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
     } catch (error: any) {
       add(`Error: ${error.message}`);
     } finally { setTrabajando(false); }
-  };
+  });
+};
 
-  const campo = "bg-black border border-white/15 px-2 py-1.5 text-[10px] font-mono text-white outline-none focus:border-[#e10600]";
-  const etiqueta = "block text-[8px] font-mono uppercase tracking-[0.2em] text-white/30 mb-1";
+  const campo = "bg-surface border border-line px-2 py-1.5 text-[10px] font-mono text-ink outline-none focus:border-brand";
+  const etiqueta = "block text-[8px] font-mono uppercase tracking-[0.2em] text-ink-muted mb-1";
 
   return (
-    <section className="border border-white/10 bg-white/[0.03] p-5 space-y-4">
+    <section className="border border-line bg-surface-2 p-5 space-y-4">
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-emerald-500/10 text-emerald-300"><CalendarPlus className="w-5 h-5" /></div>
+        <div className="p-2 bg-ok-soft text-ok"><CalendarPlus className="w-5 h-5" /></div>
         <div>
-          <h2 className="font-black uppercase tracking-tight text-lg">Preparar un nuevo split</h2>
-          <p className="text-xs text-white/45 mt-1 max-w-2xl">
+          <h2 className="font-bold uppercase tracking-tight text-lg">Preparar un nuevo split</h2>
+          <p className="text-xs text-ink-muted mt-1 max-w-2xl">
             Elige los circuitos y las plantillas iniciales. Puedes heredar los saldos del split anterior o arrancar una temporada nueva.
           </p>
         </div>
-        {onClose && <button type="button" onClick={onClose} disabled={trabajando} className="ml-auto min-h-11 shrink-0 rounded-lg border border-white/20 px-3 text-sm font-bold disabled:opacity-40">Cerrar preparación</button>}
+        {onClose && <button type="button" onClick={onClose} disabled={trabajando} className="ml-auto min-h-11 shrink-0 rounded-lg border border-line px-3 text-sm font-bold disabled:opacity-40">Cerrar preparación</button>}
       </div>
 
       {/* ── Qué se va a crear ── */}
-      <div className="border border-white/[0.06] bg-black/30 p-4 space-y-3">
+      <div className="border border-line bg-surface-2 p-4 space-y-3">
         <div className="flex gap-0.5">
           {([["siguiente", "Siguiente split"], ["temporada", "Temporada nueva"]] as const).map(([id, texto]) => (
             <button key={id} onClick={() => setModo(id)}
-              className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
-                modo === id ? "bg-white/10 text-white" : "text-white/25 hover:text-white/50"
+              className={`px-4 py-1.5 text-[9px] font-bold uppercase tracking-[0.2em] transition-all ${
+                modo === id ? "bg-surface-3 text-ink" : "text-ink-muted hover:text-ink-2"
               }`}>
               {texto}
             </button>
@@ -206,24 +210,24 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
             className={`w-full ${campo} resize-y`} />
         </label>
 
-        <div className="flex flex-wrap gap-4 text-[10px] font-mono text-white/50">
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} className="accent-[#e10600]" /> Visible en la web</label>
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={fichajesAbiertos} onChange={e => setFichajesAbiertos(e.target.checked)} className="accent-[#e10600]" /> Mercado abierto</label>
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={cerrarAnterior} onChange={e => setCerrarAnterior(e.target.checked)} className="accent-[#e10600]" /> Cerrar el bloque anterior</label>
+        <div className="flex flex-wrap gap-4 text-[10px] font-mono text-ink-2">
+          <label className="flex items-center gap-1.5"><input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} className="accent-brand" /> Visible en la web</label>
+          <label className="flex items-center gap-1.5"><input type="checkbox" checked={fichajesAbiertos} onChange={e => setFichajesAbiertos(e.target.checked)} className="accent-brand" /> Mercado abierto</label>
+          <label className="flex items-center gap-1.5"><input type="checkbox" checked={cerrarAnterior} onChange={e => setCerrarAnterior(e.target.checked)} className="accent-brand" /> Cerrar el bloque anterior</label>
         </div>
       </div>
 
       {/* ── Saldos de apertura ── */}
       {equipos.length > 0 && modo === "siguiente" && (
-        <div className="border border-white/[0.06] bg-black/30 p-4 space-y-2">
-          <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/25">
+        <div className="border border-line bg-surface-2 p-4 space-y-2">
+          <p className="text-[9px] font-mono uppercase tracking-[0.3em] text-ink-muted">
             Apertura por escudería · en blanco = la que salga de las operaciones
           </p>
           <div className="grid gap-2 sm:grid-cols-3">
             {equipos.map(equipo => (
               <label key={equipo.id} className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-white/45 flex-1 truncate">{equipo.nombre}</span>
-                <span className="text-[9px] font-mono text-white/20 tabular-nums">{equipo.saldoCierre}M →</span>
+                <span className="text-[10px] font-mono text-ink-muted flex-1 truncate">{equipo.nombre}</span>
+                <span className="text-[9px] font-mono text-ink-muted tabular-nums">{equipo.saldoCierre}M →</span>
                 <input value={aperturas[equipo.id] ?? ""} placeholder="auto" type="number" step="0.1"
                   onChange={e => setAperturas(actual => ({ ...actual, [equipo.id]: e.target.value }))}
                   className={`w-20 ${campo}`} />
@@ -235,12 +239,12 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
 
       {/* ── Destino de cada piloto ── */}
       {cargando ? (
-        <p className="text-[10px] font-mono text-white/30 flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Leyendo el bloque anterior…</p>
+        <p className="text-[10px] font-mono text-ink-muted flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Leyendo el bloque anterior…</p>
       ) : fichas.length > 0 && (
-        <div className="border border-white/[0.06] overflow-x-auto">
+        <div className="border border-line overflow-x-auto">
           <table className="text-[10px] font-mono min-w-full border-collapse">
             <thead>
-              <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[0.2em] text-white/25">
+              <tr className="border-b border-line text-[9px] uppercase tracking-[0.2em] text-ink-muted">
                 <th className="py-2 px-3 text-left font-normal">Piloto</th>
                 <th className="py-2 px-3 text-left font-normal">Venía de</th>
                 <th className="py-2 px-3 text-right font-normal">Valía</th>
@@ -255,10 +259,10 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
                 const destino = destinos[ficha.pilotoId] ?? { estado: "pendiente" as const };
                 const fichado = destino.estado === "fichado";
                 return (
-                  <tr key={ficha.pilotoId} className="border-b border-white/[0.04]">
-                    <td className="py-1.5 px-3 font-bold text-white/85">{ficha.nombre}</td>
-                    <td className="py-1.5 px-3 text-white/35">{ficha.equipoNombre}</td>
-                    <td className="py-1.5 px-3 text-right text-white/30 tabular-nums">{ficha.mantenerCierre}M</td>
+                  <tr key={ficha.pilotoId} className="border-b border-line">
+                    <td className="py-1.5 px-3 font-bold text-ink">{ficha.nombre}</td>
+                    <td className="py-1.5 px-3 text-ink-muted">{ficha.equipoNombre}</td>
+                    <td className="py-1.5 px-3 text-right text-ink-muted tabular-nums">{ficha.mantenerCierre}M</td>
                     <td className="py-1.5 px-3">
                       <select value={destino.estado}
                         onChange={e => {
@@ -310,20 +314,20 @@ export function SplitBuilderPanel({ splits, onClose }: { splits: any[]; onClose?
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button onClick={crear} disabled={trabajando || !splitId}
-          className="inline-flex items-center gap-2 border border-emerald-400/40 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-300 disabled:opacity-30">
+        <button aria-busy={pendingOnce || undefined} onClick={crear} disabled={(trabajando || !splitId) || pendingOnce}
+          className="inline-flex items-center gap-2 border border-ok/40 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-ok disabled:opacity-30">
           {trabajando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarPlus className="w-3.5 h-3.5" />}
           Crear {nombre || "el split"}
         </button>
       </div>
 
       {log.length > 0 && (
-        <div className="border border-white/[0.06] bg-black/30 px-4 py-3 space-y-0.5 max-h-72 overflow-y-auto">
+        <div className="border border-line bg-surface-2 px-4 py-3 space-y-0.5 max-h-72 overflow-y-auto">
           {log.map((linea, indice) => (
             <p key={indice} className={`text-[10px] font-mono ${
-              linea.startsWith("Error") || linea.includes("⚠") ? "text-amber-300"
-              : linea.includes("✓") ? "text-emerald-400/80"
-              : "text-white/45"
+              linea.startsWith("Error") || linea.includes("⚠") ? "text-warn"
+              : linea.includes("✓") ? "text-ok"
+              : "text-ink-muted"
             }`}>{linea}</p>
           ))}
         </div>

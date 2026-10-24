@@ -1,0 +1,3395 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>F1 BUGAMBRA — Liga Privada de Fórmula 1</title>
+  <style>
+    /* ==========================================================================
+       SISTEMA DE DISEÑO EDITORIAL — MÁXIMO 7 COLORES (TEMA 6 IPO)
+       Prohibido: sombras, bordes redondeados, degradados, pares rojo-verde/azul-amarillo/rojo-azul.
+       ========================================================================== */
+    :root {
+      --c-paper: #FFFFFF;      /* 1. Papel (Fondo principal) */
+      --c-surface: #F4F4F2;    /* 2. Superficie (Fondos secundarios) */
+      --c-ink: #0A0A0A;        /* 3. Tinta (Texto y líneas principales - Contraste 19.8:1) */
+      --c-muted: #525252;      /* 4. Gris de apoyo (Texto secundario - Contraste 7.5:1) */
+      --c-brand: #C8102E;      /* 5. Rojo de marca F1 (Acento puntual - Contraste 5.6:1) */
+      --c-data-1: #0D5C63;     /* 6. Dato 1: Petróleo oscuro (Contraste 7.4:1) */
+      --c-data-2: #7A4900;     /* 7. Dato 2: Ocre oscuro (Contraste 6.8:1) */
+      --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --header-h: 56px;
+      --bottom-bar-h: 56px;
+    }
+
+    html[data-theme="dark"] {
+      --c-paper: #0A0A0A;      /* 1. Papel oscuro (Casi negro) */
+      --c-surface: #161616;    /* 2. Superficie oscura */
+      --c-ink: #F5F5F3;        /* 3. Tinta clara (Contraste 18.2:1) */
+      --c-muted: #A3A3A3;      /* 4. Gris de apoyo claro (Contraste 7.8:1) */
+      --c-brand: #FF4D6A;      /* 5. Rojo de marca adaptado a oscuro (Contraste 5.9:1) */
+      --c-data-1: #4DD0E1;     /* 6. Dato 1 en oscuro (Contraste 10.4:1) */
+      --c-data-2: #FFB74D;     /* 7. Dato 2 en oscuro (Contraste 10.8:1) */
+    }
+
+    /* Reset estricto: 0 border-radius, 0 box-shadow en toda la interfaz */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+
+    html {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      background-color: var(--c-paper);
+      color: var(--c-ink);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding-top: var(--header-h);
+      padding-bottom: calc(var(--bottom-bar-h) + 48px);
+      overflow-x: hidden;
+    }
+
+    /* Control de movimiento (TC-16 y US-24) */
+    @media (prefers-reduced-motion: no-preference) {
+      html:not([data-motion="reduced"]) .screen-enter {
+        animation: editorialFade 0.22s ease-out;
+      }
+    }
+    @keyframes editorialFade {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Foco accesible y altamente visible (TC-14) */
+    :focus-visible {
+      outline: 2px solid var(--c-ink) !important;
+      outline-offset: 2px !important;
+    }
+
+    /* Tipografía Editorial */
+    h1, h2, h3, h4, .editorial-label, .nav-caps {
+      font-weight: 300;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .display-hero {
+      font-size: clamp(2.2rem, 6vw, 4.8rem);
+      font-weight: 300;
+      letter-spacing: 0.08em;
+      line-height: 1.05;
+      text-transform: uppercase;
+    }
+
+    .page-title {
+      font-size: clamp(1.5rem, 3.5vw, 2.4rem);
+      font-weight: 300;
+      letter-spacing: 0.14em;
+      line-height: 1.2;
+      padding: 24px 16px 16px;
+      border-bottom: 1px solid var(--c-ink);
+    }
+
+    .section-header {
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--c-muted);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--c-ink);
+      background-color: var(--c-surface);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .small-caps-caption {
+      font-variant: small-caps;
+      letter-spacing: 0.12em;
+      font-size: 11px;
+      color: var(--c-muted);
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--c-ink);
+    }
+
+    /* Objetivos táctiles >= 44x44 px (TC-18) */
+    button, a, select, input[type="checkbox"], input[type="radio"], .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    a {
+      color: var(--c-ink);
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+    }
+
+    a:hover, .btn-link:hover {
+      color: var(--c-brand);
+    }
+
+    /* Botón de enlace pequeño subrayado */
+    .btn-link {
+      background: transparent;
+      border: none;
+      color: var(--c-ink);
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      cursor: pointer;
+      padding: 0 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Acción principal: rectángulo negro de ancho completo con texto blanco en mayúsculas */
+    .btn-primary {
+      width: 100%;
+      background-color: var(--c-ink);
+      color: var(--c-paper);
+      border: 1px solid var(--c-ink);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      padding: 14px 20px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      gap: 8px;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--c-paper);
+      color: var(--c-ink);
+    }
+
+    .btn-secondary {
+      width: 100%;
+      background-color: var(--c-paper);
+      color: var(--c-ink);
+      border: 1px solid var(--c-ink);
+      font-family: var(--font-sans);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      padding: 12px 18px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      gap: 8px;
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--c-surface);
+    }
+
+    /* Cabecera fija */
+    .site-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--header-h);
+      background-color: var(--c-paper);
+      border-bottom: 1px solid var(--c-ink);
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 0 8px;
+      z-index: 1000;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .header-brand {
+      font-size: 14px;
+      font-weight: 400;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      text-decoration: none;
+      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-dot {
+      width: 7px;
+      height: 7px;
+      background-color: var(--c-brand);
+      display: inline-block;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+
+    /* Menú lateral izquierdo (Nunca circular) */
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background-color: var(--c-paper);
+      opacity: 0.85;
+      z-index: 1100;
+      display: none;
+    }
+
+    .drawer-backdrop.open {
+      display: block;
+    }
+
+    .side-drawer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: min(380px, 100vw);
+      background-color: var(--c-paper);
+      border-right: 1px solid var(--c-ink);
+      z-index: 1200;
+      display: none;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .side-drawer.open {
+      display: flex;
+    }
+
+    .drawer-header {
+      height: var(--header-h);
+      border-bottom: 1px solid var(--c-ink);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+    }
+
+    .drawer-section-label {
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--c-muted);
+      padding: 16px 16px 6px;
+      border-bottom: 1px solid var(--c-ink);
+      background-color: var(--c-surface);
+    }
+
+    .drawer-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--c-ink);
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 300;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .drawer-link:hover, .drawer-link[aria-current="page"] {
+      background-color: var(--c-surface);
+    }
+
+    .drawer-link[aria-current="page"]::before {
+      content: "■ ";
+      color: var(--c-brand);
+      margin-right: 8px;
+      font-size: 10px;
+    }
+
+    /* Rejillas editoriales sin huecos (líneas de 1 px) */
+    .editorial-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      border-bottom: 1px solid var(--c-ink);
+    }
+
+    .editorial-cell {
+      padding: 16px;
+      border-bottom: 1px solid var(--c-ink);
+    }
+
+    .editorial-cell:last-child {
+      border-bottom: none;
+    }
+
+    @media (min-width: 768px) {
+      .editorial-grid.cols-2 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .editorial-grid.cols-3 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .editorial-grid.cols-4 {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .editorial-grid.cols-2 > .editorial-cell,
+      .editorial-grid.cols-3 > .editorial-cell,
+      .editorial-grid.cols-4 > .editorial-cell {
+        border-bottom: none;
+        border-right: 1px solid var(--c-ink);
+      }
+      .editorial-grid.cols-2 > .editorial-cell:nth-child(2n),
+      .editorial-grid.cols-3 > .editorial-cell:nth-child(3n),
+      .editorial-grid.cols-4 > .editorial-cell:nth-child(4n) {
+        border-right: none;
+      }
+    }
+
+    /* Contenedor máximo 1440px */
+    .layout-container {
+      width: 100%;
+      max-width: 1440px;
+      margin: 0 auto;
+      border-left: 1px solid var(--c-ink);
+      border-right: 1px solid var(--c-ink);
+      flex: 1;
+    }
+
+    @media (max-width: 1440px) {
+      .layout-container {
+        border-left: none;
+        border-right: none;
+      }
+    }
+
+    /* Campos de formulario solo con línea inferior y etiqueta pequeña en mayúsculas */
+    .form-group {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-label {
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--c-ink);
+      margin-bottom: 4px;
+      font-weight: 400;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--c-ink);
+      color: var(--c-ink);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      padding: 10px 4px;
+      min-height: 44px;
+    }
+
+    .form-select option {
+      background-color: var(--c-paper);
+      color: var(--c-ink);
+    }
+
+    .form-error {
+      font-size: 12px;
+      color: var(--c-brand);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .form-help {
+      font-size: 11px;
+      color: var(--c-muted);
+      margin-top: 4px;
+    }
+
+    /* Tablas editoriales */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--c-ink);
+    }
+
+    table.editorial-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    table.editorial-table th,
+    table.editorial-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--c-ink);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    table.editorial-table th {
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--c-muted);
+      background-color: var(--c-surface);
+    }
+
+    table.editorial-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* Muestras de equipo: solo cuadrado junto al nombre, nunca color de texto */
+    .team-swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 1px solid var(--c-ink);
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    .swatch-p1 { background-color: var(--c-brand); }
+    .swatch-p2 { background-color: var(--c-data-1); }
+    .swatch-p3 { background-color: var(--c-data-2); }
+    .swatch-p4 { background-color: var(--c-ink); }
+    .swatch-p5 { background-color: var(--c-muted); }
+
+    /* Etiquetas de estado con símbolo y texto (Nunca solo color - TC-08, TC-09, TC-17) */
+    .status-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border: 1px solid var(--c-ink);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background-color: var(--c-paper);
+    }
+
+    .tx-income {
+      color: var(--c-data-1);
+      font-weight: 600;
+    }
+
+    .tx-expense {
+      color: var(--c-data-2);
+      font-weight: 600;
+    }
+
+    /* Imágenes a sangre */
+    .bleed-figure {
+      width: 100%;
+      border-bottom: 1px solid var(--c-ink);
+    }
+
+    .bleed-figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      background-color: var(--c-surface);
+    }
+
+    /* Barra de herramientas de simulación y revisión */
+    .utility-strip {
+      background-color: var(--c-surface);
+      border-bottom: 1px solid var(--c-ink);
+      padding: 6px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .utility-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .util-btn {
+      background: var(--c-paper);
+      border: 1px solid var(--c-ink);
+      color: var(--c-ink);
+      font-family: var(--font-sans);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .util-btn[aria-pressed="true"] {
+      background: var(--c-ink);
+      color: var(--c-paper);
+    }
+
+    /* Barra inferior fija en móvil con la acción principal (US-23) */
+    .mobile-bottom-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background-color: var(--c-paper);
+      border-top: 1px solid var(--c-ink);
+      z-index: 950;
+      display: flex;
+      align-items: center;
+    }
+
+    @media (min-width: 960px) {
+      .mobile-bottom-bar {
+        display: none;
+      }
+      body {
+        padding-bottom: 32px;
+      }
+    }
+
+    /* Buscador global en cabecera (US-21) */
+    .search-drawer {
+      background-color: var(--c-paper);
+      border-bottom: 1px solid var(--c-ink);
+      padding: 16px;
+      display: none;
+    }
+    .search-drawer.open {
+      display: block;
+    }
+
+    /* Modo Revisión (RF-12 / US-20 / TC-19) */
+    body.review-mode-active [data-reviewable] {
+      outline: 1px dashed var(--c-brand);
+      cursor: crosshair !important;
+      position: relative;
+    }
+
+    .review-badge {
+      display: inline-block;
+      background-color: var(--c-brand);
+      color: var(--c-paper);
+      font-size: 10px;
+      padding: 2px 6px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .editorial-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background-color: var(--c-paper);
+      opacity: 0.92;
+      z-index: 1500;
+      display: none;
+    }
+
+    .editorial-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(520px, 94vw);
+      background-color: var(--c-paper);
+      border: 1px solid var(--c-ink);
+      z-index: 1600;
+      display: none;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .editorial-modal.open,
+    .editorial-modal-backdrop.open {
+      display: block;
+    }
+
+    /* Banner de notificación / Deshacer */
+    .toast-banner {
+      background-color: var(--c-ink);
+      color: var(--c-paper);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--c-paper);
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+    }
+
+    .toast-banner.visible {
+      display: flex;
+    }
+
+    .toast-banner button {
+      background: var(--c-paper);
+      color: var(--c-ink);
+      border: 1px solid var(--c-paper);
+      padding: 6px 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      cursor: pointer;
+    }
+
+    .metric-big {
+      font-size: clamp(1.6rem, 3.5vw, 2.5rem);
+      font-weight: 300;
+      letter-spacing: 0.04em;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- CABECERA FIJA -->
+  <header class="site-header" role="banner">
+    <div class="header-left">
+      <button type="button" id="menuToggleBtn" class="btn-link" aria-expanded="false" aria-controls="sideDrawer" aria-label="Abrir menú de navegación (Atajo tecla M)">
+        ≡ MENÚ
+      </button>
+    </div>
+
+    <a href="#portada" class="header-brand" aria-label="F1 Bugambra Portada">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span>F1 BUGAMBRA</span>
+    </a>
+
+    <div class="header-right">
+      <button type="button" id="searchToggleBtn" class="btn-link" aria-expanded="false" aria-controls="searchPanel">
+        BUSCAR
+      </button>
+      <a href="#login" id="headerAuthLink" class="btn-link">ENTRAR</a>
+      <a href="#perfil" id="headerProfileLink" class="btn-link">PERFIL</a>
+    </div>
+  </header>
+
+  <!-- PANEL DE BÚSQUEDA EN CABECERA (US-21) -->
+  <section id="searchPanel" class="search-drawer" aria-label="Búsqueda global">
+    <div style="max-width: 720px; margin: 0 auto;">
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label for="globalSearchInput" class="form-label">BUSCAR PILOTO, ESCUDERÍA, CARRERA O PANTALLA</label>
+        <input type="search" id="globalSearchInput" class="form-input" placeholder="Ej. Sainz, Bahrein, Al-Mansoor, Mercado...">
+      </div>
+      <div id="globalSearchResults" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- BANNER DE ESTADO Y DESHACER (TC-13 / Principio 3 Nielsen) -->
+  <div id="globalToast" class="toast-banner" role="status" aria-live="polite">
+    <span id="globalToastText">Operación registrada.</span>
+    <div style="display:flex; gap:8px;">
+      <button type="button" id="globalUndoBtn" style="display:none;">DESHACER</button>
+      <button type="button" id="globalToastCloseBtn" aria-label="Cerrar aviso">CERRAR ✕</button>
+    </div>
+  </div>
+
+  <!-- BARRA DE CONTROL DE PROTOTIPO, ROLES, ESTADOS (TC-07, TC-10, TC-11) Y REVISIÓN (RF-12 / TC-19) -->
+  <aside class="utility-strip" aria-label="Herramientas de verificación y revisión del prototipo">
+    <div class="utility-group">
+      <span style="text-transform:uppercase; letter-spacing:0.12em; color:var(--c-muted);">ROL ACTIVO:</span>
+      <button type="button" class="util-btn" data-set-role="invitado" id="roleBtnInvitado" aria-pressed="false">INVITADO</button>
+      <button type="button" class="util-btn" data-set-role="jeque" id="roleBtnJeque" aria-pressed="true">JEQUE</button>
+      <button type="button" class="util-btn" data-set-role="admin" id="roleBtnAdmin" aria-pressed="false">ADMIN</button>
+    </div>
+
+    <div class="utility-group">
+      <span style="text-transform:uppercase; letter-spacing:0.12em; color:var(--c-muted);">ESTADO DATOS (TC-07):</span>
+      <button type="button" class="util-btn" data-set-viewstate="normal" id="stateBtnNormal" aria-pressed="true">NORMAL</button>
+      <button type="button" class="util-btn" data-set-viewstate="loading" id="stateBtnLoading" aria-pressed="false">CARGA</button>
+      <button type="button" class="util-btn" data-set-viewstate="empty" id="stateBtnEmpty" aria-pressed="false">SIN DATOS</button>
+      <button type="button" class="util-btn" data-set-viewstate="error" id="stateBtnError" aria-pressed="false">ERROR</button>
+    </div>
+
+    <div class="utility-group">
+      <button type="button" class="util-btn" id="themeToggleBtn" aria-pressed="false">TEMA: CLARO</button>
+      <button type="button" class="util-btn" id="reviewModeToggleBtn" aria-pressed="false">REVISAR (0)</button>
+      <button type="button" class="util-btn" id="downloadReviewJsonBtn">DESCARGAR JSON</button>
+    </div>
+  </aside>
+
+  <!-- MENÚ LATERAL IZQUIERDO (22 RUTAS - TC-04, TC-05) -->
+  <div id="drawerBackdrop" class="drawer-backdrop" tabindex="-1"></div>
+  <nav id="sideDrawer" class="side-drawer" aria-label="Navegación principal de las 22 pantallas">
+    <div class="drawer-header">
+      <span class="editorial-label" style="font-size:11px;">ÍNDICE DE NAVEGACIÓN (M)</span>
+      <button type="button" id="menuCloseBtn" class="btn-link" aria-label="Cerrar menú lateral (Esc)">CERRAR ✕</button>
+    </div>
+    <div id="drawerLinksContainer"></div>
+  </nav>
+
+  <!-- CONTENEDOR PRINCIPAL -->
+  <main id="appMain" class="layout-container" role="main" tabindex="-1"></main>
+
+  <!-- BARRA INFERIOR FIJA EN MÓVIL CON LA ACCIÓN PRINCIPAL (US-23) -->
+  <div id="mobileBottomBar" class="mobile-bottom-bar" role="region" aria-label="Acción rápida móvil">
+    <a href="#inicio" id="mobilePrimaryActionBtn" class="btn-primary">IR AL PANEL DEL JEQUE →</a>
+  </div>
+
+  <!-- MODAL PARA MODO REVISAR (RF-12 / TC-19) -->
+  <div id="reviewModalBackdrop" class="editorial-modal-backdrop"></div>
+  <div id="reviewModal" class="editorial-modal" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+    <div class="section-header">
+      <span id="reviewModalTitle">ANOTAR ELEMENTO DE INTERFAZ</span>
+      <button type="button" id="closeReviewModalBtn" class="btn-link">CERRAR ✕</button>
+    </div>
+    <form id="reviewNoteForm" style="padding: 16px;">
+      <div class="form-group">
+        <label class="form-label" for="reviewTargetRoute">RUTA ACTUAL</label>
+        <input type="text" id="reviewTargetRoute" class="form-input" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="reviewTargetSelector">SELECTOR DEL ELEMENTO</label>
+        <input type="text" id="reviewTargetSelector" class="form-input" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="reviewNoteInput">NOTA DE REVISIÓN</label>
+        <textarea id="reviewNoteInput" class="form-textarea" rows="3" placeholder="Escribe la observación sobre este componente..."></textarea>
+        <div id="reviewNoteError" class="form-error" style="display:none;"></div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <button type="submit" class="btn-primary">GUARDAR MARCA</button>
+        <button type="button" id="cancelReviewModalBtn" class="btn-secondary">CANCELAR</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       DATOS FICTICIOS AUTOCONTENIDOS — F1 BUGAMBRA (TEMPORADA 2026)
+       Sin llamadas de red, sin reglas de economía inventadas.
+       ========================================================================== */
+    const INITIAL_STATE = {
+      role: 'jeque', // 'invitado' | 'jeque' | 'admin'
+      theme: 'light', // 'light' | 'dark'
+      reducedMotion: false,
+      viewState: 'normal', // 'normal' | 'loading' | 'empty' | 'error'
+      reviewMode: false,
+      reviewMarks: [],
+      selectedTeamId: 'esc-bugambra',
+      selectedRaceId: 'gp-03',
+      telemetryLapA: 'vuelta-almansoor-q3',
+      telemetryLapB: 'vuelta-valverde-q3',
+      adminRaceDraft: null,
+      adminEconDraft: null,
+      lastUndoSnapshot: null,
+      currentUser: {
+        id: 'usr-01',
+        nombre: 'Jeque Ramiro Al-Mansoor',
+        correo: 'ramiro@bugambra.f1',
+        escuderiaId: 'esc-bugambra',
+        notificacionesWhatsapp: true
+      },
+      proximaCarrera: {
+        id: 'gp-04',
+        nombre: 'GP de Japón — Suzuka',
+        circuito: 'Suzuka International Racing Course',
+        fechaTexto: 'Domingo 26 Abril · 16:00 CEST',
+        cuentaAtras: '03 DÍAS · 21 HORAS · 18 MIN',
+        vueltas: 53
+      },
+      equipos: [
+        {
+          id: 'esc-bugambra',
+          nombre: 'Bugambra Racing Desert',
+          jeque: 'Ramiro Al-Mansoor',
+          swatch: 'swatch-p1',
+          posicion: 1,
+          puntos: 118,
+          diferenciaLider: '0 pts (Líder)',
+          saldo: 14850320.50,
+          motor: 'V6 Turbo Híbrido BGM-01',
+          sede: 'Jerez · Riad',
+          pilotosIds: ['pil-01', 'pil-02']
+        },
+        {
+          id: 'esc-alhambra',
+          nombre: 'Scuderia Nazarí GP',
+          jeque: 'Claudia Valverde',
+          swatch: 'swatch-p2',
+          posicion: 2,
+          puntos: 104,
+          diferenciaLider: '−14 pts',
+          saldo: 11240000.00,
+          motor: 'V6 Aurelia Corse',
+          sede: 'Granada',
+          pilotosIds: ['pil-03', 'pil-04']
+        },
+        {
+          id: 'esc-siroco',
+          nombre: 'Siroco Motorsport',
+          jeque: 'Darío Benítez',
+          swatch: 'swatch-p3',
+          posicion: 3,
+          puntos: 79,
+          diferenciaLider: '−39 pts',
+          saldo: 9410500.75,
+          motor: 'V6 Siroco Power',
+          sede: 'Málaga',
+          pilotosIds: ['pil-05', 'pil-06']
+        },
+        {
+          id: 'esc-tramontana',
+          nombre: 'Tramontana Apex F1',
+          jeque: 'Héctor Soler',
+          swatch: 'swatch-p4',
+          posicion: 4,
+          puntos: 52,
+          diferenciaLider: '−66 pts',
+          saldo: 7980120.00,
+          motor: 'V6 Vento Nord',
+          sede: 'Girona',
+          pilotosIds: ['pil-07', 'pil-08']
+        }
+      ],
+      pilotos: [
+        { id: 'pil-01', nombre: 'Mateo Mendoza', dorsal: 14, escuderiaId: 'esc-bugambra', puntos: 68, diff: '0 pts (Líder)', podios: 3, ritmoMedio: '1:29.412', valor: 8500000, estadoMercado: 'Fichado' },
+        { id: 'pil-02', nombre: 'Tarek Al-Harbi', dorsal: 27, escuderiaId: 'esc-bugambra', puntos: 50, diff: '−18 pts', podios: 2, ritmoMedio: '1:29.780', valor: 6200000, estadoMercado: 'Fichado' },
+        { id: 'pil-03', nombre: 'Lucas Peñalver', dorsal: 55, escuderiaId: 'esc-alhambra', puntos: 61, diff: '−7 pts', podios: 2, ritmoMedio: '1:29.520', valor: 7900000, estadoMercado: 'Fichado' },
+        { id: 'pil-04', nombre: 'Enzo Fontana', dorsal: 16, escuderiaId: 'esc-alhambra', puntos: 43, diff: '−25 pts', podios: 1, ritmoMedio: '1:30.015', valor: 5400000, estadoMercado: 'Fichado' },
+        { id: 'pil-05', nombre: 'Hugo Salgado', dorsal: 10, escuderiaId: 'esc-siroco', puntos: 49, diff: '−19 pts', podios: 1, ritmoMedio: '1:29.890', valor: 5800000, estadoMercado: 'Fichado' },
+        { id: 'pil-06', nombre: 'Niko Lindqvist', dorsal: 77, escuderiaId: 'esc-siroco', puntos: 30, diff: '−38 pts', podios: 0, ritmoMedio: '1:30.400', valor: 4100000, estadoMercado: 'En subasta' },
+        { id: 'pil-07', nombre: 'Gael Cortázar', dorsal: 23, escuderiaId: 'esc-tramontana', puntos: 34, diff: '−34 pts', podios: 0, ritmoMedio: '1:30.210', valor: 4600000, estadoMercado: 'Fichado' },
+        { id: 'pil-08', nombre: 'Tomás Quiroga', dorsal: 31, escuderiaId: 'esc-tramontana', puntos: 18, diff: '−50 pts', podios: 0, ritmoMedio: '1:30.890', valor: 3100000, estadoMercado: 'Libre' },
+        { id: 'pil-09', nombre: 'Álvaro Silvestre', dorsal: 99, escuderiaId: null, puntos: 0, diff: '−68 pts', podios: 0, ritmoMedio: '1:30.510', valor: 3500000, estadoMercado: 'Libre' },
+        { id: 'pil-10', nombre: 'Sora Takahashi', dorsal: 22, escuderiaId: null, puntos: 0, diff: '−68 pts', podios: 0, ritmoMedio: '1:30.120', valor: 4900000, estadoMercado: 'En subasta' }
+      ],
+      carreras: [
+        {
+          id: 'gp-01',
+          ronda: 'R01',
+          nombre: 'GP de Bahréin — Sakhir',
+          fecha: '15/03/2026',
+          estado: 'Disputada',
+          notaFia: 'Sin sanciones post-carrera. Verificación técnica conforme.',
+          resultados: [
+            { pilotoId: 'pil-01', estado: 'POSICION', posicion: 1, tiempo: '1:31:44.102', puntos: 25 },
+            { pilotoId: 'pil-03', estado: 'POSICION', posicion: 2, tiempo: '+4.812 s', puntos: 18 },
+            { pilotoId: 'pil-02', estado: 'POSICION', posicion: 3, tiempo: '+11.204 s', puntos: 15 },
+            { pilotoId: 'pil-05', estado: 'POSICION', posicion: 4, tiempo: '+19.005 s', puntos: 12 },
+            { pilotoId: 'pil-04', estado: 'POSICION', posicion: 5, tiempo: '+24.611 s', puntos: 10 },
+            { pilotoId: 'pil-07', estado: 'DNF', posicion: null, tiempo: 'DNF — Retirado en vuelta 38 (Caja de cambios)', puntos: 0 },
+            { pilotoId: 'pil-06', estado: 'NO_PRESENTADO', posicion: null, tiempo: 'No presentado — Ausencia comunicada por WhatsApp', puntos: 0 },
+            { pilotoId: 'pil-08', estado: 'POSICION_DESCONOCIDA', posicion: null, tiempo: 'Posición desconocida — Corte de telemetría final', puntos: 0 }
+          ]
+        },
+        {
+          id: 'gp-02',
+          ronda: 'R02',
+          nombre: 'GP de Arabia Saudí — Yeda',
+          fecha: '29/03/2026',
+          estado: 'Disputada',
+          notaFia: 'Decisión FIA #04: +5 segundos a E. Fontana por límites de pista.',
+          resultados: [
+            { pilotoId: 'pil-03', estado: 'POSICION', posicion: 1, tiempo: '1:28:10.400', puntos: 25 },
+            { pilotoId: 'pil-01', estado: 'POSICION', posicion: 2, tiempo: '+1.904 s', puntos: 18 },
+            { pilotoId: 'pil-05', estado: 'POSICION', posicion: 3, tiempo: '+8.410 s', puntos: 15 },
+            { pilotoId: 'pil-02', estado: 'POSICION', posicion: 4, tiempo: '+14.220 s', puntos: 12 },
+            { pilotoId: 'pil-07', estado: 'POSICION', posicion: 5, tiempo: '+21.118 s', puntos: 10 },
+            { pilotoId: 'pil-04', estado: 'DNF', posicion: null, tiempo: 'DNF — Toque con muro en sector 1', puntos: 0 },
+            { pilotoId: 'pil-08', estado: 'POSICION_DESCONOCIDA', posicion: null, tiempo: 'Posición desconocida — Pendiente acta de comisarios', puntos: 0 },
+            { pilotoId: 'pil-06', estado: 'NO_PRESENTADO', posicion: null, tiempo: 'No presentado — Sin conexión al lobby oficial', puntos: 0 }
+          ]
+        },
+        {
+          id: 'gp-03',
+          ronda: 'R03',
+          nombre: 'GP de Australia — Melbourne',
+          fecha: '12/04/2026',
+          estado: 'Disputada',
+          notaFia: 'Decisión FIA #09: Amonestación formal a Siroco Motorsport por retraso en parrilla.',
+          resultados: [
+            { pilotoId: 'pil-01', estado: 'POSICION', posicion: 1, tiempo: '1:26:02.880', puntos: 25 },
+            { pilotoId: 'pil-02', estado: 'POSICION', posicion: 2, tiempo: '+3.112 s', puntos: 18 },
+            { pilotoId: 'pil-03', estado: 'POSICION', posicion: 3, tiempo: '+7.540 s', puntos: 15 },
+            { pilotoId: 'pil-04', estado: 'POSICION', posicion: 4, tiempo: '+15.900 s', puntos: 12 },
+            { pilotoId: 'pil-06', estado: 'POSICION', posicion: 5, tiempo: '+28.310 s', puntos: 10 },
+            { pilotoId: 'pil-05', estado: 'DNF', posicion: null, tiempo: 'DNF — Abandono por avería hidráulica', puntos: 0 },
+            { pilotoId: 'pil-07', estado: 'NO_PRESENTADO', posicion: null, tiempo: 'No presentado — No compareció al cierre del pitlane', puntos: 0 },
+            { pilotoId: 'pil-08', estado: 'POSICION_DESCONOCIDA', posicion: null, tiempo: 'Posición desconocida — Caída de sesión en bandera a cuadros', puntos: 0 }
+          ]
+        },
+        {
+          id: 'gp-04',
+          ronda: 'R04',
+          nombre: 'GP de Japón — Suzuka',
+          fecha: '26/04/2026',
+          estado: 'Próxima carrera',
+          notaFia: 'Convocatoria abierta en el grupo de WhatsApp de la liga.',
+          resultados: []
+        }
+      ],
+      movimientos: [
+        { id: 'mov-01', fecha: '13/04/2026', escuderiaId: 'esc-bugambra', tipo: 'INGRESO', concepto: 'Prima oficial anunciada en WhatsApp — Doblete GP Melbourne', importe: 2450000.00 },
+        { id: 'mov-02', fecha: '06/04/2026', escuderiaId: 'esc-bugambra', tipo: 'GASTO', concepto: 'Cláusula de renovación técnica — Tarek Al-Harbi', importe: 680000.00 },
+        { id: 'mov-03', fecha: '30/03/2026', escuderiaId: 'esc-bugambra', tipo: 'INGRESO', concepto: 'Patrocinio principal Desert Oil Corp (Tramo R02)', importe: 1500000.00 },
+        { id: 'mov-04', fecha: '20/03/2026', escuderiaId: 'esc-bugambra', tipo: 'GASTO', concepto: 'Tasa FIA por sustitución de telemetría en Sakhir', importe: 145679.50 },
+        { id: 'mov-05', fecha: '16/03/2026', escuderiaId: 'esc-bugambra', tipo: 'INGRESO', concepto: 'Premio Victoria GP Bahréin — Mateo Mendoza', importe: 1850000.00 }
+      ],
+      comunidadHilos: [
+        { id: 'hilo-01', autor: 'Ramiro Al-Mansoor', fecha: '14/04/2026 · 21:15', titulo: 'Propuesta de horario unificado para Suzuka (16:00 CEST)', respuestas: 9, resumen: 'Tras el anuncio en WhatsApp, confirmamos disponibilidad de los 4 jeques para el domingo.' },
+        { id: 'hilo-02', autor: 'Claudia Valverde', fecha: '12/04/2026 · 23:40', titulo: 'Revisión del incidente en curva 3 de Melbourne', respuestas: 14, resumen: 'Adjuntamos repetición onboard para consulta de comisarios FIA.' },
+        { id: 'hilo-03', autor: 'Darío Benítez', fecha: '04/04/2026 · 18:05', titulo: 'Oferta abierta por piloto reserva para mitad de temporada', respuestas: 6, resumen: 'Siroco Motorsport escucha intercambios antes del cierre del mercado.' }
+      ],
+      votacionActiva: {
+        id: 'vot-01',
+        titulo: '¿Aprobar lluvia dinámica obligatoria en el GP de Bélgica (Spa)?',
+        cierre: '28/04/2026',
+        yaVoto: false,
+        opcionElegida: null,
+        opciones: [
+          { id: 'opt-si', texto: 'Sí, activar meteorología dinámica FIA', votos: 6 },
+          { id: 'opt-no', texto: 'No, mantener carrera en seco fijo', votos: 2 },
+          { id: 'opt-abs', texto: 'Abstención / Decidir por sorteo en WhatsApp', votos: 1 }
+        ]
+      },
+      archivoTemporadas: [
+        { temporada: 'Temporada 2025 (Edición IV)', campeonPiloto: 'Mateo Mendoza (294 pts)', campeonEscuderia: 'Bugambra Racing Desert', hito: 'Decidida en la última vuelta de Interlagos.' },
+        { temporada: 'Temporada 2024 (Edición III)', campeonPiloto: 'Lucas Peñalver (278 pts)', campeonEscuderia: 'Scuderia Nazarí GP', hito: 'Récord histórico de 8 poles consecutivas.' },
+        { temporada: 'Temporada 2023 (Edición II)', campeonPiloto: 'Hugo Salgado (241 pts)', campeonEscuderia: 'Siroco Motorsport', hito: 'Primera temporada con libro de movimientos auditado.' }
+      ],
+      avisosBuzon: [
+        { id: 'avi-01', fecha: '14/04/2026', asunto: 'Comunicado FIA #11: Homologación de alerones para Suzuka', cuerpo: 'El administrador ha validado las hojas técnicas enviadas por WhatsApp.', leido: false },
+        { id: 'avi-02', fecha: '13/04/2026', asunto: 'Abono registrado: +2.450.000,00 € en cuenta de Bugambra Racing', cuerpo: 'Se ha asentado el ingreso correspondiente al doblete en el GP de Australia.', leido: false },
+        { id: 'avi-03', fecha: '09/04/2026', asunto: 'Apertura de subasta: Sora Takahashi (#22)', cuerpo: 'Precio de salida fijado en 4.900.000,00 €.', leido: true }
+      ],
+      medios: [
+        { id: 'med-01', titulo: 'Salida del GP de Melbourne — Curva 1', autor: 'Comisariado FIA', fecha: '12/04/2026', tipo: 'Fotografía oficial' },
+        { id: 'med-02', titulo: 'Telemetría comparada Q3 — Sakhir', autor: 'Bugambra Data Lab', fecha: '15/03/2026', tipo: 'Gráfico técnico' },
+        { id: 'med-03', titulo: 'Podio oficial R02 Yeda', autor: 'Prensa Liga Bugambra', fecha: '29/03/2026', tipo: 'Fotografía oficial' }
+      ],
+      usuariosLiga: [
+        { id: 'u-1', nombre: 'Ramiro Al-Mansoor', correo: 'ramiro@bugambra.f1', rol: 'Jeque', escuderia: 'Bugambra Racing Desert', estado: 'Activo' },
+        { id: 'u-2', nombre: 'Claudia Valverde', correo: 'claudia@nazari.f1', rol: 'Jeque', escuderia: 'Scuderia Nazarí GP', estado: 'Activo' },
+        { id: 'u-3', nombre: 'Darío Benítez', correo: 'dario@siroco.f1', rol: 'Jeque', escuderia: 'Siroco Motorsport', estado: 'Activo' },
+        { id: 'u-4', nombre: 'Héctor Soler', correo: 'hector@tramontana.f1', rol: 'Administrador', escuderia: 'Tramontana Apex F1', estado: 'Activo' }
+      ],
+      vueltasTelemetria: {
+        'vuelta-almansoor-q3': {
+          piloto: 'Mateo Mendoza (#14 · Bugambra)',
+          circuito: 'Melbourne — Albert Park',
+          tiempoTotal: '1:16.402',
+          s1: '26.110 s',
+          s2: '17.802 s',
+          s3: '32.490 s',
+          velPunta: '331 km/h',
+          tramoVel: [290, 312, 205, 328, 275, 331, 198, 308]
+        },
+        'vuelta-valverde-q3': {
+          piloto: 'Lucas Peñalver (#55 · Scuderia Nazarí)',
+          circuito: 'Melbourne — Albert Park',
+          tiempoTotal: '1:16.718',
+          s1: '26.290 s',
+          s2: '17.740 s',
+          s3: '32.688 s',
+          velPunta: '327 km/h',
+          tramoVel: [286, 309, 208, 325, 279, 327, 192, 302]
+        }
+      }
+    };
+
+    /* Catálogo oficial de las 22 rutas exigidas en REQUIREMENTS.md y TC-05 */
+    const ROUTES_CONFIG = [
+      // Públicas (5)
+      { hash: '#portada', title: 'Portada Editorial', group: 'Públicas', roleReq: 'any', primaryLabel: 'ENTRAR A LA LIGA →', primaryHref: '#login' },
+      { hash: '#login', title: 'Iniciar Sesión', group: 'Públicas', roleReq: 'any', primaryLabel: 'ACCEDER AL PANEL →', primaryHref: '#inicio' },
+      { hash: '#registro', title: 'Solicitud de Alta de Jeque', group: 'Públicas', roleReq: 'any', primaryLabel: 'IR A INICIAR SESIÓN →', primaryHref: '#login' },
+      { hash: '#instalar', title: 'Instalar Aplicación Web', group: 'Públicas', roleReq: 'any', primaryLabel: 'VOLVER AL INICIO →', primaryHref: '#inicio' },
+      { hash: '#sistema', title: 'Sistema y Guía Visual (IPO)', group: 'Públicas', roleReq: 'any', primaryLabel: 'EXPLORAR CAMPEONATO →', primaryHref: '#campeonato' },
+      // Jeque (12)
+      { hash: '#inicio', title: 'Despacho del Jeque', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'CONSULTAR CARRERAS →', primaryHref: '#carreras' },
+      { hash: '#escuderia', title: 'Mi Escudería y Libro de Movimientos', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'VER PARRILLA DE EQUIPOS →', primaryHref: '#equipos' },
+      { hash: '#equipos', title: 'Escuderías de la Liga', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'VER MI ESCUDERÍA →', primaryHref: '#escuderia' },
+      { hash: '#campeonato', title: 'Clasificación del Campeonato', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'VER CALENDARIO Y RESULTADOS →', primaryHref: '#carreras' },
+      { hash: '#carreras', title: 'Calendario y Actas de Carrera', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'VER CLASIFICACIÓN GENERAL →', primaryHref: '#campeonato' },
+      { hash: '#mercado', title: 'Mercado Oficial de Pilotos', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'CONSULTAR SALDO EN ESCUDERÍA →', primaryHref: '#escuderia' },
+      { hash: '#comunidad', title: 'Comunidad y Foro de Jeques', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'IR A VOTACIÓN FIA →', primaryHref: '#comunidad-votacion' },
+      { hash: '#comunidad-votacion', title: 'Votaciones Oficiales de la Liga', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'VER ARCHIVO HISTÓRICO →', primaryHref: '#comunidad-archivo' },
+      { hash: '#comunidad-archivo', title: 'Archivo Histórico de Temporadas', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'VOLVER AL FORO →', primaryHref: '#comunidad' },
+      { hash: '#telemetria', title: 'Laboratorio de Telemetría Comparada', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'VOLVER A CARRERAS →', primaryHref: '#carreras' },
+      { hash: '#buzon', title: 'Buzón de Comunicados y Avisos', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'CONFIGURAR PERFIL →', primaryHref: '#perfil' },
+      { hash: '#perfil', title: 'Perfil del Jeque y Preferencias', group: 'Jeque', roleReq: 'jeque', primaryLabel: 'VOLVER AL DESPACHO →', primaryHref: '#inicio' },
+      // Administración (5)
+      { hash: '#admin-inicio', title: 'Comisariado y Administración', group: 'Administración', roleReq: 'admin', primaryLabel: 'INTRODUCIR ACTA DE CARRERA →', primaryHref: '#admin-carrera' },
+      { hash: '#admin-carrera', title: 'Administración · Resultados y FIA', group: 'Administración', roleReq: 'admin', primaryLabel: 'OPERACIONES DE ECONOMÍA →', primaryHref: '#admin-economia' },
+      { hash: '#admin-economia', title: 'Administración · Libro de Economía', group: 'Administración', roleReq: 'admin', primaryLabel: 'GESTIÓN DE MEDIOS →', primaryHref: '#admin-media' },
+      { hash: '#admin-media', title: 'Administración · Archivo de Medios', group: 'Administración', roleReq: 'admin', primaryLabel: 'GESTIÓN DE USUARIOS →', primaryHref: '#admin-usuarios' },
+      { hash: '#admin-usuarios', title: 'Administración · Jeques y Permisos', group: 'Administración', roleReq: 'admin', primaryLabel: 'PANEL DE COMISARIADO →', primaryHref: '#admin-inicio' }
+    ];
+
+    let state = JSON.parse(JSON.stringify(INITIAL_STATE));
+
+    /* Formato español estricto: 1.234,56 € (RF-06 / GUIDELINES.md #4) */
+    function formatEuros(amount) {
+      const absVal = Math.abs(Number(amount) || 0);
+      const fixed = absVal.toFixed(2);
+      const parts = fixed.split('.');
+      const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      return `${intPart},${parts[1]} €`;
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function getTeamById(id) {
+      return state.equipos.find(t => t.id === id) || null;
+    }
+
+    function getPilotById(id) {
+      return state.pilotos.find(p => p.id === id) || null;
+    }
+
+    function showToast(message, withUndo = false) {
+      const banner = document.getElementById('globalToast');
+      const textEl = document.getElementById('globalToastText');
+      const undoBtn = document.getElementById('globalUndoBtn');
+      textEl.textContent = message;
+      undoBtn.style.display = withUndo && state.lastUndoSnapshot ? 'inline-flex' : 'none';
+      banner.classList.add('visible');
+    }
+
+    function saveUndoSnapshot(label) {
+      state.lastUndoSnapshot = {
+        label,
+        equipos: JSON.parse(JSON.stringify(state.equipos)),
+        movimientos: JSON.parse(JSON.stringify(state.movimientos)),
+        carreras: JSON.parse(JSON.stringify(state.carreras)),
+        avisosBuzon: JSON.parse(JSON.stringify(state.avisosBuzon)),
+        votacionActiva: JSON.parse(JSON.stringify(state.votacionActiva)),
+        medios: JSON.parse(JSON.stringify(state.medios)),
+        usuariosLiga: JSON.parse(JSON.stringify(state.usuariosLiga))
+      };
+    }
+
+    function executeUndo() {
+      if (!state.lastUndoSnapshot) return;
+      const snap = state.lastUndoSnapshot;
+      state.equipos = snap.equipos;
+      state.movimientos = snap.movimientos;
+      state.carreras = snap.carreras;
+      state.avisosBuzon = snap.avisosBuzon;
+      state.votacionActiva = snap.votacionActiva;
+      state.medios = snap.medios;
+      state.usuariosLiga = snap.usuariosLiga;
+      state.lastUndoSnapshot = null;
+      showToast(`Acción deshecha: ${snap.label}`, false);
+      renderCurrentRoute(false);
+    }
+
+    /* Generador de etiqueta de resultado de piloto con texto y símbolo propios (RF-05 y TC-08) */
+    function renderPilotRaceStatus(res) {
+      if (res.estado === 'POSICION') {
+        const podiumSymbol = res.posicion === 1 ? '★ ' : (res.posicion <= 3 ? '◆ ' : '');
+        return `<span class="status-tag">${podiumSymbol}P${res.posicion} · Posición oficial (${res.puntos} pts)</span>`;
+      }
+      if (res.estado === 'DNF') {
+        return `<span class="status-tag">✕ DNF (No clasificado · Retirado)</span>`;
+      }
+      if (res.estado === 'NO_PRESENTADO') {
+        return `<span class="status-tag">○ No presentado (Ausente en parrilla)</span>`;
+      }
+      return `<span class="status-tag">? Posición desconocida (Sin acta de telemetría)</span>`;
+    }
+
+    /* Estados de Carga, Sin Datos y Error con Reintento (RF-11 / TC-07) */
+    function renderDataStateBlock(screenTitle) {
+      if (state.viewState === 'loading') {
+        return `
+          <section class="editorial-cell" aria-live="polite" data-reviewable="estado-carga">
+            <p class="editorial-label" style="color:var(--c-muted);">SINCRONIZANDO LIBRO OFICIAL...</p>
+            <h2 style="font-size:18px; margin:8px 0;">Cargando datos de ${escapeHtml(screenTitle)}</h2>
+            <p style="color:var(--c-muted); margin-bottom:16px;">Consultando actas validadas por el comisariado de F1 Bugambra.</p>
+            <div style="border-top:1px solid var(--c-ink); padding-top:12px;">
+              <button type="button" class="btn-secondary" data-action="reset-viewstate" style="max-width:280px;">MOSTRAR DATOS AHORA</button>
+            </div>
+          </section>
+        `;
+      }
+      if (state.viewState === 'empty') {
+        return `
+          <section class="editorial-cell" aria-live="polite" data-reviewable="estado-vacio">
+            <p class="editorial-label" style="color:var(--c-muted);">ARCHIVO SIN REGISTROS</p>
+            <h2 style="font-size:18px; margin:8px 0;">Sin datos registrados en ${escapeHtml(screenTitle)}</h2>
+            <p style="color:var(--c-muted); margin-bottom:16px;">Todavía no se han publicado actas oficiales tras el anuncio de WhatsApp para esta sección.</p>
+            <div style="border-top:1px solid var(--c-ink); padding-top:12px;">
+              <button type="button" class="btn-primary" data-action="reset-viewstate" style="max-width:280px;">RESTAURAR DATOS DE MUESTRA</button>
+            </div>
+          </section>
+        `;
+      }
+      if (state.viewState === 'error') {
+        return `
+          <section class="editorial-cell" role="alert" data-reviewable="estado-error">
+            <p class="editorial-label" style="color:var(--c-brand);">! INCIDENCIA DE LECTURA</p>
+            <h2 style="font-size:18px; margin:8px 0;">No se pudo completar la lectura de ${escapeHtml(screenTitle)}</h2>
+            <p style="color:var(--c-muted); margin-bottom:16px;">Qué pasó: El archivo local de actas devolvió una interrupción simulada. Cómo seguir: Pulsa «Reintentar» para recargar el estado íntegro.</p>
+            <div style="border-top:1px solid var(--c-ink); padding-top:12px;">
+              <button type="button" class="btn-primary" data-action="retry-viewstate" style="max-width:280px;">REINTENTAR LECTURA ↻</button>
+            </div>
+          </section>
+        `;
+      }
+      return null;
+    }
+
+    function renderPortada() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="portada-titulo">
+            EDICIÓN V · TEMPORADA PRIVADA 2026
+          </header>
+
+          <div class="editorial-cell" style="padding: 32px 16px;" data-reviewable="portada-hero">
+            <p class="editorial-label" style="color:var(--c-muted); margin-bottom:12px;">CRÓNICA OFICIAL DE LOS CUATRO JEQUES</p>
+            <h2 class="display-hero">EL DESIERTO Y EL ASFALTO DICTAN SENTENCIA</h2>
+            <p style="max-width: 640px; margin-top: 16px; font-size: 14px; color: var(--c-muted);">
+              Consulta el libro de movimientos, las actas de la FIA anunciadas por WhatsApp, el estado de tu escudería y la clasificación del campeonato desde cualquier dispositivo móvil.
+            </p>
+          </div>
+
+          <!-- Imagen editorial a sangre en SVG monocromo de alto contraste -->
+          <figure class="bleed-figure" data-reviewable="portada-imagen-sangre">
+            <svg viewBox="0 0 1200 440" role="img" aria-label="Ilustración técnica a sangre del monoplaza BGM-01 de F1 Bugambra en perfil">
+              <rect width="1200" height="440" fill="var(--c-surface)"/>
+              <line x1="0" y1="360" x2="1200" y2="360" stroke="var(--c-ink)" stroke-width="2"/>
+              <line x1="120" y1="0" x2="120" y2="440" stroke="var(--c-ink)" stroke-width="1" stroke-dasharray="4 4"/>
+              <line x1="1080" y1="0" x2="1080" y2="440" stroke="var(--c-ink)" stroke-width="1" stroke-dasharray="4 4"/>
+              <!-- Silueta técnica monoplaza -->
+              <path d="M180 320 L310 320 L360 250 L560 250 L640 205 L780 205 L850 265 L1030 285 L1050 320 Z" fill="none" stroke="var(--c-ink)" stroke-width="3"/>
+              <rect x="150" y="235" width="45" height="85" fill="none" stroke="var(--c-ink)" stroke-width="3"/>
+              <rect x="995" y="295" width="75" height="25" fill="var(--c-brand)"/>
+              <circle cx="310" cy="320" r="46" fill="var(--c-paper)" stroke="var(--c-ink)" stroke-width="4"/>
+              <circle cx="310" cy="320" r="18" fill="none" stroke="var(--c-ink)" stroke-width="2"/>
+              <circle cx="890" cy="320" r="46" fill="var(--c-paper)" stroke="var(--c-ink)" stroke-width="4"/>
+              <circle cx="890" cy="320" r="18" fill="none" stroke="var(--c-ink)" stroke-width="2"/>
+              <text x="150" y="70" fill="var(--c-ink)" font-family="Helvetica Neue, Arial, sans-serif" font-size="14" letter-spacing="4">ESPECIFICACIÓN CHASIS BGM-26 · PARRILLA CERRADA</text>
+              <text x="150" y="405" fill="var(--c-muted)" font-family="Helvetica Neue, Arial, sans-serif" font-size="12" letter-spacing="3">DISTANCIA ENTRE EJES: 3.600 MM · PESO MÍNIMO FIA: 798 KG</text>
+            </svg>
+            <figcaption class="small-caps-caption">
+              Figura 01 — Monoplaza oficial homologado por el comisariado de F1 Bugambra para la ronda de Suzuka.
+            </figcaption>
+          </figure>
+
+          <div class="editorial-cell" data-reviewable="portada-cta">
+            <a href="#login" class="btn-primary">ENTRAR AL DESPACHO DE LA LIGA →</a>
+            <div style="display:flex; flex-wrap:wrap; gap:16px; margin-top:12px; justify-content:space-between;">
+              <a href="#registro">Solicitar alta como nuevo jeque</a>
+              <a href="#instalar">Instrucciones para instalar en el móvil</a>
+              <a href="#sistema">Guía visual y sistema de diseño</a>
+            </div>
+          </div>
+
+          <div class="editorial-grid cols-3" data-reviewable="portada-cifras">
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">PRÓXIMA CITA OFICIAL</span>
+              <div class="metric-big">R04 · SUZUKA</div>
+              <p style="color:var(--c-muted); margin-top:4px;">${escapeHtml(state.proximaCarrera.fechaTexto)}</p>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">LÍDER DEL CAMPEONATO</span>
+              <div class="metric-big">BUGAMBRA</div>
+              <p style="color:var(--c-muted); margin-top:4px;">118 puntos · Jeque Ramiro Al-Mansoor</p>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">CANAL DE ANUNCIOS</span>
+              <div class="metric-big">WHATSAPP → WEB</div>
+              <p style="color:var(--c-muted); margin-top:4px;">Actas y saldos auditados tras cada GP</p>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderLogin() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="login-titulo">
+            ACCESO DE JEQUES Y COMISARIOS
+          </header>
+
+          <div class="editorial-grid cols-2">
+            <div class="editorial-cell" data-reviewable="login-formulario">
+              <p style="color:var(--c-muted); margin-bottom:20px;">
+                Introduce las credenciales de tu escudería o utiliza el acceso directo con tu cuenta de Google vinculada a la liga.
+              </p>
+
+              <form id="loginForm" novalidate>
+                <div class="form-group">
+                  <label class="form-label" for="loginEmail">CORREO ELECTRÓNICO DEL JEQUE</label>
+                  <input type="email" id="loginEmail" name="email" class="form-input" autocomplete="email" placeholder="nombre@bugambra.f1" required>
+                  <div class="form-help">Ejemplo válido: ramiro@bugambra.f1 (o incluye @admin para entrar como Administrador)</div>
+                  <div id="loginEmailError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="loginPassword">CONTRASEÑA DE ACCESO</label>
+                  <input type="password" id="loginPassword" name="password" class="form-input" autocomplete="current-password" placeholder="Mínimo 4 caracteres" required>
+                  <div id="loginPasswordError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <button type="submit" class="btn-primary" style="margin-bottom:12px;">ENTRAR CON CORREO →</button>
+              </form>
+
+              <div style="border-top:1px solid var(--c-ink); padding-top:16px; margin-top:16px;">
+                <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:8px;">ACCESO FEDERADO (RF-01 / TC-03)</p>
+                <button type="button" id="googleLoginBtn" class="btn-secondary">
+                  CONTINUAR CON GOOGLE →
+                </button>
+              </div>
+            </div>
+
+            <div class="editorial-cell" data-reviewable="login-ayuda">
+              <p class="editorial-label" style="font-size:11px; margin-bottom:12px;">¿AÚN NO TIENES LICENCIA FIA BUGAMBRA?</p>
+              <p style="color:var(--c-muted); margin-bottom:16px;">
+                Si el administrador te ha invitado en el grupo de WhatsApp, registra tu cuenta para consultar tu saldo y plantilla.
+              </p>
+              <a href="#registro" class="btn-secondary">SOLICITAR REGISTRO DE JEQUE →</a>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderRegistro() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="registro-titulo">
+            REGISTRO DE NUEVO JEQUE
+          </header>
+
+          <div class="editorial-grid cols-2">
+            <div class="editorial-cell" data-reviewable="registro-formulario">
+              <form id="registerForm" novalidate>
+                <div class="form-group">
+                  <label class="form-label" for="regName">NOMBRE DEL JEQUE</label>
+                  <input type="text" id="regName" class="form-input" placeholder="Ej. Javier Al-Khelaifi" required>
+                  <div id="regNameError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="regTeam">NOMBRE PROPUESTO DE ESCUDERÍA</label>
+                  <input type="text" id="regTeam" class="form-input" placeholder="Ej. Duna Negra F1 Team" required>
+                  <div id="regTeamError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="regEmail">CORREO ELECTRÓNICO</label>
+                  <input type="email" id="regEmail" class="form-input" placeholder="jeque@escuderia.f1" required>
+                  <div id="regEmailError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="regPass">CONTRASEÑA</label>
+                  <input type="password" id="regPass" class="form-input" placeholder="Al menos 6 caracteres" required>
+                  <div id="regPassError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <button type="submit" class="btn-primary" style="margin-bottom:12px;">CREAR CUENTA Y ENTRAR →</button>
+              </form>
+
+              <div style="border-top:1px solid var(--c-ink); padding-top:16px; margin-top:16px;">
+                <button type="button" id="googleRegisterBtn" class="btn-secondary">CONTINUAR CON GOOGLE →</button>
+              </div>
+            </div>
+
+            <div class="editorial-cell">
+              <p class="editorial-label" style="font-size:11px; margin-bottom:8px;">NORMATIVA DE ALTA</p>
+              <p style="color:var(--c-muted); margin-bottom:12px;">
+                Los presupuestos iniciales y la asignación de motores los asienta exclusivamente el administrador tras el sorteo oficial en WhatsApp.
+              </p>
+              <a href="#login">¿Ya tienes cuenta? Ir a Iniciar sesión</a>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderInstalar() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="instalar-titulo">
+            INSTALAR F1 BUGAMBRA EN TU MÓVIL
+          </header>
+
+          <div class="editorial-cell">
+            <p style="max-width:680px; color:var(--c-muted);">
+              Esta aplicación web funciona sin dependencias externas y puede añadirse a la pantalla de inicio de tu teléfono para abrirse a pantalla completa como una app nativa.
+            </p>
+          </div>
+
+          <div class="editorial-grid cols-3" data-reviewable="instalar-plataformas">
+            <div class="editorial-cell">
+              <p class="editorial-label" style="font-size:11px; margin-bottom:8px;">01 · IPHONE / IPAD (SAFARI)</p>
+              <ol style="padding-left:18px; color:var(--c-ink);">
+                <li style="margin-bottom:8px;">Pulsa el icono «Compartir» en la barra inferior de Safari.</li>
+                <li style="margin-bottom:8px;">Selecciona «Añadir a pantalla de inicio».</li>
+                <li>Confirma con «Añadir» en la esquina superior derecha.</li>
+              </ol>
+            </div>
+            <div class="editorial-cell">
+              <p class="editorial-label" style="font-size:11px; margin-bottom:8px;">02 · ANDROID (CHROME)</p>
+              <ol style="padding-left:18px; color:var(--c-ink);">
+                <li style="margin-bottom:8px;">Toca el menú de tres puntos en la esquina superior derecha.</li>
+                <li style="margin-bottom:8px;">Elige «Instalar aplicación» o «Añadir a pantalla de inicio».</li>
+                <li>Acepta el cuadro de diálogo para crear el acceso directo.</li>
+              </ol>
+            </div>
+            <div class="editorial-cell">
+              <p class="editorial-label" style="font-size:11px; margin-bottom:8px;">03 · ESCRITORIO (MAC / WINDOWS)</p>
+              <ol style="padding-left:18px; color:var(--c-ink);">
+                <li style="margin-bottom:8px;">Guarda el archivo único <code>index.html</code> en tu equipo.</li>
+                <li style="margin-bottom:8px;">Ábrelo directamente con doble clic sin necesidad de conexión ni servidor.</li>
+                <li>Usa el atajo <code>M</code> para desplegar el índice lateral en cualquier momento.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderSistema() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="sistema-titulo">
+            SISTEMA VISUAL Y GUÍA DE DISEÑO (TEMA 6 IPO)
+          </header>
+
+          <div class="section-header">
+            <span>01 · PALETA ESTRICTA DE 7 TOKENS DE COLOR (CONTRASTE AA/AAA)</span>
+            <span>CERO SOMBRAS · CERO RADIO</span>
+          </div>
+
+          <div class="editorial-grid cols-4" data-reviewable="sistema-colores">
+            <div class="editorial-cell">
+              <div style="height:40px; background:var(--c-paper); border:1px solid var(--c-ink); margin-bottom:8px;"></div>
+              <strong>1. PAPEL (--c-paper)</strong>
+              <p style="color:var(--c-muted); font-size:11px;">Claro: #FFFFFF · Oscuro: #0A0A0A</p>
+            </div>
+            <div class="editorial-cell">
+              <div style="height:40px; background:var(--c-surface); border:1px solid var(--c-ink); margin-bottom:8px;"></div>
+              <strong>2. SUPERFICIE (--c-surface)</strong>
+              <p style="color:var(--c-muted); font-size:11px;">Claro: #F4F4F2 · Oscuro: #161616</p>
+            </div>
+            <div class="editorial-cell">
+              <div style="height:40px; background:var(--c-ink); border:1px solid var(--c-ink); margin-bottom:8px;"></div>
+              <strong>3. TINTA (--c-ink)</strong>
+              <p style="color:var(--c-muted); font-size:11px;">Contraste &gt; 18:1 sobre papel</p>
+            </div>
+            <div class="editorial-cell">
+              <div style="height:40px; background:var(--c-muted); border:1px solid var(--c-ink); margin-bottom:8px;"></div>
+              <strong>4. GRIS APOYO (--c-muted)</strong>
+              <p style="color:var(--c-muted); font-size:11px;">Contraste &ge; 7.5:1 (Cumple AA)</p>
+            </div>
+            <div class="editorial-cell">
+              <div style="height:40px; background:var(--c-brand); border:1px solid var(--c-ink); margin-bottom:8px;"></div>
+              <strong>5. ROJO MARCA (--c-brand)</strong>
+              <p style="color:var(--c-muted); font-size:11px;">Acento puntual F1 (&ge; 5.6:1)</p>
+            </div>
+            <div class="editorial-cell">
+              <div style="height:40px; background:var(--c-data-1); border:1px solid var(--c-ink); margin-bottom:8px;"></div>
+              <strong>6. DATO 1 (--c-data-1)</strong>
+              <p style="color:var(--c-muted); font-size:11px;">Petróleo / Cian (&ge; 7.4:1)</p>
+            </div>
+            <div class="editorial-cell">
+              <div style="height:40px; background:var(--c-data-2); border:1px solid var(--c-ink); margin-bottom:8px;"></div>
+              <strong>7. DATO 2 (--c-data-2)</strong>
+              <p style="color:var(--c-muted); font-size:11px;">Ocre / Ámbar (&ge; 6.8:1)</p>
+            </div>
+            <div class="editorial-cell">
+              <strong>REGLA CROMÁTICA</strong>
+              <p style="color:var(--c-muted); font-size:11px;">Sin pares rojo-verde, azul-amarillo ni rojo-azul. El color jamás actúa como única señal.</p>
+            </div>
+          </div>
+
+          <div class="section-header">
+            <span>02 · SEÑALIZACIÓN MULTICANAL (SIGNO + PALABRA + FORMA)</span>
+          </div>
+          <div class="editorial-grid cols-3" data-reviewable="sistema-senales">
+            <div class="editorial-cell">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted);">ECONOMÍA (TC-09)</p>
+              <p class="tx-income" style="margin-top:8px;">+ 2.450.000,00 € · [INGRESO]</p>
+              <p class="tx-expense" style="margin-top:6px;">− 680.000,00 € · [GASTO]</p>
+            </div>
+            <div class="editorial-cell">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted);">ACTAS DE CARRERA (TC-08)</p>
+              <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+                ${renderPilotRaceStatus({ estado: 'POSICION', posicion: 1, puntos: 25 })}
+                ${renderPilotRaceStatus({ estado: 'DNF' })}
+                ${renderPilotRaceStatus({ estado: 'NO_PRESENTADO' })}
+                ${renderPilotRaceStatus({ estado: 'POSICION_DESCONOCIDA' })}
+              </div>
+            </div>
+            <div class="editorial-cell">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted);">COMPONENTES INTERACTIVOS (TC-18)</p>
+              <p style="margin-top:8px; color:var(--c-muted);">Todos los botones y enlaces respetan un área mínima táctil de 44 × 44 px y foco visible de 2 px.</p>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderInicio() {
+      const overridden = renderDataStateBlock('Despacho del Jeque');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">DESPACHO DEL JEQUE</header>${overridden}</article>`;
+      }
+
+      const miEquipo = getTeamById(state.currentUser.escuderiaId) || state.equipos[0];
+      const avisosNoLeidos = state.avisosBuzon.filter(a => !a.leido);
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="inicio-titulo">
+            DESPACHO DEL JEQUE · ${escapeHtml(miEquipo.nombre)}
+          </header>
+
+          <!-- Resumen clave (RF-02 / US-06): próxima carrera con cuenta atrás, saldo, posición y avisos nuevos -->
+          <div class="editorial-grid cols-4" data-reviewable="inicio-metricas">
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">01 · PRÓXIMA CARRERA</span>
+              <div class="metric-big" style="font-size:1.35rem;">${escapeHtml(state.proximaCarrera.nombre)}</div>
+              <p style="margin-top:6px; font-weight:600;">⏱ ${escapeHtml(state.proximaCarrera.cuentaAtras)}</p>
+              <p style="color:var(--c-muted); font-size:11px;">${escapeHtml(state.proximaCarrera.fechaTexto)}</p>
+            </div>
+
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">02 · SALDO ACTUAL DE ESCUDERÍA</span>
+              <div class="metric-big">${formatEuros(miEquipo.saldo)}</div>
+              <p style="color:var(--c-muted); font-size:11px; margin-top:6px;">
+                ${state.role === 'admin' ? 'Rol Administrador: Edición habilitada' : 'Rol Jeque: Presupuesto de solo lectura'}
+              </p>
+              <a href="#escuderia" style="margin-top:4px;">Consultar libro de movimientos →</a>
+            </div>
+
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">03 · POSICIÓN DEL EQUIPO</span>
+              <div class="metric-big">${miEquipo.posicion}º · ${miEquipo.puntos} PTS</div>
+              <p style="color:var(--c-muted); font-size:11px; margin-top:6px;">Diferencia: ${escapeHtml(miEquipo.diferenciaLider)}</p>
+              <a href="#campeonato" style="margin-top:4px;">Ver tabla del campeonato →</a>
+            </div>
+
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">04 · AVISOS NUEVOS</span>
+              <div class="metric-big">${avisosNoLeidos.length} SIN LEER</div>
+              <p style="color:var(--c-muted); font-size:11px; margin-top:6px;">Total en buzón: ${state.avisosBuzon.length} comunicados</p>
+              <a href="#buzon" style="margin-top:4px;">Abrir buzón de la FIA →</a>
+            </div>
+          </div>
+
+          <div class="section-header">
+            <span>ÚLTIMOS COMUNICADOS DEL COMISARIADO (TRAS ANUNCIO EN WHATSAPP)</span>
+            <a href="#buzon">VER TODOS LOS AVISOS</a>
+          </div>
+
+          <div class="table-wrap" data-reviewable="inicio-avisos">
+            <table class="editorial-table">
+              <thead>
+                <tr>
+                  <th>ESTADO</th>
+                  <th>FECHA</th>
+                  <th>ASUNTO</th>
+                  <th>ACCIÓN</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.avisosBuzon.map(av => `
+                  <tr>
+                    <td>
+                      <span class="status-tag">${av.leido ? '✓ LEÍDO' : '● NO LEÍDO'}</span>
+                    </td>
+                    <td>${escapeHtml(av.fecha)}</td>
+                    <td><strong>${escapeHtml(av.asunto)}</strong><br><span style="color:var(--c-muted); font-size:12px;">${escapeHtml(av.cuerpo)}</span></td>
+                    <td><a href="#buzon">Abrir en buzón</a></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          ${state.role === 'admin' ? `
+            <div class="editorial-cell" style="background:var(--c-surface);" data-reviewable="inicio-acceso-admin">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-brand);"> PRIVILEGIOS DE ADMINISTRADOR ACTIVOS (TC-11)</p>
+              <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:8px;">
+                <a href="#admin-carrera">→ Introducir resultados de carrera</a>
+                <a href="#admin-economia">→ Registrar operación de economía</a>
+                <a href="#admin-usuarios">→ Gestionar usuarios</a>
+              </div>
+            </div>
+          ` : ''}
+        </article>
+      `;
+    }
+
+    function renderEscuderia() {
+      const overridden = renderDataStateBlock('Mi Escudería y Economía');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">MI ESCUDERÍA</header>${overridden}</article>`;
+      }
+
+      const eq = getTeamById(state.selectedTeamId) || state.equipos[0];
+      const pilotosEquipo = state.pilotos.filter(p => p.escuderiaId === eq.id);
+      const movsEquipo = state.movimientos.filter(m => m.escuderiaId === eq.id || eq.id === 'esc-bugambra');
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="escuderia-titulo">
+            ESCUDERÍA · <span class="team-swatch ${eq.swatch}" aria-hidden="true"></span>${escapeHtml(eq.nombre)}
+          </header>
+
+          <!-- Selector rápido para inspeccionar detalle de cualquier equipo (RF-03 / US-07) -->
+          <div class="section-header">
+            <span>FICHA OFICIAL DE ESCUDERÍA (JEQUE: ${escapeHtml(eq.jeque)})</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <label for="teamSwitchSelect" style="font-size:10px;">INSPECCIONAR EQUIPO:</label>
+              <select id="teamSwitchSelect" class="form-select" style="width:auto; min-height:44px; padding:4px 8px;">
+                ${state.equipos.map(item => `
+                  <option value="${item.id}" ${item.id === eq.id ? 'selected' : ''}>${escapeHtml(item.nombre)}</option>
+                `).join('')}
+              </select>
+            </div>
+          </div>
+
+          <div class="editorial-grid cols-4" data-reviewable="escuderia-ficha">
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">SALDO DISPONIBLE (RF-06)</span>
+              <div class="metric-big">${formatEuros(eq.saldo)}</div>
+              <p style="font-size:11px; color:var(--c-muted); margin-top:4px;">
+                ${state.role === 'admin'
+                  ? '<a href="#admin-economia">Editar presupuesto en Administración →</a>'
+                  : 'Solo lectura · El jeque no puede modificar presupuestos (TC-10)'}
+              </p>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">POSICIÓN EN LIGA</span>
+              <div class="metric-big">${eq.posicion}º PUESTO</div>
+              <p style="font-size:11px; color:var(--c-muted); margin-top:4px;">${eq.puntos} pts (${escapeHtml(eq.diferenciaLider)})</p>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">UNIDAD DE POTENCIA</span>
+              <div class="metric-big" style="font-size:1.2rem;">${escapeHtml(eq.motor)}</div>
+              <p style="font-size:11px; color:var(--c-muted); margin-top:4px;">Homologación FIA 2026</p>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">SEDE OPERATIVA</span>
+              <div class="metric-big" style="font-size:1.2rem;">${escapeHtml(eq.sede)}</div>
+              <p style="font-size:11px; color:var(--c-muted); margin-top:4px;">Propietario: ${escapeHtml(eq.jeque)}</p>
+            </div>
+          </div>
+
+          <div class="section-header">
+            <span>PLANTILLA DE PILOTOS TITULARES (RF-03)</span>
+            <a href="#mercado">IR AL MERCADO DE FICHAJES →</a>
+          </div>
+
+          <div class="editorial-grid cols-2" data-reviewable="escuderia-pilotos">
+            ${pilotosEquipo.map(p => `
+              <div class="editorial-cell">
+                <div style="display:grid; grid-template-columns: 96px 1fr; gap: 16px; align-items:center;">
+                  <svg viewBox="0 0 100 110" width="96" height="105" role="img" aria-label="Retrato técnico de ${escapeHtml(p.nombre)}">
+                    <rect width="100" height="110" fill="var(--c-surface)" stroke="var(--c-ink)" stroke-width="1"/>
+                    <circle cx="50" cy="38" r="20" fill="none" stroke="var(--c-ink)" stroke-width="2"/>
+                    <path d="M32 34 L68 34 L65 44 L35 44 Z" fill="var(--c-ink)"/>
+                    <path d="M18 102 C18 74 82 74 82 102" fill="none" stroke="var(--c-ink)" stroke-width="2"/>
+                    <text x="10" y="20" fill="var(--c-ink)" font-size="12" font-family="Helvetica Neue, Arial">#${p.dorsal}</text>
+                  </svg>
+                  <div>
+                    <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">DORSAL #${p.dorsal} · ${escapeHtml(p.estadoMercado)}</span>
+                    <h3 style="font-size:18px; margin:4px 0;">${escapeHtml(p.nombre)}</h3>
+                    <p style="font-size:12px; color:var(--c-muted);">Puntos: <strong>${p.puntos} pts</strong> (${escapeHtml(p.diff)}) · Podios: ${p.podios}</p>
+                    <p style="font-size:12px; color:var(--c-muted);">Ritmo medio: ${escapeHtml(p.ritmoMedio)} · Valoración: ${formatEuros(p.valor)}</p>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="section-header">
+            <span>LIBRO DE MOVIMIENTOS Y ECONOMÍA (RF-06 / TC-09)</span>
+            <span>FORMATO ESPAÑOL · SIGNO + PALABRA + COLOR</span>
+          </div>
+
+          <div class="table-wrap" data-reviewable="escuderia-libro-movimientos">
+            <table class="editorial-table">
+              <thead>
+                <tr>
+                  <th>FECHA</th>
+                  <th>TIPO DE OPERACIÓN</th>
+                  <th>CONCEPTO ASENTADO POR LA LIGA</th>
+                  <th style="text-align:right;">IMPORTE</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${movsEquipo.map(m => {
+                  const isIngreso = m.tipo === 'INGRESO';
+                  return `
+                    <tr>
+                      <td>${escapeHtml(m.fecha)}</td>
+                      <td>
+                        <span class="status-tag ${isIngreso ? 'tx-income' : 'tx-expense'}">
+                          ${isIngreso ? '+ INGRESO' : '− GASTO'}
+                        </span>
+                      </td>
+                      <td>${escapeHtml(m.concepto)}</td>
+                      <td style="text-align:right;" class="${isIngreso ? 'tx-income' : 'tx-expense'}">
+                        ${isIngreso ? '+' : '−'} ${formatEuros(m.importe)} · ${isIngreso ? 'Ingreso' : 'Gasto'}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderEquipos() {
+      const overridden = renderDataStateBlock('Escuderías de la Liga');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">ESCUDERÍAS DE LA LIGA</header>${overridden}</article>`;
+      }
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="equipos-titulo">
+            PARRILLA DE ESCUDERÍAS Y JEQUES
+          </header>
+
+          <div class="editorial-grid cols-2" data-reviewable="equipos-lista">
+            ${state.equipos.map(eq => {
+              const pList = state.pilotos.filter(p => p.escuderiaId === eq.id);
+              return `
+                <div class="editorial-cell">
+                  <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                    <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">POSICIÓN #${eq.posicion} · ${eq.puntos} PUNTOS</span>
+                    <span class="status-tag">${escapeHtml(eq.diferenciaLider)}</span>
+                  </div>
+                  <h2 style="font-size:20px; margin:8px 0;">
+                    <span class="team-swatch ${eq.swatch}" aria-hidden="true"></span>${escapeHtml(eq.nombre)}
+                  </h2>
+                  <p style="color:var(--c-muted); margin-bottom:8px;">Jeque propietario: <strong>${escapeHtml(eq.jeque)}</strong> · Sede: ${escapeHtml(eq.sede)}</p>
+                  <p style="margin-bottom:12px;">Saldo oficial: <strong>${formatEuros(eq.saldo)}</strong></p>
+                  <p style="font-size:12px; color:var(--c-muted); margin-bottom:16px;">
+                    Pilotos titulares: ${pList.map(p => `${escapeHtml(p.nombre)} (#${p.dorsal})`).join(' · ')}
+                  </p>
+                  <button type="button" class="btn-secondary" data-inspect-team="${eq.id}">
+                    VER DETALLE DE ESTA ESCUDERÍA →
+                  </button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </article>
+      `;
+    }
+
+    function renderCampeonato() {
+      const overridden = renderDataStateBlock('Clasificación del Campeonato');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">CAMPEONATO</header>${overridden}</article>`;
+      }
+
+      const pilotosOrdenados = [...state.pilotos].sort((a, b) => b.puntos - a.puntos);
+      const liderPuntos = pilotosOrdenados[0]?.puntos || 0;
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="campeonato-titulo">
+            CLASIFICACIÓN DEL CAMPEONATO MUNDIAL BUGAMBRA
+          </header>
+
+          <div class="section-header">
+            <span>01 · MUNDIAL DE PILOTOS (RF-04 · PUNTOS Y DIFERENCIA CON EL LÍDER)</span>
+            <span>ACTUALIZADO TRAS R03 MELBOURNE</span>
+          </div>
+
+          <div class="table-wrap" data-reviewable="campeonato-tabla-pilotos">
+            <table class="editorial-table">
+              <thead>
+                <tr>
+                  <th>POS.</th>
+                  <th>PILOTO</th>
+                  <th>ESCUDERÍA</th>
+                  <th>PODIOS</th>
+                  <th>PUNTOS</th>
+                  <th>DIFERENCIA CON LÍDER</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${pilotosOrdenados.map((p, idx) => {
+                  const eq = getTeamById(p.escuderiaId);
+                  const diffVal = idx === 0 ? '0 pts (★ Líder)' : `−${liderPuntos - p.puntos} pts`;
+                  return `
+                    <tr>
+                      <td><strong>${idx + 1}º</strong> ${idx === 0 ? '<span class="status-tag">★ LÍDER</span>' : ''}</td>
+                      <td><strong>${escapeHtml(p.nombre)}</strong> <span style="color:var(--c-muted);">#${p.dorsal}</span></td>
+                      <td>
+                        ${eq ? `<span class="team-swatch ${eq.swatch}" aria-hidden="true"></span>${escapeHtml(eq.nombre)}` : '<span style="color:var(--c-muted);">Sin equipo (Reserva)</span>'}
+                      </td>
+                      <td>${p.podios}</td>
+                      <td><strong>${p.puntos} pts</strong></td>
+                      <td>${diffVal}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section-header">
+            <span>02 · MUNDIAL DE ESCUDERÍAS (CONSTRUCTORES)</span>
+            <span>4 EQUIPOS OFICIALES</span>
+          </div>
+
+          <div class="table-wrap" data-reviewable="campeonato-tabla-equipos">
+            <table class="editorial-table">
+              <thead>
+                <tr>
+                  <th>POS.</th>
+                  <th>ESCUDERÍA</th>
+                  <th>JEQUE</th>
+                  <th>PUNTOS</th>
+                  <th>DIFERENCIA CON LÍDER</th>
+                  <th>SALDO</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.equipos.map(eq => `
+                  <tr>
+                    <td><strong>${eq.posicion}º</strong> ${eq.posicion === 1 ? '<span class="status-tag">★ LÍDER</span>' : ''}</td>
+                    <td><span class="team-swatch ${eq.swatch}" aria-hidden="true"></span><strong>${escapeHtml(eq.nombre)}</strong></td>
+                    <td>${escapeHtml(eq.jeque)}</td>
+                    <td><strong>${eq.puntos} pts</strong></td>
+                    <td>${escapeHtml(eq.diferenciaLider)}</td>
+                    <td>${formatEuros(eq.saldo)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderCarreras() {
+      const overridden = renderDataStateBlock('Calendario y Resultados de Carreras');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">CARRERAS</header>${overridden}</article>`;
+      }
+
+      const carreraActiva = state.carreras.find(c => c.id === state.selectedRaceId) || state.carreras[0];
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="carreras-titulo">
+            CALENDARIO OFICIAL Y ACTAS DE CARRERA
+          </header>
+
+          <div class="editorial-grid cols-4" data-reviewable="carreras-selector">
+            ${state.carreras.map(c => `
+              <div class="editorial-cell" style="${c.id === carreraActiva.id ? 'background:var(--c-surface);' : ''}">
+                <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">${escapeHtml(c.ronda)} · ${escapeHtml(c.fecha)}</span>
+                <h2 style="font-size:15px; margin:6px 0;">${escapeHtml(c.nombre)}</h2>
+                <p style="margin-bottom:12px;"><span class="status-tag">${escapeHtml(c.estado)}</span></p>
+                <button type="button" class="btn-secondary" data-select-race="${c.id}" aria-pressed="${c.id === carreraActiva.id}">
+                  ${c.id === carreraActiva.id ? '■ ACTA SELECCIONADA' : 'VER ACTA DE CARRERA'}
+                </button>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="section-header">
+            <span>ACTA OFICIAL: ${escapeHtml(carreraActiva.nombre)} (${escapeHtml(carreraActiva.fecha)})</span>
+            <span>DECISIÓN FIA: ${escapeHtml(carreraActiva.notaFia)}</span>
+          </div>
+
+          ${carreraActiva.resultados.length === 0 ? `
+            <div class="editorial-cell">
+              <p style="color:var(--c-muted);">Esta carrera está pendiente de disputarse. Cuando concluya y se anuncie en WhatsApp, el administrador publicará aquí los tiempos y estados de cada piloto.</p>
+              ${state.role === 'admin' ? `<div style="margin-top:12px;"><a href="#admin-carrera" class="btn-primary" style="max-width:340px;">INTRODUCIR RESULTADOS DE ESTA CARRERA →</a></div>` : ''}
+            </div>
+          ` : `
+            <div class="table-wrap" data-reviewable="carreras-resultados-tabla">
+              <table class="editorial-table">
+                <thead>
+                  <tr>
+                    <th>ESTADO / CLASIFICACIÓN (TC-08)</th>
+                    <th>PILOTO</th>
+                    <th>ESCUDERÍA</th>
+                    <th>TIEMPO / OBSERVACIÓN FIA</th>
+                    <th>PUNTOS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${carreraActiva.resultados.map(r => {
+                    const p = getPilotById(r.pilotoId);
+                    const eq = p ? getTeamById(p.escuderiaId) : null;
+                    return `
+                      <tr>
+                        <td>${renderPilotRaceStatus(r)}</td>
+                        <td><strong>${p ? escapeHtml(p.nombre) : r.pilotoId}</strong> ${p ? `#${p.dorsal}` : ''}</td>
+                        <td>${eq ? `<span class="team-swatch ${eq.swatch}" aria-hidden="true"></span>${escapeHtml(eq.nombre)}` : '—'}</td>
+                        <td>${escapeHtml(r.tiempo)}</td>
+                        <td><strong>+${r.puntos} pts</strong></td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </article>
+      `;
+    }
+
+    function renderMercado() {
+      const overridden = renderDataStateBlock('Mercado de Pilotos');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">MERCADO</header>${overridden}</article>`;
+      }
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="mercado-titulo">
+            MERCADO OFICIAL DE PILOTOS Y CLÁUSULAS (RF-07)
+          </header>
+
+          <div class="section-header">
+            <span>ESTADOS OFICIALES: [○ LIBRE] · [◆ EN SUBASTA] · [■ FICHADO]</span>
+            <span>PRECIOS DE REFERENCIA EN EUROS</span>
+          </div>
+
+          <div class="table-wrap" data-reviewable="mercado-tabla">
+            <table class="editorial-table">
+              <thead>
+                <tr>
+                  <th>PILOTO</th>
+                  <th>ESTADO EN MERCADO</th>
+                  <th>ESCUDERÍA ACTUAL</th>
+                  <th>RITMO MEDIO</th>
+                  <th style="text-align:right;">VALOR / PRECIO</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.pilotos.map(p => {
+                  const eq = getTeamById(p.escuderiaId);
+                  let badgeSymbol = '■ ';
+                  if (p.estadoMercado === 'Libre') badgeSymbol = '○ ';
+                  if (p.estadoMercado === 'En subasta') badgeSymbol = '◆ ';
+                  return `
+                    <tr>
+                      <td><strong>${escapeHtml(p.nombre)}</strong> <span style="color:var(--c-muted);">#${p.dorsal}</span></td>
+                      <td><span class="status-tag">${badgeSymbol}${escapeHtml(p.estadoMercado)}</span></td>
+                      <td>${eq ? `<span class="team-swatch ${eq.swatch}" aria-hidden="true"></span>${escapeHtml(eq.nombre)}` : 'Sin equipo asignado'}</td>
+                      <td>${escapeHtml(p.ritmoMedio)}</td>
+                      <td style="text-align:right;"><strong>${formatEuros(p.valor)}</strong></td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderComunidad() {
+      const overridden = renderDataStateBlock('Comunidad y Foro de Jeques');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">COMUNIDAD</header>${overridden}</article>`;
+      }
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="comunidad-titulo">
+            COMUNIDAD · FORO DEL PADDOCK
+          </header>
+
+          <div class="section-header">
+            <span>SECCIONES DE COMUNIDAD (RF-08)</span>
+            <div style="display:flex; gap:16px;">
+              <a href="#comunidad" aria-current="page">01. FORO</a>
+              <a href="#comunidad-votacion">02. VOTACIONES FIA</a>
+              <a href="#comunidad-archivo">03. ARCHIVO HISTÓRICO</a>
+            </div>
+          </div>
+
+          <div class="editorial-grid cols-2">
+            <div class="editorial-cell" data-reviewable="comunidad-hilos">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">DEBATES ACTIVOS ENTRE JEQUES</p>
+              ${state.comunidadHilos.map(h => `
+                <div style="border-bottom:1px solid var(--c-ink); padding:12px 0;">
+                  <span style="font-size:11px; color:var(--c-muted);">${escapeHtml(h.autor)} · ${escapeHtml(h.fecha)} · ${h.respuestas} respuestas</span>
+                  <h3 style="font-size:15px; margin:4px 0;">${escapeHtml(h.titulo)}</h3>
+                  <p style="color:var(--c-muted); font-size:12px;">${escapeHtml(h.resumen)}</p>
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="editorial-cell" data-reviewable="comunidad-nuevo-hilo">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">PUBLICAR COMUNICADO EN EL FORO</p>
+              <form id="newThreadForm" novalidate>
+                <div class="form-group">
+                  <label class="form-label" for="threadTitleInput">TÍTULO DEL TEMA</label>
+                  <input type="text" id="threadTitleInput" class="form-input" placeholder="Ej. Revisión de neumáticos para Suzuka" required>
+                  <div id="threadTitleError" class="form-error" style="display:none;"></div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="threadBodyInput">MENSAJE PARA LOS JEQUES</label>
+                  <textarea id="threadBodyInput" class="form-textarea" rows="3" placeholder="Escribe tu propuesta oficial..." required></textarea>
+                </div>
+                <button type="submit" class="btn-primary">PUBLICAR EN EL FORO →</button>
+              </form>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderComunidadVotacion() {
+      const overridden = renderDataStateBlock('Votaciones Oficiales');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">VOTACIONES</header>${overridden}</article>`;
+      }
+
+      const vot = state.votacionActiva;
+      const totalVotos = vot.opciones.reduce((acc, o) => acc + o.votos, 0) || 1;
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="votacion-titulo">
+            COMUNIDAD · VOTACIONES CON RESULTADO VISIBLE
+          </header>
+
+          <div class="section-header">
+            <span>CONSULTA VINCULANTE · CIERRE: ${escapeHtml(vot.cierre)}</span>
+            <div style="display:flex; gap:16px;">
+              <a href="#comunidad">← VOLVER AL FORO</a>
+              <a href="#comunidad-archivo">VER ARCHIVO →</a>
+            </div>
+          </div>
+
+          <div class="editorial-grid cols-2">
+            <div class="editorial-cell" data-reviewable="votacion-formulario">
+              <h2 style="font-size:18px; margin-bottom:12px;">${escapeHtml(vot.titulo)}</h2>
+              <form id="pollVoteForm">
+                ${vot.opciones.map(o => `
+                  <label class="touch-target" style="display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--c-ink); padding:10px 0; cursor:pointer;">
+                    <input type="radio" name="pollOption" value="${o.id}" ${vot.opcionElegida === o.id ? 'checked' : ''}>
+                    <span>${escapeHtml(o.texto)}</span>
+                  </label>
+                `).join('')}
+                <div id="pollVoteError" class="form-error" style="display:none;"></div>
+                <button type="submit" class="btn-primary" style="margin-top:16px;">REGISTRAR MI VOTO DE JEQUE →</button>
+              </form>
+            </div>
+
+            <div class="editorial-cell" data-reviewable="votacion-resultados">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">ESCRUTINIO ACTUAL (${totalVotos} VOTOS EMITIDOS)</p>
+              ${vot.opciones.map(o => {
+                const pct = Math.round((o.votos / totalVotos) * 100);
+                return `
+                  <div style="margin-bottom:16px;">
+                    <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                      <strong>${escapeHtml(o.texto)}</strong>
+                      <span>${o.votos} votos (${pct} %)</span>
+                    </div>
+                    <div style="height:12px; border:1px solid var(--c-ink); background:var(--c-surface);">
+                      <div style="height:100%; width:${pct}%; background:var(--c-ink);"></div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderComunidadArchivo() {
+      const overridden = renderDataStateBlock('Archivo Histórico');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">ARCHIVO</header>${overridden}</article>`;
+      }
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="archivo-titulo">
+            COMUNIDAD · ARCHIVO HISTÓRICO DE LA LIGA
+          </header>
+
+          <div class="section-header">
+            <span>PALMARÉS OFICIAL DE EDICIONES ANTERIORES</span>
+            <a href="#comunidad">← VOLVER AL FORO</a>
+          </div>
+
+          <div class="table-wrap" data-reviewable="archivo-tabla">
+            <table class="editorial-table">
+              <thead>
+                <tr>
+                  <th>EDICIÓN / TEMPORADA</th>
+                  <th>PILOTO CAMPEÓN</th>
+                  <th>ESCUDERÍA CAMPEONA</th>
+                  <th>CRÓNICA OFICIAL</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.archivoTemporadas.map(a => `
+                  <tr>
+                    <td><strong>${escapeHtml(a.temporada)}</strong></td>
+                    <td>★ ${escapeHtml(a.campeonPiloto)}</td>
+                    <td>${escapeHtml(a.campeonEscuderia)}</td>
+                    <td>${escapeHtml(a.hito)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderTelemetria() {
+      const overridden = renderDataStateBlock('Telemetría Comparada');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">TELEMETRÍA</header>${overridden}</article>`;
+      }
+
+      const lapA = state.vueltasTelemetria[state.telemetryLapA];
+      const lapB = state.vueltasTelemetria[state.telemetryLapB];
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="telemetria-titulo">
+            LABORATORIO DE TELEMETRÍA (US-22 · COMPARACIÓN DE VUELTAS)
+          </header>
+
+          <div class="section-header">
+            <span>CIRCUITO: ALBERT PARK (MELBOURNE) · SESIÓN Q3</span>
+            <span>TRAZADO CONTINUO vs TRAZADO DISCONTINUO (SIN DEPENDER DEL COLOR)</span>
+          </div>
+
+          <div class="editorial-grid cols-2" data-reviewable="telemetria-comparativa">
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">TRAZO A (LÍNEA CONTINUA SÓLIDA ───)</span>
+              <h2 style="font-size:18px; margin:6px 0;">${escapeHtml(lapA.piloto)}</h2>
+              <div class="metric-big">${escapeHtml(lapA.tiempoTotal)}</div>
+              <p style="color:var(--c-muted); margin-top:6px;">S1: ${lapA.s1} · S2: ${lapA.s2} · S3: ${lapA.s3} · Punta: ${lapA.velPunta}</p>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">TRAZO B (LÍNEA DISCONTINUA - - -)</span>
+              <h2 style="font-size:18px; margin:6px 0;">${escapeHtml(lapB.piloto)}</h2>
+              <div class="metric-big">${escapeHtml(lapB.tiempoTotal)} (+0.316 s)</div>
+              <p style="color:var(--c-muted); margin-top:6px;">S1: ${lapB.s1} · S2: ${lapB.s2} · S3: ${lapB.s3} · Punta: ${lapB.velPunta}</p>
+            </div>
+          </div>
+
+          <figure class="bleed-figure" data-reviewable="telemetria-grafico">
+            <svg viewBox="0 0 1000 300" role="img" aria-label="Gráfico comparativo de velocidad por sectores entre Mateo Mendoza y Lucas Peñalver">
+              <rect width="1000" height="300" fill="var(--c-paper)"/>
+              <line x1="60" y1="40" x2="960" y2="40" stroke="var(--c-surface)" stroke-width="1"/>
+              <line x1="60" y1="140" x2="960" y2="140" stroke="var(--c-surface)" stroke-width="1"/>
+              <line x1="60" y1="240" x2="960" y2="240" stroke="var(--c-ink)" stroke-width="1"/>
+              <!-- Vuelta A: línea sólida -->
+              <polyline fill="none" stroke="var(--c-ink)" stroke-width="3"
+                points="60,110 180,75 310,205 440,55 570,130 700,48 830,215 950,82"/>
+              <!-- Vuelta B: línea discontinua con marcadores cuadrados -->
+              <polyline fill="none" stroke="var(--c-brand)" stroke-width="2.5" stroke-dasharray="8 6"
+                points="60,122 180,86 310,196 440,66 570,122 700,62 830,226 950,96"/>
+              <text x="65" y="275" fill="var(--c-ink)" font-size="11" font-family="Helvetica Neue, Arial">S1 (CURVAS 1-5)</text>
+              <text x="450" y="275" fill="var(--c-ink)" font-size="11" font-family="Helvetica Neue, Arial">S2 (RECTA LAKESIDE)</text>
+              <text x="800" y="275" fill="var(--c-ink)" font-size="11" font-family="Helvetica Neue, Arial">S3 (SECTOR FINAL)</text>
+            </svg>
+            <figcaption class="small-caps-caption">
+              Comparación de velocidad (km/h) — Trazo continuo: M. Mendoza (1:16.402) · Trazo discontinuo: L. Peñalver (1:16.718).
+            </figcaption>
+          </figure>
+        </article>
+      `;
+    }
+
+    function renderBuzon() {
+      const overridden = renderDataStateBlock('Buzón de Avisos');
+      if (overridden) {
+        return `<article class="screen-enter"><header class="page-title" tabindex="-1" id="screenTitleHeading">BUZÓN</header>${overridden}</article>`;
+      }
+
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="buzon-titulo">
+            BUZÓN DE NOTIFICACIONES Y ACTAS FIA (RF-09)
+          </header>
+
+          <div class="section-header">
+            <span>AVISOS CON ESTADO LEÍDO / NO LEÍDO</span>
+            <button type="button" id="markAllReadBtn" class="btn-link">MARCAR TODOS COMO LEÍDOS</button>
+          </div>
+
+          <div class="table-wrap" data-reviewable="buzon-lista">
+            <table class="editorial-table">
+              <thead>
+                <tr>
+                  <th>ESTADO</th>
+                  <th>FECHA</th>
+                  <th>MENSAJE</th>
+                  <th>ACCIÓN</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.avisosBuzon.map(a => `
+                  <tr>
+                    <td><span class="status-tag">${a.leido ? '✓ LEÍDO' : '● NO LEÍDO'}</span></td>
+                    <td>${escapeHtml(a.fecha)}</td>
+                    <td>
+                      <strong>${escapeHtml(a.asunto)}</strong>
+                      <p style="color:var(--c-muted); font-size:12px; margin-top:4px;">${escapeHtml(a.cuerpo)}</p>
+                    </td>
+                    <td>
+                      <button type="button" class="btn-secondary" data-toggle-notice="${a.id}">
+                        ${a.leido ? 'MARCAR NO LEÍDO' : 'MARCAR LEÍDO'}
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderPerfil() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="perfil-titulo">
+            PERFIL DEL JEQUE Y PREFERENCIAS DE ACCESIBILIDAD (RF-09)
+          </header>
+
+          <div class="editorial-grid cols-2">
+            <div class="editorial-cell" data-reviewable="perfil-datos">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">DATOS DE LICENCIA</p>
+              <p style="margin-bottom:8px;">Nombre oficial: <strong>${escapeHtml(state.currentUser.nombre)}</strong></p>
+              <p style="margin-bottom:8px;">Correo vinculado: <strong>${escapeHtml(state.currentUser.correo)}</strong></p>
+              <p style="margin-bottom:16px;">Rol actual en sesión: <span class="status-tag">${state.role.toUpperCase()}</span></p>
+              <button type="button" id="logoutBtn" class="btn-secondary">CERRAR SESIÓN Y VOLVER A PORTADA</button>
+            </div>
+
+            <div class="editorial-cell" data-reviewable="perfil-ajustes">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">APARIENCIA Y MOVIMIENTO (US-04 / TC-16 / US-24)</p>
+              <div style="display:flex; flex-direction:column; gap:12px;">
+                <button type="button" id="profileThemeBtn" class="btn-primary">
+                  CAMBIAR TEMA (ACTUAL: ${state.theme === 'light' ? 'CLARO' : 'OSCURO'})
+                </button>
+                <button type="button" id="profileMotionBtn" class="btn-secondary">
+                  REDUCIR MOVIMIENTO: ${state.reducedMotion ? 'ACTIVADO (SIN ANIMACIONES)' : 'DESACTIVADO'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderRoleGuardNotice() {
+      if (state.role === 'admin') return '';
+      return `
+        <div class="editorial-cell" style="background:var(--c-surface); border-bottom:1px solid var(--c-ink);" data-reviewable="guardia-rol">
+          <p class="editorial-label" style="color:var(--c-brand);">! ACCESO RESTRINGIDO AL COMISARIADO (TC-10 / TC-11)</p>
+          <p style="margin:6px 0 12px;">Estás visualizando esta ruta con rol <strong>${state.role.toUpperCase()}</strong>. Los jeques no pueden modificar presupuestos ni actas oficiales.</p>
+          <button type="button" class="btn-primary" data-quick-elevate="admin" style="max-width:360px;">
+            ACTIVAR ROL ADMINISTRADOR PARA OPERAR →
+          </button>
+        </div>
+      `;
+    }
+
+    function renderAdminInicio() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="admin-inicio-titulo">
+            COMISARIADO Y ADMINISTRACIÓN DE LA LIGA (RF-10)
+          </header>
+          ${renderRoleGuardNotice()}
+
+          <div class="editorial-grid cols-2" data-reviewable="admin-modulos">
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">MÓDULO 01 · CARRERAS Y FIA</span>
+              <h2 style="font-size:18px; margin:8px 0;">Actas de Carrera y Sanciones</h2>
+              <p style="color:var(--c-muted); margin-bottom:16px;">Introduce posiciones, DNF, ausencias y notas de comisarios con validación y resumen previo.</p>
+              <a href="#admin-carrera" class="btn-primary">ABRIR FORMULARIO DE CARRERA →</a>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">MÓDULO 02 · LIBRO ECONÓMICO</span>
+              <h2 style="font-size:18px; margin:8px 0;">Operaciones de Economía</h2>
+              <p style="color:var(--c-muted); margin-bottom:16px;">Asienta ingresos o cargos tras los anuncios de WhatsApp con confirmación y opción de deshacer.</p>
+              <a href="#admin-economia" class="btn-primary">ABRIR LIBRO DE ECONOMÍA →</a>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">MÓDULO 03 · MEDIOS</span>
+              <h2 style="font-size:18px; margin:8px 0;">Archivo de Medios Oficiales</h2>
+              <p style="color:var(--c-muted); margin-bottom:16px;">Publica capturas de telemetría y fotografías de podio verificadas.</p>
+              <a href="#admin-media" class="btn-secondary">GESTIONAR MEDIOS →</a>
+            </div>
+            <div class="editorial-cell">
+              <span class="editorial-label" style="font-size:10px; color:var(--c-muted);">MÓDULO 04 · LICENCIAS</span>
+              <h2 style="font-size:18px; margin:8px 0;">Gestión de Usuarios y Roles</h2>
+              <p style="color:var(--c-muted); margin-bottom:16px;">Administra los permisos de los jeques y comisarios de la liga.</p>
+              <a href="#admin-usuarios" class="btn-secondary">GESTIONAR USUARIOS →</a>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderAdminCarrera() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="admin-carrera-titulo">
+            ADMINISTRACIÓN · RESULTADOS DE CARRERA Y FIA (US-16 / TC-12)
+          </header>
+          ${renderRoleGuardNotice()}
+
+          <div class="editorial-grid cols-2">
+            <div class="editorial-cell" data-reviewable="admin-carrera-form">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">PASO 1 · DATOS DEL GRAN PREMIO Y PILOTO</p>
+              <form id="adminRaceForm" novalidate>
+                <div class="form-group">
+                  <label class="form-label" for="admRaceSelect">GRAN PREMIO</label>
+                  <select id="admRaceSelect" class="form-select" required>
+                    <option value="">— Selecciona una carrera —</option>
+                    ${state.carreras.map(c => `<option value="${c.id}">${escapeHtml(c.ronda)} · ${escapeHtml(c.nombre)}</option>`).join('')}
+                  </select>
+                  <div id="admRaceSelectError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="admPilotSelect">PILOTO EVALUADO</label>
+                  <select id="admPilotSelect" class="form-select" required>
+                    <option value="">— Selecciona un piloto —</option>
+                    ${state.pilotos.map(p => `<option value="${p.id}">${escapeHtml(p.nombre)} (#${p.dorsal})</option>`).join('')}
+                  </select>
+                  <div id="admPilotSelectError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="admStatusSelect">ESTADO EN META (RF-05)</label>
+                  <select id="admStatusSelect" class="form-select" required>
+                    <option value="POSICION">Posición oficial en meta</option>
+                    <option value="DNF">DNF (Retirado)</option>
+                    <option value="NO_PRESENTADO">No presentado</option>
+                    <option value="POSICION_DESCONOCIDA">Posición desconocida</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="admPosInput">POSICIÓN NUMÉRICA (SOLO SI TERMINÓ EN POSICIÓN)</label>
+                  <input type="number" id="admPosInput" class="form-input" min="1" max="20" placeholder="Ej. 1">
+                  <div id="admPosError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="admPointsInput">PUNTOS OTORGADOS POR LA LIGA</label>
+                  <input type="number" id="admPointsInput" class="form-input" min="0" max="30" placeholder="Ej. 25" required>
+                  <div id="admPointsError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="admFiaNoteInput">DECISIÓN / OBSERVACIÓN DE LA FIA</label>
+                  <input type="text" id="admFiaNoteInput" class="form-input" placeholder="Ej. +5 s por límites de pista anunciados en WhatsApp" required>
+                  <div id="admFiaNoteError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <button type="submit" class="btn-primary">GENERAR RESUMEN PREVIO DEL ACTA →</button>
+              </form>
+            </div>
+
+            <div class="editorial-cell" data-reviewable="admin-carrera-resumen">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">PASO 2 · RESUMEN PREVIO Y CONFIRMACIÓN</p>
+              ${!state.adminRaceDraft ? `
+                <p style="color:var(--c-muted);">Completa el formulario de la izquierda para previsualizar el acta antes de publicarla en la clasificación.</p>
+              ` : `
+                <div style="border:1px solid var(--c-ink); padding:16px; background:var(--c-surface);">
+                  <p class="editorial-label" style="font-size:10px; color:var(--c-brand);">RESUMEN PREVIO LISTO PARA PUBLICAR</p>
+                  <p style="margin-top:8px;">Carrera: <strong>${escapeHtml(state.adminRaceDraft.raceName)}</strong></p>
+                  <p>Piloto: <strong>${escapeHtml(state.adminRaceDraft.pilotName)}</strong></p>
+                  <p>Estado: <strong>${escapeHtml(state.adminRaceDraft.estado)}</strong> ${state.adminRaceDraft.posicion ? `(P${state.adminRaceDraft.posicion})` : ''}</p>
+                  <p>Puntos a sumar: <strong>+${state.adminRaceDraft.puntos} pts</strong></p>
+                  <p style="margin-bottom:16px;">Nota FIA: <em>${escapeHtml(state.adminRaceDraft.notaFia)}</em></p>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                    <button type="button" id="confirmRacePublishBtn" class="btn-primary">CONFIRMAR Y PUBLICAR ACTA</button>
+                    <button type="button" id="cancelRaceDraftBtn" class="btn-secondary">DESCARTAR</button>
+                  </div>
+                </div>
+              `}
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderAdminEconomia() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="admin-economia-titulo">
+            ADMINISTRACIÓN · OPERACIONES DE ECONOMÍA (US-17 / TC-13)
+          </header>
+          ${renderRoleGuardNotice()}
+
+          <div class="editorial-grid cols-2">
+            <div class="editorial-cell" data-reviewable="admin-economia-form">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">PASO 1 · PREPARAR ASIENTO CONTABLE</p>
+              <form id="adminEconForm" novalidate>
+                <div class="form-group">
+                  <label class="form-label" for="econTeamSelect">ESCUDERÍA DESTINATARIA</label>
+                  <select id="econTeamSelect" class="form-select" required>
+                    ${state.equipos.map(eq => `<option value="${eq.id}">${escapeHtml(eq.nombre)} (Saldo: ${formatEuros(eq.saldo)})</option>`).join('')}
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="econTypeSelect">TIPO DE MOVIMIENTO (RF-06)</label>
+                  <select id="econTypeSelect" class="form-select" required>
+                    <option value="INGRESO">+ INGRESO (Abono a favor de la escudería)</option>
+                    <option value="GASTO">− GASTO (Cargo / Sanción / Fichaje)</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="econAmountInput">IMPORTE EN EUROS (€)</label>
+                  <input type="number" id="econAmountInput" class="form-input" step="0.01" min="1" placeholder="Ej. 500000" required>
+                  <div id="econAmountError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="econConceptInput">CONCEPTO ANUNCIADO EN WHATSAPP</label>
+                  <input type="text" id="econConceptInput" class="form-input" placeholder="Ej. Prima por vuelta rápida en Suzuka" required>
+                  <div id="econConceptError" class="form-error" style="display:none;" role="alert"></div>
+                </div>
+
+                <button type="submit" class="btn-primary">VER RESUMEN PREVIO DE LA OPERACIÓN →</button>
+              </form>
+            </div>
+
+            <div class="editorial-cell" data-reviewable="admin-economia-confirmacion">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">PASO 2 · CONFIRMACIÓN DE OPERACIÓN DE DINERO (TC-13)</p>
+              ${!state.adminEconDraft ? `
+                <p style="color:var(--c-muted);">Rellena los datos de la operación para verificar el impacto en el saldo antes de confirmar.</p>
+              ` : `
+                <div style="border:1px solid var(--c-ink); padding:16px; background:var(--c-surface);">
+                  <p class="editorial-label" style="font-size:10px; color:var(--c-brand);">CONFIRMACIÓN REQUERIDA (OPERACIÓN DE DINERO)</p>
+                  <p style="margin-top:8px;">Escudería: <strong>${escapeHtml(state.adminEconDraft.teamName)}</strong></p>
+                  <p>Tipo: <strong>${state.adminEconDraft.tipo === 'INGRESO' ? '+ INGRESO' : '− GASTO'}</strong></p>
+                  <p>Importe: <strong>${formatEuros(state.adminEconDraft.importe)}</strong></p>
+                  <p>Concepto: <em>${escapeHtml(state.adminEconDraft.concepto)}</em></p>
+                  <p style="margin:10px 0 16px;">Nuevo saldo resultante: <strong>${formatEuros(state.adminEconDraft.nuevoSaldo)}</strong></p>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                    <button type="button" id="confirmEconBtn" class="btn-primary">CONFIRMAR Y APLICAR EN SALDO</button>
+                    <button type="button" id="cancelEconDraftBtn" class="btn-secondary">CANCELAR</button>
+                  </div>
+                </div>
+              `}
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderAdminMedia() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="admin-media-titulo">
+            ADMINISTRACIÓN · GESTIÓN DE MEDIOS (US-18)
+          </header>
+          ${renderRoleGuardNotice()}
+
+          <div class="editorial-grid cols-2">
+            <div class="editorial-cell" data-reviewable="admin-media-form">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">AÑADIR PIEZA AL ARCHIVO GRÁFICO</p>
+              <form id="adminMediaForm" novalidate>
+                <div class="form-group">
+                  <label class="form-label" for="mediaTitleInput">TÍTULO DEL DOCUMENTO / PIE DE FOTO</label>
+                  <input type="text" id="mediaTitleInput" class="form-input" placeholder="Ej. Verificación de parque cerrado R04" required>
+                  <div id="mediaTitleError" class="form-error" style="display:none;"></div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="mediaTypeSelect">CATEGORÍA</label>
+                  <select id="mediaTypeSelect" class="form-select">
+                    <option value="Fotografía oficial">Fotografía oficial</option>
+                    <option value="Gráfico técnico">Gráfico técnico</option>
+                    <option value="Acta de comisarios">Acta de comisarios</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn-primary">REGISTRAR MEDIO OFICIAL →</button>
+              </form>
+            </div>
+
+            <div class="editorial-cell" data-reviewable="admin-media-lista">
+              <p class="editorial-label" style="font-size:10px; color:var(--c-muted); margin-bottom:12px;">MEDIOS PUBLICADOS (${state.medios.length})</p>
+              ${state.medios.map(m => `
+                <div style="border-bottom:1px solid var(--c-ink); padding:10px 0; display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                    <strong>${escapeHtml(m.titulo)}</strong>
+                    <p style="font-size:11px; color:var(--c-muted);">${escapeHtml(m.tipo)} · ${escapeHtml(m.fecha)}</p>
+                  </div>
+                  <button type="button" class="btn-link" data-delete-media="${m.id}">ELIMINAR</button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderAdminUsuarios() {
+      return `
+        <article class="screen-enter">
+          <header class="page-title" tabindex="-1" id="screenTitleHeading" data-reviewable="admin-usuarios-titulo">
+            ADMINISTRACIÓN · GESTIÓN DE JEQUES Y USUARIOS (US-18)
+          </header>
+          ${renderRoleGuardNotice()}
+
+          <div class="table-wrap" data-reviewable="admin-usuarios-tabla">
+            <table class="editorial-table">
+              <thead>
+                <tr>
+                  <th>NOMBRE</th>
+                  <th>CORREO</th>
+                  <th>ESCUDERÍA</th>
+                  <th>ROL ASIGNADO</th>
+                  <th>ACCIÓN</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.usuariosLiga.map(u => `
+                  <tr>
+                    <td><strong>${escapeHtml(u.nombre)}</strong></td>
+                    <td>${escapeHtml(u.correo)}</td>
+                    <td>${escapeHtml(u.escuderia)}</td>
+                    <td><span class="status-tag">${escapeHtml(u.rol)}</span></td>
+                    <td>
+                      <button type="button" class="btn-secondary" data-toggle-user-role="${u.id}">
+                        CAMBIAR A ${u.rol === 'Administrador' ? 'JEQUE' : 'ADMINISTRADOR'}
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      `;
+    }
+
+    function getNormalizedHash() {
+      const raw = window.location.hash || '#portada';
+      const exists = ROUTES_CONFIG.some(r => r.hash === raw);
+      return exists ? raw : '#portada';
+    }
+
+    function buildDrawerNavigation(activeHash) {
+      const container = document.getElementById('drawerLinksContainer');
+      const groups = ['Públicas', 'Jeque', 'Administración'];
+      let html = '';
+
+      groups.forEach(groupName => {
+        if (groupName === 'Administración' && state.role !== 'admin') {
+          html += `
+            <div class="drawer-section-label">ADMINISTRACIÓN (SOLO ROL ADMIN · TC-10/11)</div>
+            <div style="padding:12px 16px; border-bottom:1px solid var(--c-ink); font-size:11px; color:var(--c-muted);">
+              Entra como Administrador en la barra superior para habilitar las 5 pantallas <code>#admin-*</code>, o ábrelas para verificar todas las rutas:
+            </div>
+          `;
+        } else {
+          html += `<div class="drawer-section-label">${escapeHtml(groupName)}</div>`;
+        }
+
+        const routesInGroup = ROUTES_CONFIG.filter(r => r.group === groupName);
+        routesInGroup.forEach(r => {
+          const isCurrent = r.hash === activeHash;
+          html += `
+            <a href="${r.hash}" class="drawer-link" ${isCurrent ? 'aria-current="page"' : ''}>
+              <span>${escapeHtml(r.title)}</span>
+              <span style="font-size:11px; color:var(--c-muted);">${r.hash}</span>
+            </a>
+          `;
+        });
+      });
+
+      container.innerHTML = html;
+    }
+
+    function syncHeaderAndToolbarUI(activeHash) {
+      document.getElementById('roleBtnInvitado').setAttribute('aria-pressed', String(state.role === 'invitado'));
+      document.getElementById('roleBtnJeque').setAttribute('aria-pressed', String(state.role === 'jeque'));
+      document.getElementById('roleBtnAdmin').setAttribute('aria-pressed', String(state.role === 'admin'));
+
+      document.getElementById('stateBtnNormal').setAttribute('aria-pressed', String(state.viewState === 'normal'));
+      document.getElementById('stateBtnLoading').setAttribute('aria-pressed', String(state.viewState === 'loading'));
+      document.getElementById('stateBtnEmpty').setAttribute('aria-pressed', String(state.viewState === 'empty'));
+      document.getElementById('stateBtnError').setAttribute('aria-pressed', String(state.viewState === 'error'));
+
+      const themeBtn = document.getElementById('themeToggleBtn');
+      themeBtn.textContent = `TEMA: ${state.theme === 'light' ? 'CLARO' : 'OSCURO'}`;
+      themeBtn.setAttribute('aria-pressed', String(state.theme === 'dark'));
+
+      const revBtn = document.getElementById('reviewModeToggleBtn');
+      revBtn.textContent = `REVISAR (${state.reviewMarks.length})`;
+      revBtn.setAttribute('aria-pressed', String(state.reviewMode));
+      document.body.classList.toggle('review-mode-active', state.reviewMode);
+
+      // Actualizar barra inferior fija en móvil (US-23)
+      const routeMeta = ROUTES_CONFIG.find(r => r.hash === activeHash) || ROUTES_CONFIG[0];
+      const mobileBtn = document.getElementById('mobilePrimaryActionBtn');
+      if (mobileBtn) {
+        mobileBtn.textContent = routeMeta.primaryLabel;
+        mobileBtn.setAttribute('href', routeMeta.primaryHref);
+      }
+    }
+
+    function renderReviewBadgesOnDOM(activeHash) {
+      const marksForRoute = state.reviewMarks.filter(m => m.route === activeHash);
+      marksForRoute.forEach((mark, idx) => {
+        try {
+          const el = document.querySelector(mark.selector);
+          if (el && !el.querySelector('.review-badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'review-badge';
+            badge.textContent = `NOTA #${idx + 1}: ${mark.note}`;
+            el.appendChild(badge);
+          }
+        } catch (err) {
+          // Selector seguro
+        }
+      });
+    }
+
+    function renderCurrentRoute(moveFocusToHeading = true) {
+      const hash = getNormalizedHash();
+      const mainEl = document.getElementById('appMain');
+
+      const renderers = {
+        '#portada': renderPortada,
+        '#login': renderLogin,
+        '#registro': renderRegistro,
+        '#instalar': renderInstalar,
+        '#sistema': renderSistema,
+        '#inicio': renderInicio,
+        '#escuderia': renderEscuderia,
+        '#equipos': renderEquipos,
+        '#campeonato': renderCampeonato,
+        '#carreras': renderCarreras,
+        '#mercado': renderMercado,
+        '#comunidad': renderComunidad,
+        '#comunidad-votacion': renderComunidadVotacion,
+        '#comunidad-archivo': renderComunidadArchivo,
+        '#telemetria': renderTelemetria,
+        '#buzon': renderBuzon,
+        '#perfil': renderPerfil,
+        '#admin-inicio': renderAdminInicio,
+        '#admin-carrera': renderAdminCarrera,
+        '#admin-economia': renderAdminEconomia,
+        '#admin-media': renderAdminMedia,
+        '#admin-usuarios': renderAdminUsuarios
+      };
+
+      const viewFn = renderers[hash] || renderPortada;
+      mainEl.innerHTML = viewFn();
+
+      buildDrawerNavigation(hash);
+      syncHeaderAndToolbarUI(hash);
+      renderReviewBadgesOnDOM(hash);
+      bindDynamicScreenEvents();
+
+      // Al cambiar de pantalla, el foco va al título (GUIDELINES.md #4)
+      if (moveFocusToHeading) {
+        const heading = document.getElementById('screenTitleHeading');
+        if (heading) {
+          heading.focus();
+        }
+      }
+    }
+
+    function openDrawer() {
+      const drawer = document.getElementById('sideDrawer');
+      const backdrop = document.getElementById('drawerBackdrop');
+      const toggleBtn = document.getElementById('menuToggleBtn');
+      drawer.classList.add('open');
+      backdrop.classList.add('open');
+      toggleBtn.setAttribute('aria-expanded', 'true');
+      const closeBtn = document.getElementById('menuCloseBtn');
+      if (closeBtn) closeBtn.focus();
+    }
+
+    function closeDrawer(returnFocus = true) {
+      const drawer = document.getElementById('sideDrawer');
+      const backdrop = document.getElementById('drawerBackdrop');
+      const toggleBtn = document.getElementById('menuToggleBtn');
+      if (!drawer.classList.contains('open')) return;
+      drawer.classList.remove('open');
+      backdrop.classList.remove('open');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+      if (returnFocus && toggleBtn) {
+        toggleBtn.focus();
+      }
+    }
+
+    function simulateGoogleAuth() {
+      state.role = 'jeque';
+      state.currentUser.nombre = 'Jeque Ramiro Al-Mansoor (Google)';
+      showToast('Autenticación con Google verificada correctamente. Bienvenido al despacho.', false);
+      window.location.hash = '#inicio';
+    }
+
+    function bindDynamicScreenEvents() {
+      // Login con validación sin culpar al usuario y manteniendo el foco (RF-01 / TC-02)
+      const loginForm = document.getElementById('loginForm');
+      if (loginForm) {
+        loginForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const emailInput = document.getElementById('loginEmail');
+          const passInput = document.getElementById('loginPassword');
+          const emailErr = document.getElementById('loginEmailError');
+          const passErr = document.getElementById('loginPasswordError');
+
+          emailErr.style.display = 'none';
+          passErr.style.display = 'none';
+
+          const emailVal = emailInput.value.trim();
+          const passVal = passInput.value;
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+          if (!emailRegex.test(emailVal)) {
+            emailErr.textContent = 'El formato del correo necesita incluir un signo @ y un dominio (por ejemplo: ramiro@bugambra.f1).';
+            emailErr.style.display = 'flex';
+            emailInput.focus();
+            return;
+          }
+
+          if (passVal.length < 4) {
+            passErr.textContent = 'La contraseña necesita al menos 4 caracteres para verificar la cuenta.';
+            passErr.style.display = 'flex';
+            passInput.focus();
+            return;
+          }
+
+          state.role = emailVal.toLowerCase().includes('admin') ? 'admin' : 'jeque';
+          state.currentUser.correo = emailVal;
+          showToast(`Sesión iniciada como ${state.role.toUpperCase()} (${emailVal}).`, false);
+          window.location.hash = '#inicio';
+        });
+      }
+
+      const googleLoginBtn = document.getElementById('googleLoginBtn');
+      if (googleLoginBtn) {
+        googleLoginBtn.addEventListener('click', simulateGoogleAuth);
+      }
+
+      const googleRegisterBtn = document.getElementById('googleRegisterBtn');
+      if (googleRegisterBtn) {
+        googleRegisterBtn.addEventListener('click', simulateGoogleAuth);
+      }
+
+      // Registro (RF-01)
+      const registerForm = document.getElementById('registerForm');
+      if (registerForm) {
+        registerForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const nameIn = document.getElementById('regName');
+          const teamIn = document.getElementById('regTeam');
+          const emailIn = document.getElementById('regEmail');
+          const passIn = document.getElementById('regPass');
+
+          const nameErr = document.getElementById('regNameError');
+          const teamErr = document.getElementById('regTeamError');
+          const emailErr = document.getElementById('regEmailError');
+          const passErr = document.getElementById('regPassError');
+
+          [nameErr, teamErr, emailErr, passErr].forEach(el => el.style.display = 'none');
+
+          if (!nameIn.value.trim()) {
+            nameErr.textContent = 'Indica el nombre con el que figurarás en el consejo de jeques.';
+            nameErr.style.display = 'flex';
+            nameIn.focus();
+            return;
+          }
+          if (!teamIn.value.trim()) {
+            teamErr.textContent = 'Indica el nombre de tu escudería para inscribirla en el campeonato.';
+            teamErr.style.display = 'flex';
+            teamIn.focus();
+            return;
+          }
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailIn.value.trim())) {
+            emailErr.textContent = 'Introduce una dirección de correo con formato nombre@dominio.com.';
+            emailErr.style.display = 'flex';
+            emailIn.focus();
+            return;
+          }
+          if (passIn.value.length < 6) {
+            passErr.textContent = 'Escribe una contraseña de al menos 6 caracteres.';
+            passErr.style.display = 'flex';
+            passIn.focus();
+            return;
+          }
+
+          state.role = 'jeque';
+          state.currentUser.nombre = nameIn.value.trim();
+          state.currentUser.correo = emailIn.value.trim();
+          showToast(`Cuenta de jeque registrada para ${state.currentUser.nombre}.`, false);
+          window.location.hash = '#inicio';
+        });
+      }
+
+      // Cambio de equipo en #escuderia
+      const teamSwitchSelect = document.getElementById('teamSwitchSelect');
+      if (teamSwitchSelect) {
+        teamSwitchSelect.addEventListener('change', (e) => {
+          state.selectedTeamId = e.target.value;
+          renderCurrentRoute(false);
+        });
+      }
+
+      // Inspeccionar equipo desde #equipos
+      document.querySelectorAll('[data-inspect-team]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.selectedTeamId = btn.getAttribute('data-inspect-team');
+          window.location.hash = '#escuderia';
+        });
+      });
+
+      // Seleccionar carrera en #carreras
+      document.querySelectorAll('[data-select-race]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.selectedRaceId = btn.getAttribute('data-select-race');
+          renderCurrentRoute(false);
+        });
+      });
+
+      // Publicar nuevo hilo en #comunidad
+      const newThreadForm = document.getElementById('newThreadForm');
+      if (newThreadForm) {
+        newThreadForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const titleIn = document.getElementById('threadTitleInput');
+          const bodyIn = document.getElementById('threadBodyInput');
+          const errEl = document.getElementById('threadTitleError');
+          if (!titleIn.value.trim() || !bodyIn.value.trim()) {
+            errEl.textContent = 'Completa el título y el mensaje antes de publicar en el foro.';
+            errEl.style.display = 'flex';
+            titleIn.focus();
+            return;
+          }
+          state.comunidadHilos.unshift({
+            id: 'hilo-' + Date.now(),
+            autor: state.currentUser.nombre,
+            fecha: 'Hoy · Justo ahora',
+            titulo: titleIn.value.trim(),
+            respuestas: 0,
+            resumen: bodyIn.value.trim()
+          });
+          showToast('Hilo publicado en el foro de la comunidad.', false);
+          renderCurrentRoute(false);
+        });
+      }
+
+      // Votar en #comunidad-votacion
+      const pollVoteForm = document.getElementById('pollVoteForm');
+      if (pollVoteForm) {
+        pollVoteForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const checked = pollVoteForm.querySelector('input[name="pollOption"]:checked');
+          const errEl = document.getElementById('pollVoteError');
+          if (!checked) {
+            errEl.textContent = 'Selecciona una de las opciones antes de registrar tu voto.';
+            errEl.style.display = 'flex';
+            return;
+          }
+          saveUndoSnapshot('Voto en consulta FIA');
+          const opt = state.votacionActiva.opciones.find(o => o.id === checked.value);
+          if (opt) {
+            opt.votos += 1;
+            state.votacionActiva.yaVoto = true;
+            state.votacionActiva.opcionElegida = opt.id;
+          }
+          showToast('Voto registrado en el escrutinio oficial.', true);
+          renderCurrentRoute(false);
+        });
+      }
+
+      // Buzón leído / no leído (#buzon)
+      document.querySelectorAll('[data-toggle-notice]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-toggle-notice');
+          const target = state.avisosBuzon.find(a => a.id === id);
+          if (target) {
+            target.leido = !target.leido;
+            renderCurrentRoute(false);
+          }
+        });
+      });
+
+      const markAllReadBtn = document.getElementById('markAllReadBtn');
+      if (markAllReadBtn) {
+        markAllReadBtn.addEventListener('click', () => {
+          state.avisosBuzon.forEach(a => a.leido = true);
+          showToast('Todos los comunicados del buzón marcados como leídos.', false);
+          renderCurrentRoute(false);
+        });
+      }
+
+      // Perfil (#perfil)
+      const profileThemeBtn = document.getElementById('profileThemeBtn');
+      if (profileThemeBtn) {
+        profileThemeBtn.addEventListener('click', toggleTheme);
+      }
+
+      const profileMotionBtn = document.getElementById('profileMotionBtn');
+      if (profileMotionBtn) {
+        profileMotionBtn.addEventListener('click', () => {
+          state.reducedMotion = !state.reducedMotion;
+          document.documentElement.setAttribute('data-motion', state.reducedMotion ? 'reduced' : 'normal');
+          renderCurrentRoute(false);
+        });
+      }
+
+      const logoutBtn = document.getElementById('logoutBtn');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+          state.role = 'invitado';
+          showToast('Sesión cerrada correctamente.', false);
+          window.location.hash = '#portada';
+        });
+      }
+
+      // Botón rápido para elevar a Admin en vistas protegidas
+      document.querySelectorAll('[data-quick-elevate="admin"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.role = 'admin';
+          showToast('Rol Administrador activado.', false);
+          renderCurrentRoute(false);
+        });
+      });
+
+      // Administración: Resultados de carrera con validación (TC-12)
+      const adminRaceForm = document.getElementById('adminRaceForm');
+      if (adminRaceForm) {
+        adminRaceForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const raceSel = document.getElementById('admRaceSelect');
+          const pilotSel = document.getElementById('admPilotSelect');
+          const statusSel = document.getElementById('admStatusSelect');
+          const posIn = document.getElementById('admPosInput');
+          const ptsIn = document.getElementById('admPointsInput');
+          const noteIn = document.getElementById('admFiaNoteInput');
+
+          const raceErr = document.getElementById('admRaceSelectError');
+          const pilotErr = document.getElementById('admPilotSelectError');
+          const posErr = document.getElementById('admPosError');
+          const ptsErr = document.getElementById('admPointsError');
+          const noteErr = document.getElementById('admFiaNoteError');
+
+          [raceErr, pilotErr, posErr, ptsErr, noteErr].forEach(el => el.style.display = 'none');
+
+          if (!raceSel.value) {
+            raceErr.textContent = 'Falta seleccionar el Gran Premio al que corresponde el acta.';
+            raceErr.style.display = 'flex';
+            raceSel.focus();
+            return;
+          }
+          if (!pilotSel.value) {
+            pilotErr.textContent = 'Falta indicar el piloto evaluado en esta acta.';
+            pilotErr.style.display = 'flex';
+            pilotSel.focus();
+            return;
+          }
+          if (statusSel.value === 'POSICION' && (!posIn.value || Number(posIn.value) < 1)) {
+            posErr.textContent = 'Para el estado «Posición oficial en meta» debes indicar el puesto numérico (1 a 20).';
+            posErr.style.display = 'flex';
+            posIn.focus();
+            return;
+          }
+          if (ptsIn.value === '' || Number(ptsIn.value) < 0) {
+            ptsErr.textContent = 'Falta indicar los puntos otorgados (0 o superior).';
+            ptsErr.style.display = 'flex';
+            ptsIn.focus();
+            return;
+          }
+          if (!noteIn.value.trim()) {
+            noteErr.textContent = 'Falta escribir la observación o verificación de la FIA.';
+            noteErr.style.display = 'flex';
+            noteIn.focus();
+            return;
+          }
+
+          const raceObj = state.carreras.find(c => c.id === raceSel.value);
+          const pilotObj = getPilotById(pilotSel.value);
+
+          state.adminRaceDraft = {
+            raceId: raceObj.id,
+            raceName: raceObj.nombre,
+            pilotId: pilotObj.id,
+            pilotName: pilotObj.nombre,
+            estado: statusSel.value,
+            posicion: statusSel.value === 'POSICION' ? Number(posIn.value) : null,
+            puntos: Number(ptsIn.value),
+            notaFia: noteIn.value.trim()
+          };
+          renderCurrentRoute(false);
+        });
+      }
+
+      const confirmRacePublishBtn = document.getElementById('confirmRacePublishBtn');
+      if (confirmRacePublishBtn) {
+        confirmRacePublishBtn.addEventListener('click', () => {
+          if (!state.adminRaceDraft) return;
+          saveUndoSnapshot(`Acta de carrera (${state.adminRaceDraft.pilotName})`);
+          const d = state.adminRaceDraft;
+          const raceObj = state.carreras.find(c => c.id === d.raceId);
+          if (raceObj) {
+            raceObj.estado = 'Disputada';
+            raceObj.notaFia = d.notaFia;
+            raceObj.resultados.unshift({
+              pilotoId: d.pilotId,
+              estado: d.estado,
+              posicion: d.posicion,
+              tiempo: d.notaFia,
+              puntos: d.puntos
+            });
+          }
+          const pilotObj = getPilotById(d.pilotId);
+          if (pilotObj) {
+            pilotObj.puntos += d.puntos;
+            const eq = getTeamById(pilotObj.escuderiaId);
+            if (eq) eq.puntos += d.puntos;
+          }
+          state.selectedRaceId = d.raceId;
+          state.adminRaceDraft = null;
+          showToast('Acta de carrera publicada oficialmente. Puedes deshacer la acción si hubo un error.', true);
+          renderCurrentRoute(false);
+        });
+      }
+
+      const cancelRaceDraftBtn = document.getElementById('cancelRaceDraftBtn');
+      if (cancelRaceDraftBtn) {
+        cancelRaceDraftBtn.addEventListener('click', () => {
+          state.adminRaceDraft = null;
+          renderCurrentRoute(false);
+        });
+      }
+
+      // Administración: Operaciones de economía (US-17 / TC-13)
+      const adminEconForm = document.getElementById('adminEconForm');
+      if (adminEconForm) {
+        adminEconForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const teamSel = document.getElementById('econTeamSelect');
+          const typeSel = document.getElementById('econTypeSelect');
+          const amountIn = document.getElementById('econAmountInput');
+          const conceptIn = document.getElementById('econConceptInput');
+
+          const amountErr = document.getElementById('econAmountError');
+          const conceptErr = document.getElementById('econConceptError');
+          amountErr.style.display = 'none';
+          conceptErr.style.display = 'none';
+
+          const rawAmount = Number(amountIn.value);
+          if (!amountIn.value || isNaN(rawAmount) || rawAmount <= 0) {
+            amountErr.textContent = 'Introduce un importe numérico mayor que 0,00 €.';
+            amountErr.style.display = 'flex';
+            amountIn.focus();
+            return;
+          }
+          if (!conceptIn.value.trim()) {
+            conceptErr.textContent = 'Indica el concepto anunciado en WhatsApp para el libro de movimientos.';
+            conceptErr.style.display = 'flex';
+            conceptIn.focus();
+            return;
+          }
+
+          const eq = getTeamById(teamSel.value);
+          const delta = typeSel.value === 'INGRESO' ? rawAmount : -rawAmount;
+          state.adminEconDraft = {
+            teamId: eq.id,
+            teamName: eq.nombre,
+            tipo: typeSel.value,
+            importe: rawAmount,
+            concepto: conceptIn.value.trim(),
+            nuevoSaldo: eq.saldo + delta
+          };
+          renderCurrentRoute(false);
+        });
+      }
+
+      const confirmEconBtn = document.getElementById('confirmEconBtn');
+      if (confirmEconBtn) {
+        confirmEconBtn.addEventListener('click', () => {
+          if (!state.adminEconDraft) return;
+          saveUndoSnapshot(`Operación económica en ${state.adminEconDraft.teamName}`);
+          const d = state.adminEconDraft;
+          const eq = getTeamById(d.teamId);
+          if (eq) {
+            eq.saldo = d.nuevoSaldo;
+          }
+          state.movimientos.unshift({
+            id: 'mov-' + Date.now(),
+            fecha: '22/04/2026',
+            escuderiaId: d.teamId,
+            tipo: d.tipo,
+            concepto: d.concepto,
+            importe: d.importe
+          });
+          state.adminEconDraft = null;
+          showToast(`Operación aplicada: ${d.tipo === 'INGRESO' ? '+' : '−'}${formatEuros(d.importe)} en ${d.teamName}.`, true);
+          renderCurrentRoute(false);
+        });
+      }
+
+      const cancelEconDraftBtn = document.getElementById('cancelEconDraftBtn');
+      if (cancelEconDraftBtn) {
+        cancelEconDraftBtn.addEventListener('click', () => {
+          state.adminEconDraft = null;
+          renderCurrentRoute(false);
+        });
+      }
+
+      // Administración: Medios (#admin-media)
+      const adminMediaForm = document.getElementById('adminMediaForm');
+      if (adminMediaForm) {
+        adminMediaForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const titleIn = document.getElementById('mediaTitleInput');
+          const typeSel = document.getElementById('mediaTypeSelect');
+          const errEl = document.getElementById('mediaTitleError');
+          if (!titleIn.value.trim()) {
+            errEl.textContent = 'Escribe el título descriptivo de la pieza gráfica.';
+            errEl.style.display = 'flex';
+            titleIn.focus();
+            return;
+          }
+          saveUndoSnapshot('Publicación de medio');
+          state.medios.unshift({
+            id: 'med-' + Date.now(),
+            titulo: titleIn.value.trim(),
+            autor: state.currentUser.nombre,
+            fecha: '22/04/2026',
+            tipo: typeSel.value
+          });
+          showToast('Pieza añadida al archivo de medios.', true);
+          renderCurrentRoute(false);
+        });
+      }
+
+      document.querySelectorAll('[data-delete-media]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          saveUndoSnapshot('Eliminación de medio');
+          const id = btn.getAttribute('data-delete-media');
+          state.medios = state.medios.filter(m => m.id !== id);
+          showToast('Medio eliminado del archivo. Puedes deshacer la acción.', true);
+          renderCurrentRoute(false);
+        });
+      });
+
+      // Administración: Usuarios (#admin-usuarios)
+      document.querySelectorAll('[data-toggle-user-role]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          saveUndoSnapshot('Cambio de rol de usuario');
+          const id = btn.getAttribute('data-toggle-user-role');
+          const usr = state.usuariosLiga.find(u => u.id === id);
+          if (usr) {
+            usr.rol = usr.rol === 'Administrador' ? 'Jeque' : 'Administrador';
+            showToast(`Rol de ${usr.nombre} actualizado a ${usr.rol}.`, true);
+            renderCurrentRoute(false);
+          }
+        });
+      });
+
+      // Botones de reintento o restauración de estado de datos (TC-07)
+      document.querySelectorAll('[data-action="reset-viewstate"], [data-action="retry-viewstate"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.viewState = 'normal';
+          showToast('Lectura de datos restablecida con éxito.', false);
+          renderCurrentRoute(false);
+        });
+      });
+    }
+
+    function toggleTheme() {
+      state.theme = state.theme === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', state.theme);
+      renderCurrentRoute(false);
+    }
+
+    function openReviewModal(route, selector) {
+      document.getElementById('reviewTargetRoute').value = route;
+      document.getElementById('reviewTargetSelector').value = selector;
+      document.getElementById('reviewNoteInput').value = '';
+      document.getElementById('reviewNoteError').style.display = 'none';
+      document.getElementById('reviewModalBackdrop').classList.add('open');
+      document.getElementById('reviewModal').classList.add('open');
+      document.getElementById('reviewNoteInput').focus();
+    }
+
+    function closeReviewModal() {
+      document.getElementById('reviewModalBackdrop').classList.remove('open');
+      document.getElementById('reviewModal').classList.remove('open');
+    }
+
+    function downloadReviewJson() {
+      const payload = {
+        aplicacion: 'F1 Bugambra',
+        fechaExportacion: new Date().toISOString(),
+        totalMarcas: state.reviewMarks.length,
+        marcas: state.reviewMarks
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'f1-bugambra-revision.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Archivo JSON de revisión descargado correctamente.', false);
+    }
+
+    function initGlobalListeners() {
+      // Navegación por hash (TC-01, TC-05, TC-06)
+      window.addEventListener('hashchange', () => {
+        closeDrawer(false);
+        renderCurrentRoute(true);
+      });
+
+      // Botón Menú y Cierre (TC-04)
+      document.getElementById('menuToggleBtn').addEventListener('click', () => {
+        const isOpen = document.getElementById('sideDrawer').classList.contains('open');
+        if (isOpen) closeDrawer(true);
+        else openDrawer();
+      });
+
+      document.getElementById('menuCloseBtn').addEventListener('click', () => closeDrawer(true));
+      document.getElementById('drawerBackdrop').addEventListener('click', () => closeDrawer(true));
+
+      // Atajos de teclado: 'M' abre/cierra el menú lateral y 'Esc' cierra menú o modales (TC-04)
+      document.addEventListener('keydown', (e) => {
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+        const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+        if (!isTyping && (e.key === 'm' || e.key === 'M')) {
+          e.preventDefault();
+          const isOpen = document.getElementById('sideDrawer').classList.contains('open');
+          if (isOpen) closeDrawer(true);
+          else openDrawer();
+        } else if (e.key === 'Escape') {
+          if (document.getElementById('reviewModal').classList.contains('open')) {
+            closeReviewModal();
+          } else if (document.getElementById('sideDrawer').classList.contains('open')) {
+            closeDrawer(true);
+          } else if (document.getElementById('searchPanel').classList.contains('open')) {
+            document.getElementById('searchPanel').classList.remove('open');
+            document.getElementById('searchToggleBtn').focus();
+          }
+        }
+      });
+
+      // Selector de Rol en barra superior (TC-10, TC-11)
+      document.querySelectorAll('[data-set-role]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.role = btn.getAttribute('data-set-role');
+          showToast(`Rol cambiado a: ${state.role.toUpperCase()}`, false);
+          renderCurrentRoute(false);
+        });
+      });
+
+      // Selector de Estado de Datos (TC-07)
+      document.querySelectorAll('[data-set-viewstate]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.viewState = btn.getAttribute('data-set-viewstate');
+          renderCurrentRoute(false);
+        });
+      });
+
+      // Tema Claro / Oscuro (US-04 / TC-15)
+      document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+
+      // Deshacer global (TC-13)
+      document.getElementById('globalUndoBtn').addEventListener('click', executeUndo);
+      document.getElementById('globalToastCloseBtn').addEventListener('click', () => {
+        document.getElementById('globalToast').classList.remove('visible');
+      });
+
+      // Buscador global en cabecera (US-21)
+      const searchToggleBtn = document.getElementById('searchToggleBtn');
+      const searchPanel = document.getElementById('searchPanel');
+      const searchInput = document.getElementById('globalSearchInput');
+      const searchResults = document.getElementById('globalSearchResults');
+
+      searchToggleBtn.addEventListener('click', () => {
+        const open = searchPanel.classList.toggle('open');
+        searchToggleBtn.setAttribute('aria-expanded', String(open));
+        if (open) searchInput.focus();
+      });
+
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) {
+          searchResults.innerHTML = '';
+          return;
+        }
+        const matchedRoutes = ROUTES_CONFIG.filter(r => r.title.toLowerCase().includes(q) || r.hash.toLowerCase().includes(q));
+        const matchedPilots = state.pilotos.filter(p => p.nombre.toLowerCase().includes(q));
+        const matchedTeams = state.equipos.filter(t => t.nombre.toLowerCase().includes(q) || t.jeque.toLowerCase().includes(q));
+
+        let html = '<div style="border-top:1px solid var(--c-ink); padding-top:8px; display:flex; flex-direction:column; gap:6px;">';
+        matchedRoutes.forEach(r => {
+          html += `<a href="${r.hash}" class="search-result-link">Pantalla: ${escapeHtml(r.title)} (${r.hash})</a>`;
+        });
+        matchedTeams.forEach(t => {
+          html += `<a href="#escuderia" data-search-team="${t.id}" class="search-result-link">Escudería: ${escapeHtml(t.nombre)} — Jeque ${escapeHtml(t.jeque)}</a>`;
+        });
+        matchedPilots.forEach(p => {
+          html += `<a href="#mercado" class="search-result-link">Piloto: ${escapeHtml(p.nombre)} (#${p.dorsal}) · ${p.puntos} pts</a>`;
+        });
+        if (!matchedRoutes.length && !matchedTeams.length && !matchedPilots.length) {
+          html += `<p style="color:var(--c-muted);">Sin coincidencias para «${escapeHtml(q)}».</p>`;
+        }
+        html += '</div>';
+        searchResults.innerHTML = html;
+
+        searchResults.querySelectorAll('.search-result-link').forEach(link => {
+          link.addEventListener('click', () => {
+            const teamId = link.getAttribute('data-search-team');
+            if (teamId) state.selectedTeamId = teamId;
+            searchPanel.classList.remove('open');
+          });
+        });
+      });
+
+      // Modo Revisar (RF-12 / US-20 / TC-19)
+      document.getElementById('reviewModeToggleBtn').addEventListener('click', () => {
+        state.reviewMode = !state.reviewMode;
+        syncHeaderAndToolbarUI(getNormalizedHash());
+        showToast(
+          state.reviewMode
+            ? 'Modo Revisar ACTIVO: Toca cualquier bloque punteado de la pantalla para añadir una nota.'
+            : 'Modo Revisar desactivado.',
+          false
+        );
+      });
+
+      document.getElementById('appMain').addEventListener('click', (e) => {
+        if (!state.reviewMode) return;
+        const reviewable = e.target.closest('[data-reviewable]');
+        if (!reviewable) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const key = reviewable.getAttribute('data-reviewable');
+        const selector = `[data-reviewable="${key}"]`;
+        openReviewModal(getNormalizedHash(), selector);
+      }, true);
+
+      document.getElementById('closeReviewModalBtn').addEventListener('click', closeReviewModal);
+      document.getElementById('cancelReviewModalBtn').addEventListener('click', closeReviewModal);
+
+      document.getElementById('reviewNoteForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const route = document.getElementById('reviewTargetRoute').value;
+        const selector = document.getElementById('reviewTargetSelector').value;
+        const noteIn = document.getElementById('reviewNoteInput');
+        const errEl = document.getElementById('reviewNoteError');
+
+        if (!noteIn.value.trim()) {
+          errEl.textContent = 'Escribe una nota antes de guardar la marca de revisión.';
+          errEl.style.display = 'flex';
+          noteIn.focus();
+          return;
+        }
+
+        state.reviewMarks.push({
+          route,
+          selector,
+          note: noteIn.value.trim(),
+          timestamp: new Date().toISOString()
+        });
+
+        closeReviewModal();
+        renderCurrentRoute(false);
+        showToast(`Marca de revisión guardada en ${route} (${selector}).`, false);
+      });
+
+      document.getElementById('downloadReviewJsonBtn').addEventListener('click', downloadReviewJson);
+    }
+
+    // Arranque inicial en #portada si no hay hash activo (TC-01 y TC-06)
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!window.location.hash) {
+        window.location.hash = '#portada';
+      }
+      initGlobalListeners();
+      renderCurrentRoute(false);
+    });
+  </script>
+
+  <!-- Conexión de solo lectura con los datos públicos de la liga (docs/redesign/connected/README.md) -->
+  <script src="bugambra-live.js"></script>
+  <script>
+    (function () {
+      if (!window.BugambraLive || !window.fetch) return;
+      BugambraLive.CONFIG.apiKey = 'AIzaSyDROC-k5p-43Q3CRTdwLwleyjfHkxsq9nQ'; // clave web pública de Firebase, la misma que usa la app
+      var prev = state.viewState; state.viewState = 'loading'; renderCurrentRoute(false);
+      BugambraLive.loadLive(window.fetch.bind(window)).then(function (raw) {
+        BugambraLive.applyToState(state, BugambraLive.mapLiveData(raw), raw.split.nombre);
+        state.viewState = prev; renderCurrentRoute(false);
+        showToast('Datos reales de ' + raw.split.nombre + ' (solo lectura).');
+      }).catch(function () {
+        state.viewState = prev; renderCurrentRoute(false);
+        showToast('No se pudieron leer los datos reales: se muestran datos de ejemplo.');
+      });
+    })();
+  </script>
+</body>
+</html>

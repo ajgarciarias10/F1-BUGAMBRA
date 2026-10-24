@@ -351,31 +351,31 @@ export function RaceReportModal({
         }
       `}</style>
 
-      <div className="relative w-full max-w-5xl rounded-lg bg-zinc-950 border border-white/20 shadow-2xl flex flex-col max-h-[92vh]">
+      <div className="relative w-full max-w-5xl rounded-lg bg-surface border border-line shadow-2xl flex flex-col max-h-[92vh]">
         {/* Barra superior de acciones */}
-        <div className="no-print flex items-center justify-between border-b border-white/10 px-5 py-3 bg-zinc-900/80">
+        <div className="no-print flex items-center justify-between border-b border-line px-5 py-3 bg-surface-2">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-[#e10600]/20 text-[#e10600]">
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-brand/20 text-brand">
               <FileText className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-white">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-ink">
                 Informe Oficial de Gran Premio
               </h2>
-              <p className="text-[10px] text-white/50">{circuito.nombre} · {splitName} · Resultados y Economía</p>
+              <p className="text-[10px] text-ink-2">{circuito.nombre} · {splitName} · Resultados y Economía</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="flex items-center gap-2 rounded bg-amber-500 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-black transition-colors hover:bg-amber-400"
+              className="flex items-center gap-2 rounded bg-warn-soft border border-warn/40 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-warn transition-colors hover:bg-warn-soft/20"
             >
               <Printer className="h-3.5 w-3.5" />
               Descargar PDF / Imprimir
             </button>
             <button
               onClick={onClose}
-              className="rounded p-1.5 text-white/40 hover:bg-white/10 hover:text-white transition-colors"
+              className="rounded p-1.5 text-ink-muted hover:bg-surface-3 hover:text-ink transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -460,9 +460,6 @@ export function RaceReportModal({
                       </td>
                       <td className="p-1.5 font-bold text-zinc-950">
                         {pName}
-                        {circuito.piloto_dia_ganador === r.pilotoId && (
-                          <span className="ml-1 text-[9px] px-1 py-0.2 bg-amber-100 border border-amber-300 text-amber-900 rounded font-black">DOTD</span>
-                        )}
                       </td>
                       <td className="p-1.5 text-zinc-700">{tName}</td>
                       <td className="p-1.5 text-center font-mono">

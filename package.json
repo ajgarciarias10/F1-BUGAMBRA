@@ -8,16 +8,18 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "corepack npm@10.9.4 run dev:web",
-    "start": "corepack npm@10.9.4 run dev:web",
-    "dev:web": "corepack npm@10.9.4 --workspace @f1-bugambra/web run dev",
-    "dev:api": "corepack npm@10.9.4 --workspace @f1-bugambra/api run dev",
-    "build": "corepack npm@10.9.4 --workspace @f1-bugambra/web run build",
-    "preview": "corepack npm@10.9.4 --workspace @f1-bugambra/web run preview",
-    "typecheck": "corepack npm@10.9.4 --workspaces --if-present run typecheck",
-    "test": "corepack npm@10.9.4 --workspace @f1-bugambra/api test",
+    "dev": "npm run dev:web",
+    "start": "npm run dev:web",
+    "dev:web": "npm --workspace @f1-bugambra/web run dev",
+    "dev:api": "npm --workspace @f1-bugambra/api run dev",
+    "build": "npm --workspace @f1-bugambra/web run build",
+    "preview": "npm --workspace @f1-bugambra/web run preview",
+    "typecheck": "npm --workspaces --if-present run typecheck",
+    "test": "npm --workspace @f1-bugambra/api test",
+    "guard:agents": "node tool/agent-guard.mjs",
+    "test:guard": "node --test tool/agent-guard.test.mjs",
     "guardrails:economy": "npm run typecheck --workspace @f1-bugambra/web && npm test --workspace @f1-bugambra/web",
     "clean": "rm -rf apps/web/dist server.js",
-    "lint": "corepack npm@10.9.4 run typecheck"
+    "lint": "npm run typecheck"
   }
 }
