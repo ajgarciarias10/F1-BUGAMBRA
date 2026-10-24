@@ -77,7 +77,21 @@ cambiar(/    \/\*\* Escudería del usuario del prototipo:[\s\S]*?\n    function 
     function miNombre() {
       return (state.sesion && state.sesion.nombre) || 'bienvenido';
     }
+    /** El mercado solo se enseña cuando el admin abre los fichajes del split en curso. */
+    function mercadoAbierto() {
+      return LIGA.some(t => t.enCurso && t.mercadoAbierto);
+    }
 `);
+
+// Mi piloto y el mercado dependen de la cuenta y del split, no del rol de ejemplo.
+cambiar("enCurso: !!s.activo,", "enCurso: !!s.activo, mercadoAbierto: !!s.fichajes_abiertos,");
+cambiar(`      if (role === 'piloto') {
+        links.push({ route: '#mi-piloto', label: 'Mi piloto', sub: 'Ficha y carrera' });`, `      if (miPiloto()) {
+        links.push({ route: '#mi-piloto', label: 'Mi piloto', sub: 'Ficha y carrera' });`);
+cambiar(`        { route: '#mercado', label: 'Mercado', sub: (role === 'jeque' || role === 'admin') ? 'Sala de pujas' : 'Solo consulta' },
+`, `        ...(mercadoAbierto() ? [{ route: '#mercado', label: 'Mercado', sub: (role === 'jeque' || role === 'admin') ? 'Sala de pujas' : 'Solo consulta' }] : []),
+`);
+cambiar("      if (route === 'mi-piloto') return role === 'piloto';", "      if (route === 'mi-piloto') return !!miPiloto();\n      if (route === 'mercado') return mercadoAbierto();");
 cambiar(`      const cuentas = { usuario: 'Álex', piloto: 'Fabi', director: miNombre('director'), jeque: miNombre('jeque'), admin: 'Comisario' };
 `, "");
 cambiar(`        const nombre = cuentas[role] || 'Mi cuenta';
@@ -90,7 +104,8 @@ cambiar(`      const p = state.pilotos.find(x => x.slug === 'fabi') || state.pil
 `);
 cambiar(`      const aliasMap = { usuario: 'Álex', piloto: 'Fabi', director: miNombre('director'), jeque: miNombre('jeque'), admin: 'Comisario Jefe' };
       const alias = aliasMap[role] || 'Miembro';`, `      const alias = miNombre();
-      const trayectoria = (miPiloto() || {}).trayectoria || [];`);
+      // Toda su carrera, también los splits en los que ya no corre.
+      const trayectoria = state.sesion && state.sesion.pilotoSlug ? trayectoriaPiloto(state.sesion.pilotoSlug) : [];`);
 cambiar(`<button type="button" class="btn btn-primary" onclick="showToast('Perfil guardado')">Guardar cambios</button>`,
 `<button type="button" class="btn btn-primary" onclick="bugambraAccion(() => bugambraSesion.guardarAlias(document.getElementById('perfilAliasInput').value))">Guardar cambios</button>
               <button type="button" class="btn btn-secondary" onclick="bugambraAccion(() => bugambraSesion.salir())">Cerrar sesión</button>`);
@@ -151,6 +166,7 @@ cambiar(/    window\.handleSimAuth = function\(metodo\) \{[\s\S]*?\n    \};\n/, 
       if (!window.bugambraSesion) { showToast('Conectando con la liga, vuelve a intentarlo en un momento.'); return; }
       const r = await accion();
       if (r.mensaje) showToast(r.mensaje);
+      if (r.ok && state.sesion) recargarLiga();
     };
 
     window.bugambraEntrar = function(metodo) {
@@ -165,5 +181,32 @@ cambiar(/    window\.handleSimAuth = function\(metodo\) \{[\s\S]*?\n    \};\n/, 
       return bugambraAccion(() => bugambraSesion.entrarConCorreo(valor('authEmail'), valor('authPass')));
     };
 `);
+
+// ── Acciones: las conectadas escriben con los servicios de la app; el resto lleva al panel completo ──
+cambiar(`    if (typeof fetch === 'function' && window.cargarLiga) {
+      cargarLiga(fetch).then(nueva => {`, `    function recargarLiga() {
+    if (typeof fetch === 'function' && window.cargarLiga) {
+      cargarLiga(fetch).then(nueva => {`);
+cambiar(`      }).catch(err => console.warn('Datos en vivo no disponibles, uso la copia:', err.message));
+    }
+`, `      }).catch(err => console.warn('Datos en vivo no disponibles, uso la copia:', err.message));
+    }
+    }
+    recargarLiga();
+`);
+cambiar("if (pendiente && !anteriorSinProcesar) { g.economiaProcesada = true; showToast(`GP ${g.n} procesado (prototipo: no se guarda).`); renderApp(); }",
+  "if (pendiente && !anteriorSinProcesar) bugambraAccion(() => bugambraAcciones.procesarEconomia({ splitId: t.id, n: g.n }));");
+cambiar("<strong>${state.temporada.ventanaFichajes ? 'Abierta' : 'Cerrada'}</strong>", "<strong>${mercadoAbierto() ? 'Abierta' : 'Cerrada'}</strong>");
+cambiar(`onclick="state.temporada.ventanaFichajes=!state.temporada.ventanaFichajes;renderApp();">Alternar`, `onclick="bugambraAlternarMercado()">\${mercadoAbierto() ? 'Cerrar' : 'Abrir'}`);
+cambiar(`onclick="state.temporada.subastaEnVivo=!state.temporada.subastaEnVivo;renderApp();"`, `onclick="bugambraPendiente('Activar o pausar la subasta en vivo')"`);
+cambiar(`onclick="openMoneyConfirmModal({titulo:'Iniciar temporada',resumen:'Se iniciará una nueva temporada.',onConfirm:()=>showToast('Temporada iniciada')})"`, `onclick="bugambraPendiente('Iniciar la temporada')"`);
+cambiar(`onclick="state.mercado.estado=state.mercado.estado==='Abierto'?'Cerrado':'Abierto';renderApp();"`, `onclick="bugambraAlternarMercado()"`);
+cambiar(`onclick="state.mercado.modo=state.mercado.modo==='Sala de pujas'?'Fichaje directo':'Sala de pujas';renderApp();"`, `onclick="bugambraPendiente('Cambiar el modo del mercado')"`);
+cambiar(" En el prototipo los cambios no se guardan en la liga.", "");
+cambiar(`onclick="showToast('Logo actualizado')"`, `onclick="bugambraPendiente('Cambiar el logo de la escudería')"`);
+cambiar(`onsubmit="event.preventDefault();showToast('Prototipo: el alta no se guarda.');state.ui.adminAltaAbierta=false;renderApp();"`, `onsubmit="event.preventDefault();bugambraPendiente('Dar de alta un piloto')"`);
+cambiar(`onclick="showToast('En la web real, aquí se fija el presupuesto inicial.')"`, `onclick="bugambraPendiente('Fijar el presupuesto inicial')"`);
+cambiar(`onclick="showToast('En la web real, aquí se descarga el boletín FIA en PDF.')"`, `onclick="bugambraPendiente('Descargar el boletín FIA en PDF')"`);
+cambiar("    window.addEventListener('DOMContentLoaded', () => {", readFileSync(new URL("tool/prototipo-acciones.js", raiz), "utf8") + "    window.addEventListener('DOMContentLoaded', () => {");
 
 writeFileSync(salida, html);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sesionDesdePerfil } from "./perfil.ts";
+import { equipoDelPrototipo, pilotoDelPrototipo, sesionDesdePerfil } from "./perfil.ts";
 
 test("el perfil de Firestore se traduce a los ids del diseño", () => {
   const s = sesionDesdePerfil("u1", "Jeque@Correo.com", { nombre: " Marotez ", rol: "jeque", escuderia_id: "equipo_alfa_romero", piloto_id: "" });
@@ -15,4 +15,13 @@ test("el perfil de Firestore se traduce a los ids del diseño", () => {
 test("el dueño entra como admin aunque su perfil antiguo diga piloto", () => {
   assert.equal(sesionDesdePerfil("u3", "AJGarciaRias@gmail.com", { rol: "piloto" }).rol, "admin");
   assert.equal(sesionDesdePerfil("u4", "otro@gmail.com", {}).rol, "usuario");
+});
+
+test("los ids de Firestore se traducen a los del diseño", () => {
+  assert.equal(equipoDelPrototipo("equipo_alfa_romero"), "alfa");
+  assert.equal(equipoDelPrototipo("otro_id", "Roses"), "roses");
+  assert.equal(equipoDelPrototipo("agente_libre"), "agente_libre");
+  assert.equal(equipoDelPrototipo("desconocido", "Haas"), null);
+  assert.equal(pilotoDelPrototipo("piloto_fabi"), "fabi");
+  assert.equal(pilotoDelPrototipo("toni"), "toni");
 });

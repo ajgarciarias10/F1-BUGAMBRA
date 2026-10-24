@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 import { Plus, Save, Trash2, Users } from "lucide-react";
-import { doc } from "firebase/firestore";
-import { db } from "../services/firebase";
-import { runAuditedAdminMutation } from "../services/adminMutationService";
+import { guardarRivalidades, type Rivalidad } from "../services/rivalidadesService";
 
 import { useSingleFlight } from "../hooks/useSingleFlight";
-type Rivalry = { id: string; pilotoIds: string[] };
+type Rivalry = Rivalidad;
 
 export function AdminRivalriesPanel({ splits }: { splits: any[] }) {
   const { run: runOnce, pending: pendingOnce } = useSingleFlight();
@@ -23,21 +21,9 @@ export function AdminRivalriesPanel({ splits }: { splits: any[] }) {
 
   const saveGroups = async (nextGroups: Rivalry[]) => {
     return runOnce(async () => {
-    const equipoNombreMap = Object.fromEntries((split?.equipos || []).map((team: any) => [team.id, team.nombre]));
-    const groups = nextGroups.map(group => {
-      const members = group.pilotoIds.map(pilotId => {
-        const pilot = split?.roster?.find((item: any) => item.pilotoId === pilotId);
-        return { id: pilotId, nombre: pilot?.nombre || pilotId, equipoId: pilot?.equipoId || "", equipoNombre: equipoNombreMap[pilot?.equipoId] || pilot?.equipoId || "", rating: pilot?.rating_piloto ?? 0, puntos_piloto: pilot?.puntos_piloto ?? 0, statusRank: 0, price: pilot?.precio_compra ?? 0 };
-      });
-      return { id: group.id, statusRank: 0, type: members.length === 2 ? "pair" : "triad", members, groupScore: members.reduce((sum: number, member: any) => sum + member.rating, 0) / Math.max(1, members.length) };
-    });
     setSaving(true);
     try {
-      await runAuditedAdminMutation({ ref: doc(db, "splits", splitId), action: "rivalries.update", summary: `Rivalidades actualizadas en ${splitId}: ${nextGroups.length} grupos.`, apply: current => {
-        if (!current) throw new Error("El split ya no existe.");
-        return { ...current, rivalidades_manual: nextGroups,
-          rivalries: { splitId, totalPilotos: split?.roster?.length || 0, pairCount: nextGroups.filter(group => group.pilotoIds.length === 2).length, coeficiente: 1, rivalidades: [], groups, soloPilots: [] } };
-      } });
+      await guardarRivalidades(splitId, nextGroups, { equipos: split?.equipos || [], roster: split?.roster || [] });
       setGroups(nextGroups); setMessage("Rivalidades guardadas.");
     } catch (error: any) { setMessage(`No se guardaron las rivalidades: ${error.message}`); }
     finally { setSaving(false); }

@@ -28,3 +28,16 @@ export function sesionDesdePerfil(uid: string, email: string, perfil: Record<str
     foto: perfil.foto_url || null,
   };
 }
+
+const EQUIPO_POR_NOMBRE: Record<string, string> = { "Alfa Romero": "alfa", Zenith: "zenith", Roses: "roses" };
+
+/** Id del diseño de una escudería de Firestore (por id o, si el split usa otro id, por nombre). */
+export function equipoDelPrototipo(id: string, nombre?: string): string | null {
+  if (id === "agente_libre") return "agente_libre";
+  return EQUIPO[id] ?? (nombre ? EQUIPO_POR_NOMBRE[nombre] ?? null : null);
+}
+
+/** Id del diseño de un piloto de Firestore: `piloto_fabi` → `fabi`. */
+export function pilotoDelPrototipo(id: string): string {
+  return id.replace(/^piloto_/, "");
+}

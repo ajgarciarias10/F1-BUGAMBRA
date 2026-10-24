@@ -15,6 +15,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { auth } from "../services/auth";
 import { db } from "../services/firebase";
 import { guardarPerfil, perfilGoogleExistente, provisionProfile } from "../services/perfilService";
+import { escucharSugerencias } from "../services/sugerenciasService";
 import { authFeedback } from "../utils/authFeedback";
 import { registerServiceWorker } from "../pwa/registerServiceWorker";
 import { sesionDesdePerfil, type SesionPrototipo } from "./perfil";
@@ -121,8 +122,37 @@ async function guardarAlias(nombre: string): Promise<Resultado> {
   });
 }
 
+type Acciones = typeof import("./acciones");
+
+/**
+ * Acciones que escriben en la liga (acciones.ts), cargadas la primera vez que se usan: la portada
+ * pública no descarga los servicios de economía. Una cada vez, como el resto de la sesión.
+ */
+function accion<K extends Exclude<keyof Acciones, "Resultado">>(nombre: K) {
+  return (...args: Parameters<Acciones[K]>): Promise<Resultado> => unaVez(async () => {
+    if (!actual) return { ok: false, mensaje: "Entra con tu cuenta para hacer esto." };
+    const modulo = await import("./acciones");
+    return (modulo[nombre] as (...a: unknown[]) => Promise<Resultado>)(...args);
+  });
+}
+
+const bugambraAcciones = {
+  pactar: accion("pactar"),
+  deshacer: accion("deshacer"),
+  corregirPrecio: accion("corregirPrecio"),
+  procesarEconomia: accion("procesarEconomia"),
+  rivalidades: accion("rivalidades"),
+  alternarMercado: accion("alternarMercado"),
+  proponer: (p: { categoria: string; titulo: string }) => unaVez(async () => {
+    if (!actual) return { ok: false, mensaje: "Entra con tu cuenta para enviar propuestas." };
+    const { proponer } = await import("./acciones");
+    return proponer(p, { uid: actual.uid, nombre: actual.nombre, email: auth.currentUser?.email || "", rol: actual.rol });
+  }),
+};
+
 declare global {
   interface Window {
+    bugambraAcciones: typeof bugambraAcciones;
     bugambraSesion: {
       entrarConGoogle: typeof entrarConGoogle;
       entrarConCorreo: typeof entrarConCorreo;
@@ -135,11 +165,25 @@ declare global {
 }
 
 window.bugambraSesion = { entrarConGoogle, entrarConCorreo, registrar, recuperar, salir, guardarAlias };
+window.bugambraAcciones = bugambraAcciones;
+
+/** El buzón real (colección `mejoras`) para quien tiene sesión, con el evento `bugambra:propuestas`. */
+let dejarBuzon: (() => void) | null = null;
+function escucharBuzon(conSesion: boolean) {
+  dejarBuzon?.();
+  dejarBuzon = null;
+  if (!conSesion) return;
+  dejarBuzon = escucharSugerencias(
+    items => window.dispatchEvent(new CustomEvent("bugambra:propuestas", { detail: items })),
+    error => console.error("No se pudo leer el buzón", error),
+  );
+}
 
 let dejarDeEscuchar: (() => void) | null = null;
 onAuthStateChanged(auth, (user: User | null) => {
   dejarDeEscuchar?.();
   dejarDeEscuchar = null;
+  escucharBuzon(!!user);
   if (!user) { publicar(null); return; }
   dejarDeEscuchar = onSnapshot(doc(db, "usuarios", user.uid), snap => {
     // Sin perfil todavía (Google recién creado): se publica cuando provisionProfile lo escriba.
