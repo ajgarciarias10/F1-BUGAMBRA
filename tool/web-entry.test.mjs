@@ -33,3 +33,9 @@ test("un vídeo de Bugambra TV carga ese vídeo, no el canal (que sin directo sa
   const html = leer("index.html");
   assert.match(html, /: item\.directo\s*\?\s*`https:\/\/player\.twitch\.tv\/\?channel=/, "El reproductor usa el canal para vídeos que no son directos");
 });
+
+test("la media de qualy sale de los puestos de clasificación guardados, no fija en «—»", () => {
+  const html = leer("index.html");
+  assert.ok(!html.includes("p.mediaQualy = '—';"), "La media de qualy vuelve a estar fija en «—»");
+  assert.match(html, /p\.mediaQualy = qualys\.length/);
+});

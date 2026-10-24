@@ -339,12 +339,13 @@ __LIVE__
           return { gp: `GP ${g.n} · ${g.pais}`, pos: x ? posTexto(x.pos) : 'No corrió', pts: x ? x.pts : 0, vr: false, pilotoDia: false };
         });
         p.trayectoria = trayectoriaPiloto(p.slug);
-        // Medias del split en curso, calculadas de los resultados (la qualy no se guarda en la base de datos).
+        // Medias del split en curso, calculadas de los resultados guardados (puesto de qualy y de carrera).
         const corridas = t.gps.filter(g => g.disputada && g.res[p.slug]);
         const posiciones = corridas.map(g => g.res[p.slug].pos).filter(x => typeof x === 'number');
         p.mediaCarrera = posiciones.length ? `${(posiciones.reduce((s, x) => s + x, 0) / posiciones.length).toFixed(1).replace('.', ',')}` : '—';
         p.mediaPuntos = corridas.length ? (r.pts / corridas.length).toFixed(1).replace('.', ',') : '—';
-        p.mediaQualy = '—';
+        const qualys = corridas.map(g => Number(g.res[p.slug].q)).filter(x => x >= 1 && x < 99);
+        p.mediaQualy = qualys.length ? `${(qualys.reduce((s, x) => s + x, 0) / qualys.length).toFixed(1).replace('.', ',')}` : '—';
       });
       state.pilotos.sort((a, b) => b.puntos - a.puntos);
 
