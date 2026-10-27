@@ -240,6 +240,11 @@ cambiar("<strong>${state.temporada.subastaEnVivo ? 'Activa' : 'Pausada'}</strong
 cambiar(">Iniciar temporada</button>", ">Comenzar el split</button>");
 cambiar("      const ultimoAviso = state.avisos[0];\n      const showSaldo", "      const ultimoAviso = avisoInicio();\n      const showSaldo");
 cambiar(/\n *<button type="button" class="btn btn-secondary" style="width:100%;margin-top:var\(--sp-2\);" onclick="solicitarSubirClausulaJeque\('\$\{p\.id\}'\)">[\s\S]*?<\/button>/, "");
+// Acta cerrada: aviso y «Reabrir acta» en el resumen, para que un cambio no se pierda sin avisar.
+cambiar(`Decisiones FIA: <strong>\${c.decisionesFia.length}</strong>.
+                </p>`, `Decisiones FIA: <strong>\${c.decisionesFia.length}</strong>.
+                </p>
+                \${botonReabrirActa(c.orden)}`);
 cambiar("    window.addEventListener('DOMContentLoaded', () => {", readFileSync(new URL("tool/prototipo-acciones.js", raiz), "utf8") + "    window.addEventListener('DOMContentLoaded', () => {");
 
 writeFileSync(salida, html);

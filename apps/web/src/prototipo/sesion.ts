@@ -184,6 +184,7 @@ const bugambraAcciones = {
   alternarSubasta: accion("alternarSubasta"),
   comenzarSplit: accion("comenzarSplit"),
   presupuestoInicial: accion("presupuestoInicial"),
+  reabrirActa: accion("reabrirActa"),
   proponer: (p: { categoria: string; titulo: string }) => unaVez(async () => {
     if (!actual) return { ok: false, mensaje: "Entra con tu cuenta para enviar propuestas." };
     const { proponer } = await import("./acciones");

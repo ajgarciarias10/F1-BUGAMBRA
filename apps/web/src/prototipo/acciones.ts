@@ -7,7 +7,7 @@
 import { collection, getDoc, getDocs, doc } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { ajustarClausula, anularPacto, asegurarSplitSiguiente, deshacerAlta, guardarPacto, liberarPiloto } from "../services/transferService";
-import { ficharPiloto, procesarEconomiaCarrera } from "../services/economyService";
+import { ficharPiloto, procesarEconomiaCarrera, revertirEconomiaCarrera } from "../services/economyService";
 import { processRace } from "../services/raceProcessor";
 import { fetchLatestOfficialNotice, fetchTeamLedger, programarCarrera, publishOfficialNotice, registerFiaDecision, setFastestLapVideo } from "../services/readModelService";
 import { comenzarTemporada } from "../services/auctionService";
@@ -346,4 +346,31 @@ export async function presupuestoInicial(p: { splitId: string; equipo: string; i
   const equipo = await escuderiaFirestore(p.splitId, p.equipo);
   await fijarPresupuestoInicial(p.splitId, equipo.id, equipo.data().nombre || equipo.id, p.importe);
   return { ok: true, mensaje: `Presupuesto inicial de ${equipo.data().nombre} fijado en ${millones(p.importe)}.` };
+}
+
+/**
+ * Reabre el acta de un GP para corregirla, como «Reabrir acta» del panel: si su economía ya está
+ * procesada, la revierte antes. Si alguien se pactó después de ese GP (su ficha quedó congelada
+ * en él), hay que deshacer antes ese pacto: revertir la economía por debajo descuadraría su precio.
+ */
+export async function reabrirActa(p: { splitId: string; n: number }): Promise<Resultado> {
+  const { circuito } = await circuitoPorNumero(p.splitId, p.n);
+  if (!circuito.acta_cerrada) return { ok: true, mensaje: "El acta ya estaba abierta." };
+  if (circuito.economia_procesada) {
+    const plantilla = await leerPlantillaSplit(p.splitId);
+    const pactados = plantilla.roster.filter((x: any) => x.pending_equipoId && x.congelado_en === circuito.id);
+    if (pactados.length) {
+      return { ok: false, mensaje: `Antes deshaz el pacto de ${pactados.map(x => x.nombre || x.pilotoId).join(", ")} (Economía → Deshacer): se pactó después de este GP.` };
+    }
+    const rev = await revertirEconomiaCarrera(p.splitId, circuito.id);
+    if (!rev.ok) return { ok: false, mensaje: `No se reabrió: ${rev.message}` };
+  }
+  const ref = doc(db, `splits/${p.splitId}/circuitos`, circuito.id);
+  await runAuditedAdminBatch({
+    refs: [ref], action: "acta_cerrada_reopen", summary: `Acta reabierta en ${circuito.id}`,
+    apply: currents => ({ writes: { [ref.path]: planActaCerrada(currents[ref.path], false).after } }),
+  });
+  return { ok: true, mensaje: circuito.economia_procesada
+    ? `Economía del GP ${p.n} revertida y acta reabierta: corrige, cierra el acta y vuelve a procesar la economía.`
+    : `Acta del GP ${p.n} reabierta.` };
 }

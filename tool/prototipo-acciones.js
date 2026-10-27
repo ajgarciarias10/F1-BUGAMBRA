@@ -161,7 +161,27 @@
       }));
     }
 
+    window.reabrirActaAdmin = function(orden) {
+      const g = gpDeTemporada(orden);
+      openMoneyConfirmModal({
+        titulo: `Reabrir acta · GP ${orden} (${g.pais || ''})`,
+        resumen: g.economiaProcesada
+          ? 'Su economía ya está procesada: se revierte primero (cada escudería devuelve lo cobrado y los precios vuelven a como estaban). Después corriges, cierras el acta y la procesas de nuevo.'
+          : 'Vuelve a permitir corregir los resultados.',
+        onConfirm: () => bugambraAccion(() => bugambraAcciones.reabrirActa({ splitId: temporadaActual().id, n: Number(orden) }))
+      });
+    };
+
+    /** Con el acta cerrada, en lugar de los botones de guardar, el aviso y «Reabrir acta». */
+    function botonReabrirActa(orden) {
+      return gpDeTemporada(orden).actaCerrada
+        ? `<p class="acta-aviso is-error" style="margin-top:var(--sp-2);">El acta está cerrada: los cambios de la tabla no se guardan hasta reabrirla.</p>
+           <button type="button" class="btn btn-secondary" style="margin-top:var(--sp-2);" onclick="reabrirActaAdmin(${orden})">Reabrir acta${gpDeTemporada(orden).economiaProcesada ? ' (revierte su economía)' : ''}</button>`
+        : '';
+    }
+
     function guardarActa(orden, cerrar) {
+      if (gpDeTemporada(orden).actaCerrada) return reabrirActaAdmin(orden);
       const c = state.carreras.find(x => x.orden === orden);
       const filas = filasActa();
       openMoneyConfirmModal({
