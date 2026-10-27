@@ -196,12 +196,60 @@
     window.guardarActaAdmin = (orden) => guardarActa(orden, false);
     window.confirmarCerrarActaAdmin = (orden) => guardarActa(orden, true);
 
+    /** Formulario de decisión FIA ligado al acta: el piloto sale de la parrilla del GP. */
+    function renderFormFia(orden) {
+      const t = temporadaActual();
+      const pilotos = clasificacionEquipos(t).flatMap(r => r.pilotos.filter(s => t.pilotos[s]).map(s => ({ slug: s, nombre: t.pilotos[s].nombre })));
+      const efectos = ['+3 s', '+5 s', '+10 s', 'Advertencia'];
+      return `
+        <form class="clean-table-panel" onsubmit="event.preventDefault(); agregarDecisionFiaAdmin(${orden});" style="display:flex;flex-direction:column;gap:var(--sp-2);">
+          <h2 class="section-title">Añadir decisión FIA</h2>
+          <select id="fiaPilotoInput" class="form-input" required onchange="marcarSancionadoEnActa(this.value)">
+            <option value="">Piloto sancionado…</option>
+            ${pilotos.map(p => `<option value="${p.slug}">${p.nombre}</option>`).join('')}
+          </select>
+          <input id="fiaMotivoInput" class="form-input" placeholder="Motivo: qué pasó" required>
+          <input id="fiaEfectoInput" class="form-input" placeholder="Efecto (+5 s, pierde un puesto…)" required>
+          <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
+            ${efectos.map(e => `<button type="button" class="pill-filter" onclick="document.getElementById('fiaEfectoInput').value='${e}'">${e}</button>`).join('')}
+          </div>
+          <input id="fiaMultaInput" class="form-input" placeholder="Multa (opcional, se anota sin cobrar)">
+          <button type="submit" class="btn btn-secondary">Añadir decisión</button>
+        </form>`;
+    }
+
+    /** Del formulario al acta: el piloto elegido queda «Sancionado» en su fila. */
+    window.marcarSancionadoEnActa = function(slug) {
+      const fila = document.querySelector(`#actaTabla tr[data-piloto="${slug}"]`);
+      if (!fila) return;
+      fila.querySelector('.acta-fia').value = 'Sancionado';
+      validarActa();
+    };
+
+    // Del acta al formulario: marcar «Sancionado» elige al piloto, y el puesto tras la sanción escribe el efecto.
+    document.addEventListener('change', (e) => {
+      const fila = e.target.closest && e.target.closest('#actaTabla tr[data-piloto]');
+      const form = document.getElementById('fiaPilotoInput');
+      if (!fila || !form) return;
+      if (e.target.matches('.acta-fia') && e.target.value === 'Sancionado') {
+        form.value = fila.dataset.piloto;
+        document.getElementById('fiaMotivoInput').focus();
+      }
+      if (e.target.matches('.acta-s') && e.target.value) {
+        form.value = fila.dataset.piloto;
+        const pista = fila.querySelector('.acta-c').value;
+        document.getElementById('fiaEfectoInput').value = e.target.value === 'DSQ' ? 'Descalificación' : `${pista ? pista + '.º → ' : ''}${e.target.value}.º en pista`;
+      }
+    });
+
     window.agregarDecisionFiaAdmin = function(orden) {
       const campo = (id) => document.getElementById(id).value.trim();
+      const select = document.getElementById('fiaPilotoInput');
       const d = { piloto: campo('fiaPilotoInput'), motivo: campo('fiaMotivoInput'), efecto: campo('fiaEfectoInput'), multa: campo('fiaMultaInput') };
+      const nombre = select.selectedOptions[0] ? select.selectedOptions[0].textContent : d.piloto;
       openMoneyConfirmModal({
         titulo: 'Confirmar decisión FIA',
-        resumen: `${d.piloto}: ${d.motivo} → ${d.efecto}${d.multa ? ` · multa ${d.multa}` : ''}.`,
+        resumen: `${nombre}: ${d.motivo} → ${d.efecto}${d.multa ? ` · multa ${d.multa}` : ''}.`,
         detalleExtra: 'Queda en el acta del GP. La multa se anota pero no se cobra del saldo.',
         onConfirm: () => bugambraAccion(() => bugambraAcciones.decisionFia({ splitId: temporadaActual().id, n: orden, ...d }))
       });

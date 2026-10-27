@@ -230,7 +230,7 @@ cambiar("if (ultima) { state.ui.selectedCarreraOrden = ultima.n; state.ui.adminC
 cambiar("selectedCarreraOrden: 14,", "selectedCarreraOrden: null,");
 cambiar("const c = state.carreras.find(x => x.orden === Number(state.ui.adminCarreraOrden)) || state.carreras[2];", "const c = state.carreras.find(x => x.orden === Number(state.ui.adminCarreraOrden)) || state.carreras.find(x => x.estado === 'Próxima') || state.carreras[0];");
 cambiar("const cSel = state.carreras.find(c => c.orden === Number(state.ui.selectedCarreraOrden)) || state.carreras[2];", "const cSel = state.carreras.find(c => c.orden === Number(state.ui.selectedCarreraOrden)) || [...state.carreras].reverse().find(c => c.estado === 'Disputada') || state.carreras[0];");
-cambiar('<div style="margin-bottom:var(--sp-4);">${renderActaResultados(c.orden)}</div>', '${renderProgramacionAdmin(c.orden)}\n          <div style="margin-bottom:var(--sp-4);">${renderActaResultados(c.orden)}</div>');
+cambiar('<div style="margin-bottom:var(--sp-4);">${renderActaResultados(c.orden)}</div>', '${renderProgramacionAdmin(c.orden)}\n          ${botonReabrirActa(c.orden)}\n          <div style="margin-bottom:var(--sp-4);">${renderActaResultados(c.orden)}</div>');
 cambiar(`              <div class="clean-table-panel">
                 <h3 class="section-title" style="margin-bottom:var(--sp-2);">Decisiones FIA</h3>`, `              \${renderVueltaRapida(cSel.orden)}
               <div class="clean-table-panel">
@@ -241,10 +241,8 @@ cambiar(">Iniciar temporada</button>", ">Comenzar el split</button>");
 cambiar("      const ultimoAviso = state.avisos[0];\n      const showSaldo", "      const ultimoAviso = avisoInicio();\n      const showSaldo");
 cambiar(/\n *<button type="button" class="btn btn-secondary" style="width:100%;margin-top:var\(--sp-2\);" onclick="solicitarSubirClausulaJeque\('\$\{p\.id\}'\)">[\s\S]*?<\/button>/, "");
 // Acta cerrada: aviso y «Reabrir acta» en el resumen, para que un cambio no se pierda sin avisar.
-cambiar(`Decisiones FIA: <strong>\${c.decisionesFia.length}</strong>.
-                </p>`, `Decisiones FIA: <strong>\${c.decisionesFia.length}</strong>.
-                </p>
-                \${botonReabrirActa(c.orden)}`);
+// Decisión FIA ligada al acta: piloto de la parrilla, efecto con un toque, multa opcional.
+cambiar(/<form class="clean-table-panel" onsubmit="event\.preventDefault\(\); agregarDecisionFiaAdmin\(\$\{c\.orden\}\);"[\s\S]*?<\/form>/, '${renderFormFia(c.orden)}');
 cambiar("    window.addEventListener('DOMContentLoaded', () => {", readFileSync(new URL("tool/prototipo-acciones.js", raiz), "utf8") + "    window.addEventListener('DOMContentLoaded', () => {");
 
 writeFileSync(salida, html);
