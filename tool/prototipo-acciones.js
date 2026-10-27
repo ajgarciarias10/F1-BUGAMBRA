@@ -204,7 +204,7 @@
       return `
         <form class="clean-table-panel" onsubmit="event.preventDefault(); agregarDecisionFiaAdmin(${orden});" style="display:flex;flex-direction:column;gap:var(--sp-2);">
           <h2 class="section-title">Añadir decisión FIA</h2>
-          <select id="fiaPilotoInput" class="form-input" required onchange="marcarSancionadoEnActa(this.value)">
+          <select id="fiaPilotoInput" class="form-input" required data-orden="${orden}" onchange="this.dataset.elegidoAMano = '1'; marcarSancionadoEnActa(this.value)">
             <option value="">Piloto sancionado…</option>
             ${pilotos.map(p => `<option value="${p.slug}">${p.nombre}</option>`).join('')}
           </select>
@@ -217,6 +217,36 @@
           <button type="submit" class="btn btn-secondary">Añadir decisión</button>
         </form>`;
     }
+
+    /**
+     * «Piloto sancionado» sigue a la tabla: arriba los sancionados que aún no tienen decisión FIA,
+     * luego los que ya la tienen y luego el resto; y, si el admin no eligió otro, el primero pendiente.
+     */
+    function actualizarPilotoFia() {
+      const form = document.getElementById('fiaPilotoInput');
+      if (!form) return;
+      const filas = [...document.querySelectorAll('#actaTabla tr[data-piloto]')];
+      const nombre = (tr) => (temporadaActual().pilotos[tr.dataset.piloto] || {}).nombre || tr.dataset.piloto;
+      const conDecision = new Set((gpDeTemporada(form.dataset.orden).fia || []).map(d => d.piloto));
+      const sancionado = (tr) => tr.querySelector('.acta-fia').value === 'Sancionado';
+      const grupos = [
+        ['Sancionados en el acta, sin decisión FIA', filas.filter(tr => sancionado(tr) && !conDecision.has(tr.dataset.piloto))],
+        ['Ya tienen decisión FIA', filas.filter(tr => conDecision.has(tr.dataset.piloto))],
+        ['Resto de la parrilla', filas.filter(tr => !sancionado(tr) && !conDecision.has(tr.dataset.piloto))]
+      ];
+      const elegido = form.value;
+      form.innerHTML = '<option value="">Piloto sancionado…</option>' + grupos.filter(([, trs]) => trs.length).map(([titulo, trs]) =>
+        `<optgroup label="${titulo}">${trs.map(tr => `<option value="${tr.dataset.piloto}">${nombre(tr)}</option>`).join('')}</optgroup>`).join('');
+      const pendientes = grupos[0][1];
+      form.value = form.dataset.elegidoAMano || (elegido && pendientes.some(tr => tr.dataset.piloto === elegido))
+        ? elegido : (pendientes[0] ? pendientes[0].dataset.piloto : elegido);
+    }
+
+    const validarActaOriginal = window.validarActa;
+    window.validarActa = function() {
+      validarActaOriginal();
+      actualizarPilotoFia();
+    };
 
     /** Del formulario al acta: el piloto elegido queda «Sancionado» en su fila. */
     window.marcarSancionadoEnActa = function(slug) {
@@ -232,13 +262,15 @@
       const form = document.getElementById('fiaPilotoInput');
       if (!fila || !form) return;
       if (e.target.matches('.acta-fia') && e.target.value === 'Sancionado') {
+        delete form.dataset.elegidoAMano;
         form.value = fila.dataset.piloto;
         document.getElementById('fiaMotivoInput').focus();
       }
       if (e.target.matches('.acta-s') && e.target.value) {
         form.value = fila.dataset.piloto;
         const pista = fila.querySelector('.acta-c').value;
-        document.getElementById('fiaEfectoInput').value = e.target.value === 'DSQ' ? 'Descalificación' : `${pista ? pista + '.º → ' : ''}${e.target.value}.º en pista`;
+        document.getElementById('fiaEfectoInput').value = e.target.value === 'DSQ' ? 'Descalificación'
+          : pista && pista !== e.target.value ? `${pista}.º → ${e.target.value}.º en pista` : `${e.target.value}.º tras sanción`;
       }
     });
 
