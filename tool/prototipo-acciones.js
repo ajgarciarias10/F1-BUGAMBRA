@@ -242,10 +242,64 @@
         ? elegido : (pendientes[0] ? pendientes[0].dataset.piloto : elegido);
     }
 
+    /** Efecto que se deduce de la fila: el puesto tras la sanción, o vacío. */
+    function efectoDeFila(tr) {
+      const pista = tr.querySelector('.acta-c').value;
+      const tras = tr.querySelector('.acta-s').disabled ? '' : tr.querySelector('.acta-s').value;
+      if (!tras) return '';
+      if (tras === 'DSQ') return 'Descalificación';
+      return pista && pista !== tras ? `${pista}.º → ${tras}.º en pista` : `${tras}.º tras sanción`;
+    }
+
+    /** En cada fila sancionada, su botón para registrar la decisión FIA de ese piloto. */
+    function botonesFiaEnActa() {
+      const form = document.getElementById('fiaPilotoInput');
+      if (!form) return;
+      const conDecision = new Set((gpDeTemporada(form.dataset.orden).fia || []).map(d => d.piloto));
+      document.querySelectorAll('#actaTabla tr[data-piloto]').forEach(tr => {
+        const celda = tr.querySelector('.acta-s').parentElement;
+        let boton = celda.querySelector('.acta-fia-btn');
+        if (tr.querySelector('.acta-fia').value !== 'Sancionado') { if (boton) boton.remove(); return; }
+        if (!boton) {
+          boton = document.createElement('button');
+          boton.type = 'button';
+          boton.className = 'pill-filter acta-fia-btn';
+          boton.style.marginTop = 'var(--sp-1)';
+          boton.onclick = () => decisionFiaDePiloto(tr.dataset.piloto);
+          celda.appendChild(boton);
+        }
+        boton.textContent = conDecision.has(tr.dataset.piloto) ? '✓ Otra decisión FIA' : '+ Decisión FIA';
+      });
+    }
+
+    /** La decisión FIA de un piloto sancionado, rellenada desde su fila del acta. */
+    window.decisionFiaDePiloto = function(slug) {
+      const form = document.getElementById('fiaPilotoInput');
+      const orden = Number(form.dataset.orden);
+      const tr = document.querySelector(`#actaTabla tr[data-piloto="${slug}"]`);
+      const nombre = (temporadaActual().pilotos[slug] || {}).nombre || slug;
+      const efectos = ['+3 s', '+5 s', '+10 s', 'Advertencia'];
+      openMoneyConfirmModal({
+        titulo: `Decisión FIA · ${nombre} · GP ${orden}`,
+        resumen: 'Escribe qué pasó; el efecto ya viene del acta si le cambiaste el puesto.',
+        detalleExtra: `
+          <span class="form-field"><label for="fiaModalMotivo">Motivo</label><input id="fiaModalMotivo" class="form-input" placeholder="Qué pasó"></span>
+          <span class="form-field"><label for="fiaModalEfecto">Efecto</label><input id="fiaModalEfecto" class="form-input" value="${atributo(efectoDeFila(tr))}"></span>
+          <span style="display:flex;flex-wrap:wrap;gap:var(--sp-2);margin:var(--sp-2) 0;">${efectos.map(e => `<button type="button" class="pill-filter" onclick="document.getElementById('fiaModalEfecto').value='${e}'">${e}</button>`).join('')}</span>
+          <span class="form-field"><label for="fiaModalMulta">Multa (opcional, se anota sin cobrar)</label><input id="fiaModalMulta" class="form-input"></span>`,
+        onConfirm: () => {
+          const campo = (id) => document.getElementById(id).value.trim();
+          bugambraAccion(() => bugambraAcciones.decisionFia({ splitId: temporadaActual().id, n: orden, piloto: slug, motivo: campo('fiaModalMotivo'), efecto: campo('fiaModalEfecto'), multa: campo('fiaModalMulta') }));
+        }
+      });
+      setTimeout(() => { const m = document.getElementById('fiaModalMotivo'); if (m) m.focus(); }, 50);
+    };
+
     const validarActaOriginal = window.validarActa;
     window.validarActa = function() {
       validarActaOriginal();
       actualizarPilotoFia();
+      botonesFiaEnActa();
     };
 
     /** Del formulario al acta: el piloto elegido queda «Sancionado» en su fila. */

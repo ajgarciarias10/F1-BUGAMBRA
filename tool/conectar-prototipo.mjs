@@ -225,10 +225,10 @@ cambiar(`        <div class="kpi-grid">
             <span class="kpi-label">Próximo GP · \${etiquetaGp(ev)}</span>`);
 cambiar("main.innerHTML = `${renderHeroPortada()}${renderPortadaTabs()}${tabContent}`;", "main.innerHTML = `${renderHeroPortada()}${bloqueDirecto()}${renderPortadaTabs()}${tabContent}`;");
 cambiar("adminCarreraOrden: 14,", "adminCarreraOrden: null,");
-// El admin abre el GP activo (el próximo por disputar): el que se programa y, la noche de la carrera, el del acta.
+// El admin abre el GP con el acta abierta (trabajo pendiente) o, si no hay, el próximo por disputar.
 cambiar("if (ultima) { state.ui.selectedCarreraOrden = ultima.n; state.ui.adminCarreraOrden = ultima.n; }", "if (ultima) state.ui.selectedCarreraOrden = ultima.n;");
 cambiar("selectedCarreraOrden: 14,", "selectedCarreraOrden: null,");
-cambiar("const c = state.carreras.find(x => x.orden === Number(state.ui.adminCarreraOrden)) || state.carreras[2];", "const c = state.carreras.find(x => x.orden === Number(state.ui.adminCarreraOrden)) || state.carreras.find(x => x.estado === 'Próxima') || state.carreras[0];");
+cambiar("const c = state.carreras.find(x => x.orden === Number(state.ui.adminCarreraOrden)) || state.carreras[2];", "const c = state.carreras.find(x => x.orden === Number(state.ui.adminCarreraOrden)) || state.carreras.find(x => x.estado === 'Disputada' && !gpDeTemporada(x.orden).actaCerrada) || state.carreras.find(x => x.estado === 'Próxima') || state.carreras[0];");
 cambiar("const cSel = state.carreras.find(c => c.orden === Number(state.ui.selectedCarreraOrden)) || state.carreras[2];", "const cSel = state.carreras.find(c => c.orden === Number(state.ui.selectedCarreraOrden)) || [...state.carreras].reverse().find(c => c.estado === 'Disputada') || state.carreras[0];");
 cambiar('<div style="margin-bottom:var(--sp-4);">${renderActaResultados(c.orden)}</div>', '${renderProgramacionAdmin(c.orden)}\n          ${botonReabrirActa(c.orden)}\n          <div style="margin-bottom:var(--sp-4);">${renderActaResultados(c.orden)}</div>');
 cambiar(`              <div class="clean-table-panel">
