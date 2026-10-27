@@ -25,6 +25,28 @@ export async function fetchTeamLedger(
   return buildLedgerView(txs, currentBalance);
 }
 
+/**
+ * Corrige o anula una decisión FIA ya registrada. No la borra: queda en el acta con la marca de
+ * editada o anulada, y el antes y el después en admin_audit.
+ */
+export async function editarDecisionFia(
+  splitId: string, circuitId: string, id: string,
+  cambios: Pick<DecisionFia, "motivo" | "efecto_deportivo"> | { anulada: true },
+) {
+  if ("motivo" in cambios && !cambios.motivo.trim()) throw new Error("La decisión necesita un motivo.");
+  await runAuditedAdminMutation({
+    ref: doc(db, `splits/${splitId}/circuitos`, circuitId),
+    action: "anulada" in cambios ? "decision_fia_anulada" : "decision_fia_editada",
+    summary: `Decisión FIA ${id} ${"anulada" in cambios ? "anulada" : "corregida"} en ${circuitId}`,
+    apply: current => {
+      if (!current) throw new Error("Circuito no encontrado.");
+      const existing: DecisionFia[] = current.decisiones_fia ?? [];
+      if (!existing.some(d => d.id === id)) throw new Error("Esa decisión FIA ya no existe.");
+      return { ...current, decisiones_fia: existing.map(d => d.id === id ? { ...d, ...cambios, editada_en: new Date().toISOString() } : d) };
+    },
+  });
+}
+
 /** Último aviso oficial publicado por el admin, o null si no hay ninguno. */
 export async function fetchLatestOfficialNotice(): Promise<AvisoOficial | null> {
   const snap = await getDocs(query(collection(db, "avisos_oficiales"), orderBy("publicado_en", "desc"), limit(1)));

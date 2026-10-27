@@ -208,11 +208,11 @@ cambiar(`onsubmit="event.preventDefault();showToast('Prototipo: el alta no se gu
 cambiar(`onclick="showToast('En la web real, aquí se fija el presupuesto inicial.')"`, `onclick="bugambraPresupuestoInicial('\${r.id}')"`);
 cambiar(`onclick="showToast('En la web real, aquí se descarga el boletín FIA en PDF.')"`, `onclick="bugambraPendiente('Descargar el boletín FIA en PDF')"`);
 // Acta y FIA: el estado del acta y las decisiones salen de Firestore; se puede guardar sin cerrar.
-cambiar("disputada: !!c.completado, res };", "disputada: !!c.completado, actaCerrada: !!c.acta_cerrada, hotlap: c.hotlap_url || null, nombreGuardado: c.nombre, fia: (c.decisiones_fia || []).map(d => ({ piloto: d.pilotoId ? slug(d.pilotoId) : null, motivo: d.motivo, efecto: d.efecto_deportivo || d.tipo })), res };");
+cambiar("disputada: !!c.completado, res };", "disputada: !!c.completado, actaCerrada: !!c.acta_cerrada, hotlap: c.hotlap_url || null, nombreGuardado: c.nombre, fia: (c.decisiones_fia || []).map(d => ({ id: d.id, piloto: d.pilotoId ? slug(d.pilotoId) : null, motivo: d.motivo, efecto: d.efecto_deportivo || d.tipo, registrada: d.registrada_en || null, editada: d.editada_en || null, anulada: !!d.anulada })), res };");
 cambiar("actaEstado: disputada ? 'Acta cerrada por la FIA' :", "actaEstado: disputada ? (g.actaCerrada ? 'Acta cerrada' : 'Resultados guardados · acta abierta') :");
 cambiar(`          resultadosDetalle: detalle,
           decisionesFia: []`, `          resultadosDetalle: detalle,
-          decisionesFia: (g.fia || []).map(d => ({ ...d, piloto: d.piloto ? nombre(d.piloto) : 'Escudería' }))`);
+          decisionesFia: (g.fia || []).filter(d => !d.anulada).map(d => ({ ...d, piloto: d.piloto ? nombre(d.piloto) : 'Escudería', motivo: d.editada ? d.motivo + ' (corregida)' : d.motivo }))`);
 cambiar("<strong>${d.piloto}</strong> · Multa: <strong>${d.multa}</strong>", "<strong>${d.piloto}</strong>${d.multa ? ` · Multa: <strong>${d.multa}</strong>` : ''}");
 cambiar(`<button type="button" class="btn btn-primary" onclick="confirmarCerrarActaAdmin(\${c.orden})">`, `<button type="button" class="btn btn-secondary" onclick="guardarActaAdmin(\${c.orden})">Guardar resultados sin cerrar</button>
               <button type="button" class="btn btn-primary" onclick="confirmarCerrarActaAdmin(\${c.orden})">`);

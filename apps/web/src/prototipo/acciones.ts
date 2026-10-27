@@ -9,7 +9,7 @@ import { db } from "../services/firebase";
 import { ajustarClausula, anularPacto, asegurarSplitSiguiente, deshacerAlta, guardarPacto, liberarPiloto } from "../services/transferService";
 import { ficharPiloto, procesarEconomiaCarrera, revertirEconomiaCarrera } from "../services/economyService";
 import { processRace } from "../services/raceProcessor";
-import { fetchLatestOfficialNotice, fetchTeamLedger, programarCarrera, publishOfficialNotice, registerFiaDecision, setFastestLapVideo } from "../services/readModelService";
+import { editarDecisionFia, fetchLatestOfficialNotice, fetchTeamLedger, programarCarrera, publishOfficialNotice, registerFiaDecision, setFastestLapVideo } from "../services/readModelService";
 import { comenzarTemporada } from "../services/auctionService";
 import { auth } from "../services/auth";
 import type { LedgerSource } from "../types";
@@ -373,4 +373,19 @@ export async function reabrirActa(p: { splitId: string; n: number }): Promise<Re
   return { ok: true, mensaje: circuito.economia_procesada
     ? `Economía del GP ${p.n} revertida y acta reabierta: corrige, cierra el acta y vuelve a procesar la economía.`
     : `Acta del GP ${p.n} reabierta.` };
+}
+
+/** Corrige el motivo y el efecto de una decisión FIA ya registrada. */
+export async function editarFia(p: { splitId: string; n: number; id: string; motivo: string; efecto: string }): Promise<Resultado> {
+  if (!p.motivo.trim()) return { ok: false, mensaje: "Escribe el motivo." };
+  const { circuito } = await circuitoPorNumero(p.splitId, p.n);
+  await editarDecisionFia(p.splitId, circuito.id, p.id, { motivo: p.motivo.trim(), efecto_deportivo: p.efecto.trim() });
+  return { ok: true, mensaje: "Decisión FIA corregida." };
+}
+
+/** Anula una decisión FIA: sigue en el registro, tachada. */
+export async function anularFia(p: { splitId: string; n: number; id: string }): Promise<Resultado> {
+  const { circuito } = await circuitoPorNumero(p.splitId, p.n);
+  await editarDecisionFia(p.splitId, circuito.id, p.id, { anulada: true });
+  return { ok: true, mensaje: "Decisión FIA anulada; queda en el registro." };
 }

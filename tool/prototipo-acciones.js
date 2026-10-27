@@ -202,6 +202,7 @@
       const pilotos = clasificacionEquipos(t).flatMap(r => r.pilotos.filter(s => t.pilotos[s]).map(s => ({ slug: s, nombre: t.pilotos[s].nombre })));
       const efectos = ['+3 s', '+5 s', '+10 s', 'Advertencia'];
       return `
+        ${renderRegistroFia(orden)}
         <form class="clean-table-panel" onsubmit="event.preventDefault(); agregarDecisionFiaAdmin(${orden});" style="display:flex;flex-direction:column;gap:var(--sp-2);">
           <h2 class="section-title">Añadir decisión FIA</h2>
           <select id="fiaPilotoInput" class="form-input" required data-orden="${orden}" onchange="this.dataset.elegidoAMano = '1'; marcarSancionadoEnActa(this.value)">
@@ -227,7 +228,7 @@
       if (!form) return;
       const filas = [...document.querySelectorAll('#actaTabla tr[data-piloto]')];
       const nombre = (tr) => (temporadaActual().pilotos[tr.dataset.piloto] || {}).nombre || tr.dataset.piloto;
-      const conDecision = new Set((gpDeTemporada(form.dataset.orden).fia || []).map(d => d.piloto));
+      const conDecision = new Set((gpDeTemporada(form.dataset.orden).fia || []).filter(d => !d.anulada).map(d => d.piloto));
       const sancionado = (tr) => tr.querySelector('.acta-fia').value === 'Sancionado';
       const grupos = [
         ['Sancionados en el acta, sin decisión FIA', filas.filter(tr => sancionado(tr) && !conDecision.has(tr.dataset.piloto))],
@@ -255,7 +256,7 @@
     function botonesFiaEnActa() {
       const form = document.getElementById('fiaPilotoInput');
       if (!form) return;
-      const conDecision = new Set((gpDeTemporada(form.dataset.orden).fia || []).map(d => d.piloto));
+      const conDecision = new Set((gpDeTemporada(form.dataset.orden).fia || []).filter(d => !d.anulada).map(d => d.piloto));
       document.querySelectorAll('#actaTabla tr[data-piloto]').forEach(tr => {
         const celda = tr.querySelector('.acta-s').parentElement;
         let boton = celda.querySelector('.acta-fia-btn');
@@ -268,14 +269,66 @@
           boton.onclick = () => decisionFiaDePiloto(tr.dataset.piloto);
           celda.appendChild(boton);
         }
-        boton.textContent = conDecision.has(tr.dataset.piloto) ? '✓ Otra decisión FIA' : '+ Decisión FIA';
+        boton.textContent = conDecision.has(tr.dataset.piloto) ? '✎ Decisión FIA' : '+ Decisión FIA';
       });
     }
 
-    /** La decisión FIA de un piloto sancionado, rellenada desde su fila del acta. */
+    // ── Registro de decisiones FIA del GP: se ven, se corrigen y se anulan, nunca se borran ──
+    const fechaFia = (iso) => iso ? new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+    function renderRegistroFia(orden) {
+      const lista = (gpDeTemporada(orden).fia || []);
+      const nombre = (slug) => (temporadaActual().pilotos[slug] || {}).nombre || slug || 'Escudería';
+      return `
+        <div class="clean-table-panel" style="margin-bottom:var(--sp-3);">
+          <h2 class="section-title" style="margin-bottom:var(--sp-2);">Registro de decisiones FIA · GP ${orden}</h2>
+          ${lista.length ? lista.map(d => `
+            <div style="padding:var(--sp-2) 0;border-bottom:var(--line-thin) solid var(--border-color);${d.anulada ? 'opacity:0.55;' : ''}">
+              <div style="display:flex;justify-content:space-between;gap:var(--sp-2);flex-wrap:wrap;align-items:center;">
+                <strong style="${d.anulada ? 'text-decoration:line-through;' : ''}">${nombre(d.piloto)} · ${d.efecto || ''}</strong>
+                ${d.anulada ? '<span class="badge-pill">Anulada</span>' : `<span style="display:flex;gap:var(--sp-2);">
+                  <button type="button" class="pill-filter" onclick="editarFiaAdmin(${orden}, '${d.id}')">Editar</button>
+                  <button type="button" class="pill-filter" onclick="anularFiaAdmin(${orden}, '${d.id}')">Anular</button></span>`}
+              </div>
+              <div style="font-size:var(--fs-sm);color:var(--text-muted);${d.anulada ? 'text-decoration:line-through;' : ''}">${d.motivo || ''}</div>
+              <div style="font-size:var(--fs-xs);color:var(--text-muted);">Registrada ${fechaFia(d.registrada)}${d.editada ? ` · ${d.anulada ? 'anulada' : 'editada'} ${fechaFia(d.editada)}` : ''}</div>
+            </div>`).join('') : '<p style="font-size:var(--fs-sm);color:var(--text-muted);">Aún no hay decisiones FIA en este GP.</p>'}
+        </div>`;
+    }
+
+    window.editarFiaAdmin = function(orden, id) {
+      const d = (gpDeTemporada(orden).fia || []).find(x => x.id === id);
+      if (!d) return;
+      const nombre = (temporadaActual().pilotos[d.piloto] || {}).nombre || d.piloto;
+      openMoneyConfirmModal({
+        titulo: `Editar decisión FIA · ${nombre} · GP ${orden}`,
+        resumen: 'Corrige lo escrito. El cambio queda registrado con la fecha y el texto anterior.',
+        detalleExtra: `
+          <span class="form-field"><label for="fiaEditMotivo">Motivo</label><input id="fiaEditMotivo" class="form-input" value="${atributo(d.motivo)}"></span>
+          <span class="form-field"><label for="fiaEditEfecto">Efecto</label><input id="fiaEditEfecto" class="form-input" value="${atributo(d.efecto)}"></span>`,
+        onConfirm: () => {
+          const campo = (x) => document.getElementById(x).value.trim();
+          bugambraAccion(() => bugambraAcciones.editarFia({ splitId: temporadaActual().id, n: Number(orden), id, motivo: campo('fiaEditMotivo'), efecto: campo('fiaEditEfecto') }));
+        }
+      });
+      setTimeout(() => { const m = document.getElementById('fiaEditMotivo'); if (m) m.focus(); }, 50);
+    };
+
+    window.anularFiaAdmin = function(orden, id) {
+      const d = (gpDeTemporada(orden).fia || []).find(x => x.id === id);
+      if (!d) return;
+      openMoneyConfirmModal({
+        titulo: 'Anular decisión FIA',
+        resumen: `«${d.efecto}» dejará de contar, pero seguirá en el registro tachada.`,
+        onConfirm: () => bugambraAccion(() => bugambraAcciones.anularFia({ splitId: temporadaActual().id, n: Number(orden), id }))
+      });
+    };
+
+    /** La decisión FIA de un piloto sancionado, desde su fila: la suya para corregirla o una nueva. */
     window.decisionFiaDePiloto = function(slug) {
       const form = document.getElementById('fiaPilotoInput');
       const orden = Number(form.dataset.orden);
+      const vigente = [...(gpDeTemporada(orden).fia || [])].reverse().find(d => d.piloto === slug && !d.anulada);
+      if (vigente) return editarFiaAdmin(orden, vigente.id);
       const tr = document.querySelector(`#actaTabla tr[data-piloto="${slug}"]`);
       const nombre = (temporadaActual().pilotos[slug] || {}).nombre || slug;
       const efectos = ['+3 s', '+5 s', '+10 s', 'Advertencia'];

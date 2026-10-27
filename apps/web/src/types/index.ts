@@ -157,6 +157,10 @@ export interface DecisionFia {
   transaccionId?: string;
   registrada_por?: string;
   registrada_en?: unknown;
+  /** Última corrección del texto; el antes y el después quedan en admin_audit. */
+  editada_en?: string;
+  /** Anulada no se borra: el registro conserva qué se decidió y que se retiró. */
+  anulada?: boolean;
 }
 
 /** Aviso oficial que el admin publica de forma explícita (colección `avisos_oficiales`). */
