@@ -1,8 +1,8 @@
 # 04. Puerta de revisión contra la hoja antes de aplicar la economía de una carrera
 
-- **Branch from:** la rama donde esté integrado el ticket 03 (no empezar sin él)
+- **Branch from:** feature/migracion-postgres-con-hoja (tickets 02 y 03 integrados)
 - **Work branch:** feature/puerta-revision-economia
-- **Owned files:** los que el agente liste y el dueño apruebe antes de empezar (el flujo de aplicar la economía está repartido por `apps/web/src/services/raceProcessor.ts`, `economyService.ts`, `adminMutationService.ts` y `AdminDashboard.tsx`; **parar y preguntar** si hace falta otro)
+- **Owned files:** `docs/trabajo/migracion-postgres/tickets/04-puerta-de-revision-antes-de-aplicar-la-economia.md`; `apps/api/database/migrations/004_google_account.sql` (nuevo), `apps/api/src/auth.ts`, `apps/api/src/google-identity.ts` (nuevo), `apps/api/src/config.ts`, `apps/api/src/types/express.d.ts`, `apps/api/src/server.ts`, `apps/api/tests/google-auth.test.ts` (nuevo), `apps/api/.env.example`. Para la interfaz de Google: `apps/web/src/prototipo/sesion.ts`, `apps/web/src/contexts/AuthContext.tsx`, `apps/web/src/services/auth.ts`, `apps/web/src/nueva/pantallas/Acceso.tsx`, `apps/web/src/components/LoginRegister.tsx` y sus pruebas directas. Los ficheros de resultados y economía se concretarán al resolver su alcance pendiente; no tocarlos antes.
 - **Do not touch:** cálculos de `presupuesto.ts` y `economyRules.ts` (solo se leen), `firestore.rules`, datos en vivo
 - **Agent and model:** Claude, nivel medio; revisión final del dueño
 - **Done when:** aplicar la economía de una carrera es imposible desde la interfaz si la revisión no pasó o si algo cambió después de ella; `npm run guardrails:economy` en verde; pruebas que fallan antes y pasan después.
@@ -10,6 +10,8 @@
 ## Context
 
 Decisión del dueño (2026-11-04): tras calcular la economía de una carrera, se revisa contra la hoja de la liga; si hay diferencias se **para** y se habla; cuando está corregido se acepta. Usa el lector del ticket 03.
+
+Decisión posterior del dueño: la liquidación debe pasar a la API/PostgreSQL y el acceso de Google debe usar Google Identity Services con `google-auth-library` (ya instalada), sin clave de servicio ni escritura en Firebase. La puerta no se activa mientras actas y resultados puedan divergir entre Firestore y PostgreSQL. El alcance exacto de esas escrituras y lecturas está pendiente de confirmación.
 
 ## Flujo
 
