@@ -8,7 +8,7 @@ Fuente: `f1_import_test.documento`, copia verificada de 396 documentos de Fireba
 | `pilotos/*` | 13 | `driver` | ID externo, nombre, foto extraída a fichero. `rating_piloto` corresponde al estado de piloto por split, no al nombre global. |
 | `temporadas/*` | 1 | Tabla de archivo de origen | Es la agrupación superior «Temporada 1» de varios splits; `season` representa cada split en el esquema actual, así que no se puede asignar esta fila a un segundo `season` sin duplicar la jerarquía. |
 | `splits/*` | 5 | `season` y reglas/estado asociados | Origins y Splits 1–4. `orden`, nombre, estado; `temporadaId`, `economia_mapeo`, rivalidades, dúos, flags de mercado y enlaces no tienen columnas directas. |
-| `splits/*/circuitos/*` | 24 | `race`, `race_revision`, `race_result` | ID, secuencia, estado, resultados y flags de economía. Hay carreras con posición desconocida; el esquema actual exige posiciones que la fuente no tiene. Votaciones, decisiones FIA, reglas aplicadas y saldos de economía necesitan conservación explícita. |
+| `splits/*/circuitos/*` | 24 | `race`, `race_revision`, `race_result` | ID, secuencia, estado, resultados y flags de economía. La fuente usa `99` como marcador repetido de posición desconocida: se normaliza a `NULL`. `isDnfOwnError: true` es una indicación explícita de DNF aun cuando falte `isDnf`; cero puntos nunca se usa para inferirlo. Votaciones, decisiones FIA, reglas aplicadas y saldos de economía se conservan en el archivo. |
 | `splits/*/roster/*` | 21 | `season_driver`, `roster_assignment` | Identidad, equipo, valoración, precio y ventana de participación. Historial de valoración/precio y condiciones de compra necesitan conservación explícita. |
 | `splits/*/equipos/*` | 14 | `team`, `season_team`, `team_standing` | Nombre, presupuesto inicial y guardado, puntos. Histórico económico y estado de mercado necesitan conservación explícita. |
 | `splits/*/equipos/*/pilotos/*` | 35 | `season_driver`, `roster_assignment`, `driver_standing` | Precio, participación, estadísticas. Campos pendientes de fichaje, cláusulas e historiales no tienen destino directo. |
@@ -33,5 +33,9 @@ Además, `f1_import_test.auth_usuario` contiene 17 identidades. Se usará para c
 4. Conservar estado de subasta y mapeos de Excel en la tabla de archivo hasta que exista un modelo funcional propio. No activarlos automáticamente en la web.
 
 4. Comprobar para los 392 documentos incluidos que cada ruta tiene al menos un destino normalizado o una fila en el archivo, y que los campos no modelados de documentos normalizados siguen en el archivo. Listar las cuatro rutas excluidas. Verificar SHA-256 de cada fichero extraído contra los bytes originales del base64.
+
+## Orden del libro
+
+`ledger_entry.secuencia` es global y determinista. Los movimientos fechados se ordenan por su instante normalizado a `timestamptz` (tanto texto ISO como timestamp de Firebase), con `seq` de la copia para empates. Los 27 movimientos sin fecha se colocan después, en orden de `seq`. Su `created_at` queda `NULL`: el importador no inventa una fecha histórica. Los movimientos de importe cero también se conservan.
 
 Estas decisiones no modifican saldos. El informe de conciliación comparará saldo inicial más movimientos contra saldo guardado por equipo y split; cualquier diferencia queda pendiente del dueño.
