@@ -36,7 +36,7 @@ Notas prácticas:
 ## Orden de trabajo
 
 1. **Ticket 03** (lector de la hoja y informe de jornada). Es lo que permite decidir qué saldo es el bueno.
-2. **Ticket 02** (llevar los datos al esquema normalizado). Pregunta antes: ¿qué cuenta de Google es la administradora? ¿`paddock_posts` se migra o se archiva?
+2. **Ticket 02** (llevar los datos al esquema normalizado). El administrador es `ajgarciarias@gmail.com`. El dueño decidió descartar `paddock_posts` del destino; la copia de Firebase permanece intacta.
 3. **Ticket 04** (puerta de revisión antes de aplicar la economía). Depende del 03.
 4. Reescribir web y API sin Firebase: sesión propia y botón de Google (Google Identity Services, verificación del token en la API). Falta su ticket; **parar y preguntar antes de añadir cualquier dependencia nueva** (por ejemplo `google-auth-library` o `jose`).
 

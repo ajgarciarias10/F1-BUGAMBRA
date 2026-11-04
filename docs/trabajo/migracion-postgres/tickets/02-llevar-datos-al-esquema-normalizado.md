@@ -5,7 +5,7 @@
 - **Owned files:** `docs/trabajo/migracion-postgres/**`, `apps/api/database/migrations/003_*.sql` (solo ajustes necesarios al esquema, nuevos ficheros), `apps/api/scripts/migrate-staging-to-schema.ts`, `apps/api/tests/migrate-staging*.test.ts`, `apps/api/package.json` (solo scripts), `apps/api/src/server.ts` (solo para registrar la ruta de imágenes), `apps/api/src/media.ts` (nuevo: servir las imágenes migradas), `apps/api/tests/media*.test.ts`
 - **Do not touch:** `apps/web/**`, `001_initial_schema.sql` y `002_admin_account.sql` (se amplía con migraciones nuevas, no se reescribe), el proyecto Firebase en vivo, `f1_import_test` (solo lectura)
 - **Agent and model:** Claude, nivel medio
-- **Done when:** el script migra de `f1_import_test` al esquema real en una sola transacción repetible (mismo resultado si se ejecuta dos veces), el informe de conciliación se genera y `npm test` de la API pasa. Ningún dato se da por bueno si el informe tiene diferencias sin explicar.
+- **Done when:** el script migra de `f1_import_test` al esquema real en una sola transacción repetible (mismo resultado si se ejecuta dos veces), excluyendo `paddock_posts` por decisión del dueño, el informe de conciliación se genera y `npm test` de la API pasa. Ningún dato se da por bueno si el informe tiene diferencias sin explicar.
 
 ## Context
 
@@ -14,8 +14,8 @@ Ticket 01 dejó una copia fiel y verificada en `f1_import_test` (396 documentos,
 - **Sin contraseñas.** Cada usuario entra con Google; no se migran hashes. Los 12 usuarios que tenían correo y contraseña solo entran si su correo tiene cuenta de Google. Comprobar que cada usuario activo tiene un correo que sirva para Google.
 - **`admin@f1bugambra.com` no existe en la base nueva.** No se migra. El administrador es una cuenta con Google (confirmar cuál con el dueño).
 - **Administrador: `ajgarciarias@gmail.com`** (ya es `rol: admin` en los datos y entra con Google).
-- **`paddock_posts` se migran** junto con el resto, con sus imágenes extraídas a ficheros.
-- **Alcance ampliado (2026-11-04, dueño):** se permite `apps/api/src/server.ts` y un `media.ts` nuevo para servir las imágenes migradas. Los 9 usuarios que solo tenían contraseña usan correos gmail.com, así que pueden entrar con Google.
+- **Decisión posterior del dueño:** `paddock_posts` se descarta de la base nueva por innecesario. No se importa ni se conserva en la tabla de archivo normalizada. La exportación y `f1_import_test` quedan intactas; no se escribe en Firebase.
+- **Alcance ampliado (2026-11-04, dueño):** se permite `apps/api/src/server.ts` y un `media.ts` nuevo para servir las fotos migradas de pilotos. Los 9 usuarios que solo tenían contraseña usan correos gmail.com, así que pueden entrar con Google.
 - **Los fallos de orden y de datos se arreglan antes de producción**, no se arrastran.
 - **Hacerlo ordenado y sin sobrecargar la base:** inserciones por lotes, índices después de cargar, y nada pesado dentro de las filas.
 
@@ -23,7 +23,7 @@ Ticket 01 dejó una copia fiel y verificada en `f1_import_test` (396 documentos,
 
 1. **Mapa de campos.** Documentar, antes de escribir código, cómo se corresponde cada colección con las tablas de `001_initial_schema.sql` (`splits`→`season`/`race`, `transacciones`→`ledger_entry`, `usuarios`→`app_user`, `pilotos`→`driver`, `admin_audit`→`audit_log`, etc.) y qué no tiene sitio. Parar y preguntar si algo no encaja en vez de improvisar.
 2. **Orden explícito.** Dar a `ledger_entry` una columna de orden propia (`secuencia`) en vez de depender de `fecha`: 27 transacciones históricas no tienen fecha. Regla de orden documentada y con test: fecha cuando existe, y para las históricas el orden de `seq` de la copia. Fechas en texto ISO y en timestamp se normalizan a `timestamptz`.
-3. **Imágenes fuera de las filas.** `pilotos.foto_url` y `paddock_posts.mediaUrl` traen imágenes en base64 dentro del documento (más de la mitad de los 2,2 MB). Extraerlas a ficheros en disco servidos por la API y guardar solo la URL. `paddock_posts` está en retirada (BACKLOG): preguntar al dueño si se migra o se archiva fuera de la base.
+3. **Imágenes fuera de las filas.** `pilotos.foto_url` trae imágenes en base64. Extraerlas a ficheros en disco servidos por la API y guardar solo la URL. Excluir por completo `paddock_posts` y sus imágenes del destino, con un conteo explícito en el informe.
 4. **Conciliación de saldos** (ver abajo). Generar un informe, no corregir nada solo.
 5. **Usuarios.** Cargar `usuarios` en `app_user` excluyendo `admin@f1bugambra.com`. Clave: correo en minúsculas. Informar de cualquier correo duplicado o sin documento.
 6. **Repetible.** Ejecutar el script dos veces da el mismo resultado; identificadores estables (`external_key` = id de Firestore) para que no se duplique nada.
