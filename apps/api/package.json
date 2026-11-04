@@ -8,6 +8,7 @@
     "start": "tsx src/server.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed-users": "tsx scripts/seed-users.ts",
+    "db:import-staging": "tsx scripts/import-firestore-staging.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "workbook:fetch": "tsx scripts/fetch-workbook.ts"
