@@ -1,0 +1,152 @@
+{
+  "format": "f1-bugambra-review",
+  "version": 1,
+  "exportedAt": "2026-10-20T16:32:36.067Z",
+  "annotations": [
+    {
+      "id": "3258fac4-a2da-4c22-a4db-d792e5ec0c82",
+      "route": "#registro",
+      "theme": "dark",
+      "viewport": {
+        "width": 1920,
+        "height": 956
+      },
+      "rect": {
+        "x": -1.0167014613778707,
+        "y": -0.014676770346577814,
+        "w": 2.0751565762004174,
+        "h": 1.024076475920404
+      },
+      "pageRect": {
+        "x": 0.09416666666666666,
+        "y": 0.21121706406063087,
+        "w": 0.8283333333333334,
+        "h": 0.6367271688429698
+      },
+      "selector": "#main > div:nth-of-type(1) > div:nth-of-type(2)",
+      "elementText": "Entrar Registrarme Entra en la parrilla. Acceso de muestra; no se envían datos. Nombre visible Correo electrónico Contraseña Registrarme (demo) → Entrar al reco",
+      "note": "Me gusta pero añadiria la forma de que se hiciera con google con firebase auth, y login lo haria mas estilo zara.",
+      "tags": [
+        "Falta algo"
+      ],
+      "severity": "importante",
+      "timestamp": "2026-10-20T16:17:31.416Z"
+    },
+    {
+      "id": "be41e19f-971d-467c-a62b-20f826e0dc44",
+      "route": "#portada",
+      "theme": "dark",
+      "viewport": {
+        "width": 3200,
+        "height": 1593
+      },
+      "rect": {
+        "x": -0.8236111108462015,
+        "y": -0.05029451605358693,
+        "w": 2.3416667342185975,
+        "h": 1.0455369266971666
+      },
+      "pageRect": {
+        "x": -0.8236111108462015,
+        "y": -0.05029451605358693,
+        "w": 2.3416667342185975,
+        "h": 1.0455369266971666
+      },
+      "selector": "#main",
+      "elementText": "LA LIGA / TEMPORADA DE MUESTRA Cada carrera deja huella. Un lugar claro para seguir el campeonato, consultar las actas y vivir lo que pasa entre carreras. SIGUI",
+      "note": "Los colores de la pagina me parecen muy robotizados, quiero que sea una pagina mas como esta paguina https://www.formula1.com/",
+      "tags": [
+        "Cambiar color"
+      ],
+      "severity": "importante",
+      "timestamp": "2026-10-20T16:24:45.230Z"
+    },
+    {
+      "id": "43afe765-ea8e-49fe-9396-53f39016c7d3",
+      "route": "#sistema",
+      "theme": "dark",
+      "viewport": {
+        "width": 2400,
+        "height": 1195
+      },
+      "rect": {
+        "x": 0,
+        "y": 0.051829268292682924,
+        "w": 0.9947916666666666,
+        "h": 0.9451219512195121
+      },
+      "pageRect": {
+        "x": -0.5,
+        "y": -0.04374038950378439,
+        "w": 1.9895833333333333,
+        "h": 0.04359974516454392
+      },
+      "selector": "#app > header:nth-of-type(1)",
+      "elementText": "F1 BUGAMBRA CUADERNO DE PADDOCK Portada Instalar Sistema TEMPORADA DE MUESTRA Entrar",
+      "note": "Vamos a crea un menu en el que yo mediante un atajo de teclado o con el puntero sea el del ordenador o el del movil con el dedo. Al pulsar dos veces en la pantalla y el teclado dandole al tabulador abramos un menu de estilo desplegable hacia abajo. Toque moderno con transparencia con la parte de dentras .",
+      "tags": [
+        "Quitar"
+      ],
+      "severity": "importante",
+      "timestamp": "2026-10-20T16:28:46.397Z"
+    },
+    {
+      "id": "20d188d9-eb5d-4b7a-a812-e6598c396ea5",
+      "route": "#escuderia",
+      "theme": "dark",
+      "viewport": {
+        "width": 2400,
+        "height": 1195
+      },
+      "rect": {
+        "x": 0.0035732554665665853,
+        "y": -0.9441489361702128,
+        "w": 0.11524030228071477,
+        "h": 1.9148936170212767
+      },
+      "pageRect": {
+        "x": 0.6331034482758621,
+        "y": 0.23271348618884274,
+        "w": 0.03706896551724138,
+        "h": 0.1299873623397725
+      },
+      "selector": "#main > div:nth-of-type(1) > div:nth-of-type(2) > section:nth-of-type(1) > div:nth-of-type(3)",
+      "elementText": "22 Lia Velo 17 puntos · titular Activa",
+      "note": "Fotos del piloto",
+      "tags": [
+        "No me gusta"
+      ],
+      "severity": "importante",
+      "timestamp": "2026-10-20T16:29:27.094Z"
+    },
+    {
+      "id": "3771964c-320d-48d1-98ef-127fd2bce96f",
+      "route": "#equipos",
+      "theme": "dark",
+      "viewport": {
+        "width": 2400,
+        "height": 1195
+      },
+      "rect": {
+        "x": -0.19382440476190477,
+        "y": -0.27137543134641884,
+        "w": 2.2507440476190474,
+        "h": 2.5181446955600246
+      },
+      "pageRect": {
+        "x": -0.06086206896551724,
+        "y": 0.12791239515377448,
+        "w": 1.043103448275862,
+        "h": 0.662861136999068
+      },
+      "selector": "#main > div:nth-of-type(1) > section:nth-of-type(1)",
+      "elementText": "ESCUDERÍA 01 96 PTS Marea Racing Vega Sol · Lia Velo Ver clasificación →",
+      "note": "SI clico al equipo tendria que salir un cuerpo ocupando lo que he señalado poniendo el equipo con sus fotos y jugadores con su medias .",
+      "tags": [
+        "No me gusta"
+      ],
+      "severity": "importante",
+      "timestamp": "2026-10-20T16:31:35.104Z"
+    }
+  ]
+}

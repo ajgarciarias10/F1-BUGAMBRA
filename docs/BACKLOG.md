@@ -24,6 +24,15 @@ The prototype becomes the app (ADR 0004). Plan and waves: `docs/trabajo/redesign
 - [ ] Retire the Firestore rules for `paddock_posts` and the vote fields once the owner confirms nobody needs the stored data
 - [ ] Assign Antonio Ceferi as Alfa Romero's sporting director in Equipos y usuarios (owner, live data)
 
+## Migración de Firebase a PostgreSQL (`docs/trabajo/migracion-postgres/`, empezar por `TRASPASO.md`)
+
+- [x] 01 Copia fiel de Firebase en `f1_import_test`, verificada
+- [ ] 03 Comprobar cada jornada contra la hoja de la liga leyéndola directamente
+- [ ] 02 Llevar los datos al esquema normalizado (orden explícito, imágenes fuera de las filas, informe de saldos)
+- [ ] 04 Puerta de revisión contra la hoja antes de aplicar la economía de una carrera
+- [ ] Sustituir Firebase Auth por inicio de sesión con Google propio (falta ticket); quitar el respaldo de `apps/api/src/auth.ts` que no verifica la firma
+- [ ] Confirmar con el dueño cuál es la hoja oficial (`1kUFWc…` frente a `19Um3b…` de `AGENTS.md`)
+
 ## Economy and data (rules in `AGENTS.md`)
 
 - [ ] Reconcile Hungary (Split 3) and process its economy only after the owner confirms the replay

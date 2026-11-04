@@ -1,0 +1,348 @@
+{
+  "items": [
+    {
+      "id": "3258fac4-a2da-4c22-a4db-d792e5ec0c82",
+      "route": "#registro",
+      "note": "Me gusta pero añadiria la forma de que se hiciera con google con firebase auth, y login lo haria mas estilo zara.",
+      "tags": [
+        "Falta algo"
+      ],
+      "severity": "importante",
+      "selector": "#main > div:nth-of-type(1) > div:nth-of-type(2)",
+      "status": "hecho",
+      "sentAt": "2026-10-20T16:34:26.809Z",
+      "updatedAt": "2026-10-20T16:36:08.375Z",
+      "reply": "En #login y #registro añadí Google de muestra sobre el correo y una composición editorial mínima en app.js/styles.css.",
+      "annotation": {
+        "id": "3258fac4-a2da-4c22-a4db-d792e5ec0c82",
+        "route": "#registro",
+        "theme": "dark",
+        "viewport": {
+          "width": 1920,
+          "height": 956
+        },
+        "rect": {
+          "x": -1.0167014613778707,
+          "y": -0.014676770346577814,
+          "w": 2.0751565762004174,
+          "h": 1.024076475920404
+        },
+        "pageRect": {
+          "x": 0.09416666666666666,
+          "y": 0.21121706406063087,
+          "w": 0.8283333333333334,
+          "h": 0.6367271688429698
+        },
+        "selector": "#main > div:nth-of-type(1) > div:nth-of-type(2)",
+        "elementText": "Entrar Registrarme Entra en la parrilla. Acceso de muestra; no se envían datos. Nombre visible Correo electrónico Contraseña Registrarme (demo) → Entrar al reco",
+        "note": "Me gusta pero añadiria la forma de que se hiciera con google con firebase auth, y login lo haria mas estilo zara.",
+        "tags": [
+          "Falta algo"
+        ],
+        "severity": "importante",
+        "timestamp": "2026-10-20T16:17:31.416Z"
+      }
+    },
+    {
+      "id": "be41e19f-971d-467c-a62b-20f826e0dc44",
+      "route": "#portada",
+      "note": "Los colores de la pagina me parecen muy robotizados, quiero que sea una pagina mas como esta paguina https://www.formula1.com/",
+      "tags": [
+        "Cambiar color"
+      ],
+      "severity": "importante",
+      "selector": "#main",
+      "status": "hecho",
+      "sentAt": "2026-10-20T16:34:26.809Z",
+      "updatedAt": "2026-10-20T16:39:04.342Z",
+      "reply": "La portada usa escenas SVG locales y titulares de carrera; los tokens rojo, negro y blanco de styles.css actualizan también las demás pantallas.",
+      "annotation": {
+        "id": "be41e19f-971d-467c-a62b-20f826e0dc44",
+        "route": "#portada",
+        "theme": "dark",
+        "viewport": {
+          "width": 3200,
+          "height": 1593
+        },
+        "rect": {
+          "x": -0.8236111108462015,
+          "y": -0.05029451605358693,
+          "w": 2.3416667342185975,
+          "h": 1.0455369266971666
+        },
+        "pageRect": {
+          "x": -0.8236111108462015,
+          "y": -0.05029451605358693,
+          "w": 2.3416667342185975,
+          "h": 1.0455369266971666
+        },
+        "selector": "#main",
+        "elementText": "LA LIGA / TEMPORADA DE MUESTRA Cada carrera deja huella. Un lugar claro para seguir el campeonato, consultar las actas y vivir lo que pasa entre carreras. SIGUI",
+        "note": "Los colores de la pagina me parecen muy robotizados, quiero que sea una pagina mas como esta paguina https://www.formula1.com/",
+        "tags": [
+          "Cambiar color"
+        ],
+        "severity": "importante",
+        "timestamp": "2026-10-20T16:24:45.230Z"
+      }
+    },
+    {
+      "id": "43afe765-ea8e-49fe-9396-53f39016c7d3",
+      "route": "#sistema",
+      "note": "Vamos a crea un menu en el que yo mediante un atajo de teclado o con el puntero sea el del ordenador o el del movil con el dedo. Al pulsar dos veces en la pantalla y el teclado dandole al tabulador abramos un menu de estilo desplegable hacia abajo. Toque moderno con transparencia con la parte de dentras .",
+      "tags": [
+        "Quitar"
+      ],
+      "severity": "importante",
+      "selector": "#app > header:nth-of-type(1)",
+      "status": "hecho",
+      "sentAt": "2026-10-20T16:34:26.809Z",
+      "updatedAt": "2026-10-20T17:37:12.949Z",
+      "reply": "El menú radial global sustituye al desplegable de #sistema y funciona en las rutas públicas, de jeque y admin con teclado y doble pulsación.",
+      "annotation": {
+        "id": "43afe765-ea8e-49fe-9396-53f39016c7d3",
+        "route": "#sistema",
+        "theme": "dark",
+        "viewport": {
+          "width": 2400,
+          "height": 1195
+        },
+        "rect": {
+          "x": 0,
+          "y": 0.051829268292682924,
+          "w": 0.9947916666666666,
+          "h": 0.9451219512195121
+        },
+        "pageRect": {
+          "x": -0.5,
+          "y": -0.04374038950378439,
+          "w": 1.9895833333333333,
+          "h": 0.04359974516454392
+        },
+        "selector": "#app > header:nth-of-type(1)",
+        "elementText": "F1 BUGAMBRA CUADERNO DE PADDOCK Portada Instalar Sistema TEMPORADA DE MUESTRA Entrar",
+        "note": "Vamos a crea un menu en el que yo mediante un atajo de teclado o con el puntero sea el del ordenador o el del movil con el dedo. Al pulsar dos veces en la pantalla y el teclado dandole al tabulador abramos un menu de estilo desplegable hacia abajo. Toque moderno con transparencia con la parte de dentras .",
+        "tags": [
+          "Quitar"
+        ],
+        "severity": "importante",
+        "timestamp": "2026-10-20T16:28:46.397Z"
+      }
+    },
+    {
+      "id": "20d188d9-eb5d-4b7a-a812-e6598c396ea5",
+      "route": "#escuderia",
+      "note": "Fotos del piloto",
+      "tags": [
+        "No me gusta"
+      ],
+      "severity": "importante",
+      "selector": "#main > div:nth-of-type(1) > div:nth-of-type(2) > section:nth-of-type(1) > div:nth-of-type(3)",
+      "status": "hecho",
+      "sentAt": "2026-10-20T16:34:26.809Z",
+      "updatedAt": "2026-10-20T16:43:41.118Z",
+      "reply": "Mi escudería muestra retratos SVG locales y ficticios de Vega Sol y Lia Velo, con números de piloto y texto alternativo.",
+      "annotation": {
+        "id": "20d188d9-eb5d-4b7a-a812-e6598c396ea5",
+        "route": "#escuderia",
+        "theme": "dark",
+        "viewport": {
+          "width": 2400,
+          "height": 1195
+        },
+        "rect": {
+          "x": 0.0035732554665665853,
+          "y": -0.9441489361702128,
+          "w": 0.11524030228071477,
+          "h": 1.9148936170212767
+        },
+        "pageRect": {
+          "x": 0.6331034482758621,
+          "y": 0.23271348618884274,
+          "w": 0.03706896551724138,
+          "h": 0.1299873623397725
+        },
+        "selector": "#main > div:nth-of-type(1) > div:nth-of-type(2) > section:nth-of-type(1) > div:nth-of-type(3)",
+        "elementText": "22 Lia Velo 17 puntos · titular Activa",
+        "note": "Fotos del piloto",
+        "tags": [
+          "No me gusta"
+        ],
+        "severity": "importante",
+        "timestamp": "2026-10-20T16:29:27.094Z"
+      }
+    },
+    {
+      "id": "3771964c-320d-48d1-98ef-127fd2bce96f",
+      "route": "#equipos",
+      "note": "SI clico al equipo tendria que salir un cuerpo ocupando lo que he señalado poniendo el equipo con sus fotos y jugadores con su medias .",
+      "tags": [
+        "No me gusta"
+      ],
+      "severity": "importante",
+      "selector": "#main > div:nth-of-type(1) > section:nth-of-type(1)",
+      "status": "hecho",
+      "sentAt": "2026-10-20T16:34:26.809Z",
+      "updatedAt": "2026-10-20T16:45:51.409Z",
+      "reply": "Las tarjetas de #equipos abren un detalle ancho con imagen SVG de equipo, retratos de pilotos y puntos, media y mejor resultado ficticios.",
+      "annotation": {
+        "id": "3771964c-320d-48d1-98ef-127fd2bce96f",
+        "route": "#equipos",
+        "theme": "dark",
+        "viewport": {
+          "width": 2400,
+          "height": 1195
+        },
+        "rect": {
+          "x": -0.19382440476190477,
+          "y": -0.27137543134641884,
+          "w": 2.2507440476190474,
+          "h": 2.5181446955600246
+        },
+        "pageRect": {
+          "x": -0.06086206896551724,
+          "y": 0.12791239515377448,
+          "w": 1.043103448275862,
+          "h": 0.662861136999068
+        },
+        "selector": "#main > div:nth-of-type(1) > section:nth-of-type(1)",
+        "elementText": "ESCUDERÍA 01 96 PTS Marea Racing Vega Sol · Lia Velo Ver clasificación →",
+        "note": "SI clico al equipo tendria que salir un cuerpo ocupando lo que he señalado poniendo el equipo con sus fotos y jugadores con su medias .",
+        "tags": [
+          "No me gusta"
+        ],
+        "severity": "importante",
+        "timestamp": "2026-10-20T16:31:35.104Z"
+      }
+    },
+    {
+      "id": "66dd3c71-19c0-4242-8632-4bde7eb5f172",
+      "route": "#inicio",
+      "note": "¡Claro que sí! Ese efecto \"rollo futurista o videojuego\" queda espectacular en desarrollo web. Para lograr que un círculo siga al ratón y que al pulsar la tecla Tab o hacer doble clic se despliegue un menú circular semitransparente, necesitas una combinación de HTML, CSS (con glassmorphism para el toque transparente) y JavaScript para controlar los eventos del teclado y del ratón",
+      "tags": [
+        "No me gusta"
+      ],
+      "severity": "menor",
+      "selector": "#app > div:nth-of-type(1) > aside:nth-of-type(1) > div:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(10) > span:nth-of-type(1)",
+      "status": "hecho",
+      "sentAt": "2026-10-20T16:49:37.559Z",
+      "updatedAt": "2026-10-20T17:37:53.573Z",
+      "reply": "El círculo seguidor de escritorio está en la capa global, crece sobre acciones y se oculta en campos, táctil, movimiento reducido y modo Revisar.",
+      "annotation": {
+        "id": "66dd3c71-19c0-4242-8632-4bde7eb5f172",
+        "route": "#inicio",
+        "theme": "dark",
+        "viewport": {
+          "width": 2752,
+          "height": 1370
+        },
+        "rect": {
+          "x": -0.43891537087450044,
+          "y": -29.648479800083297,
+          "w": 1.845053632414687,
+          "h": 61.103406913785925
+        },
+        "pageRect": {
+          "x": -0.5173103450906688,
+          "y": -0.06473354065303853,
+          "w": 0.14234482995395004,
+          "h": 0.9839764117171501
+        },
+        "selector": "#app > div:nth-of-type(1) > aside:nth-of-type(1) > div:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(10) > span:nth-of-type(1)",
+        "elementText": "Buzón de mejoras",
+        "note": "¡Claro que sí! Ese efecto \"rollo futurista o videojuego\" queda espectacular en desarrollo web. Para lograr que un círculo siga al ratón y que al pulsar la tecla Tab o hacer doble clic se despliegue un menú circular semitransparente, necesitas una combinación de HTML, CSS (con glassmorphism para el toque transparente) y JavaScript para controlar los eventos del teclado y del ratón",
+        "tags": [
+          "No me gusta"
+        ],
+        "severity": "menor",
+        "timestamp": "2026-10-20T16:49:33.837Z"
+      }
+    },
+    {
+      "id": "34825d38-ec7d-47a7-b43f-5760413d774f",
+      "route": "#portada",
+      "note": "Que es esto es algo demasiado principiante tiene que ser lo primero si queremos ir al menu deberia estar al izquierda de todo y deberia de hacer algun efecto visual, luego la parte de portada instalar y sistema si tenemos el menu para que quiero eso. Demasiado principiante y con fallos en posicionamiento",
+      "tags": [
+        "No me gusta"
+      ],
+      "severity": "importante",
+      "selector": "#app > header:nth-of-type(1)",
+      "status": "hecho",
+      "sentAt": "2026-10-21T08:43:25.210Z",
+      "updatedAt": "2026-10-21T16:14:19.565Z",
+      "reply": "La cabecera coloca el menú a la izquierda, centra la marca y elimina la navegación pública duplicada; la portada usa blancos, filetes e imagen editorial en styles.css.",
+      "annotation": {
+        "id": "34825d38-ec7d-47a7-b43f-5760413d774f",
+        "route": "#portada",
+        "theme": "dark",
+        "viewport": {
+          "width": 2400,
+          "height": 1195
+        },
+        "rect": {
+          "x": 0.0010416666666666667,
+          "y": 0.0975609756097561,
+          "w": 0.9953125,
+          "h": 0.8536585365853658
+        },
+        "pageRect": {
+          "x": -0.4503968253968254,
+          "y": -0.039868542090056074,
+          "w": 1.8958333333333333,
+          "h": 0.037713485760863856
+        },
+        "selector": "#app > header:nth-of-type(1)",
+        "elementText": "F1 BUGAMBRA CUADERNO DE PADDOCK Portada Instalar Sistema MENÚ TEMPORADA DE MUESTRA Entrar",
+        "note": "Que es esto es algo demasiado principiante tiene que ser lo primero si queremos ir al menu deberia estar al izquierda de todo y deberia de hacer algun efecto visual, luego la parte de portada instalar y sistema si tenemos el menu para que quiero eso. Demasiado principiante y con fallos en posicionamiento",
+        "tags": [
+          "No me gusta"
+        ],
+        "severity": "importante",
+        "timestamp": "2026-10-21T08:43:20.258Z"
+      }
+    },
+    {
+      "id": "8ae96296-79d0-4f14-aa40-9b58385d9cd7",
+      "route": "#inicio",
+      "note": "Entro aqui y el formato es diferente al del inicio el menu debe ser tal y como lo hemos definido y no esta basura",
+      "tags": [
+        "No me gusta"
+      ],
+      "severity": "importante",
+      "selector": "#app > div:nth-of-type(1) > aside:nth-of-type(1) > div:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(9)",
+      "status": "hecho",
+      "sentAt": "2026-10-21T08:45:35.517Z",
+      "updatedAt": "2026-10-21T16:16:57.087Z",
+      "reply": "Inicio y las otras 21 rutas comparten la cabecera, el menú lateral completo, la tipografía editorial y muestras de carga, vacío y error.",
+      "annotation": {
+        "id": "8ae96296-79d0-4f14-aa40-9b58385d9cd7",
+        "route": "#inicio",
+        "theme": "dark",
+        "viewport": {
+          "width": 2400,
+          "height": 1195
+        },
+        "rect": {
+          "x": -0.08387942332896461,
+          "y": -11.576086956521738,
+          "w": 1.1336828309305373,
+          "h": 24.72826086956522
+        },
+        "pageRect": {
+          "x": -0.4048275862068966,
+          "y": -0.0632,
+          "w": 0.14913793103448275,
+          "h": 0.91
+        },
+        "selector": "#app > div:nth-of-type(1) > aside:nth-of-type(1) > div:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(9)",
+        "elementText": "Perfil",
+        "note": "Entro aqui y el formato es diferente al del inicio el menu debe ser tal y como lo hemos definido y no esta basura",
+        "tags": [
+          "No me gusta"
+        ],
+        "severity": "importante",
+        "timestamp": "2026-10-21T08:45:31.741Z"
+      }
+    }
+  ]
+}
