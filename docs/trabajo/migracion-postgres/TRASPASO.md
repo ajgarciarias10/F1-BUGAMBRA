@@ -45,7 +45,7 @@ Notas prácticas:
 - 27 de 200 transacciones (`…__historico__…`) no tienen fecha; 26 la guardan como texto ISO y 147 como timestamp. Hace falta una columna de orden explícita.
 - Los saldos guardados no cuadran con inicial + libro en 8 de 12 casos (equipo y split). Ejemplo: Roses split 1, guardado 28,1 y libro 145,0. Puede haber ajustes manuales legítimos o errores: **solo informar**, nunca corregir sin el dueño (`AGENTS.md`).
 - `apps/api/src/auth.ts` acepta tokens de respaldo comprobando solo `aud`, `iss` y `exp`, **sin verificar la firma**. Hay que quitarlo en la migración de auth.
-- El ID de la hoja (`1kUFWc…`) no es el que cita `AGENTS.md` (`19Um3b…`). Tiene el mismo diseño pero es más reciente (59 columnas, ya con fichajes T4). **Pendiente de que el dueño confirme que es la oficial**; hasta entonces no tocar el enlace de `AGENTS.md`.
+- El ID de la hoja configurada no es el que cita `AGENTS.md`. El dueño confirmó que la hoja configurada es la oficial. La web aún no se actualiza porque faltan las sanciones del circuito; para migrar, conservar los datos de Firebase tal como están. El enlace de `AGENTS.md` requiere una actualización aparte, fuera del alcance del ticket 03.
 
 ## Pendiente del dueño (no del agente)
 

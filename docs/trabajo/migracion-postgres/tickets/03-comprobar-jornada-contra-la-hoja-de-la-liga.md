@@ -11,7 +11,7 @@
 
 Hoy el dueño pasa el Excel en crudo cada vez que aplica una jornada. La hoja se puede exportar sin credenciales (`https://docs.google.com/spreadsheets/d/<ID>/export?format=xlsx`, visto el 2026-11-04), así que la comprobación puede leerla sola.
 
-La hoja que dio el dueño el 2026-11-04 (ID guardado en `~/.secrets/league-sheet-id`, no en el repo) tiene el mismo diseño que el libro oficial del que habla `AGENTS.md` (`2026!E50` «Presupuesto», `R50` «Fichajes T3»), pero es posterior: 59 columnas y ya contiene fichajes T4. Su ID **no** es el que cita `AGENTS.md`. Hasta que el dueño confirme cuál es la oficial, no se cambia ese fichero.
+La hoja que dio el dueño el 2026-11-04 (ID guardado en `~/.secrets/league-sheet-id`, no en el repo) tiene el mismo diseño que el libro del que habla `AGENTS.md` (`2026!E50` «Presupuesto», `R50` «Fichajes T3»), pero es posterior: 59 columnas y ya contiene fichajes T4. El dueño confirmó que esta hoja configurada es la oficial. Su enlace en `AGENTS.md` se actualizará en otro trabajo, porque ese archivo no está en `Owned files:`. La web aún no refleja la hoja porque faltan sanciones del circuito; la migración conserva los datos de Firebase.
 
 ## What to do
 
