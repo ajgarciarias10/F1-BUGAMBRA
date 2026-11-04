@@ -11,6 +11,7 @@ import { loadCorrectionContext } from "./correction-repository.ts";
 import { pool } from "./database.ts";
 import { loadSystemControlData } from "./reconciliation-repository.ts";
 import { generateRaceWinnerImage, validateRaceWinnerImageInput } from "./domain/race-winner-image.ts";
+import { serveMigratedMedia } from "./media.ts";
 import {
   previewRaceCorrection,
   parseRaceResults,
@@ -60,6 +61,8 @@ app.get("/health", async (_request, response, next) => {
 app.get("/api/me", requireAuthentication, (request, response) => {
   response.json({ user: request.currentUser });
 });
+
+app.get("/api/media/:filename", serveMigratedMedia);
 
 app.post("/api/media/race-winner-image", requireAuthentication, requireRole("admin"), async (request, response) => {
   if (!config.geminiApiKey) {
