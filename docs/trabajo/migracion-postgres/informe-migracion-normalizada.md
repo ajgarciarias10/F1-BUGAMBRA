@@ -19,7 +19,7 @@ Dos ejecuciones consecutivas produjeron el mismo hash de filas y el mismo conteo
 
 ## Conciliación informativa
 
-El cálculo `presupuesto_inicial + movimientos` difiere del saldo guardado en 8 de 14 equipos por split. Las diferencias (`guardado − calculado`, en millones) son:
+El cálculo `presupuesto_inicial + movimientos del mismo split` difiere del saldo actual guardado en 8 de 14 equipos por split. Es una comparación de momentos distintos cuando los fichajes del split siguiente ya han modificado el saldo del anterior. Las diferencias (`guardado − calculado`, en millones) son:
 
 | Split | Equipo | Diferencia |
 |---|---|---:|
@@ -32,7 +32,9 @@ El cálculo `presupuesto_inicial + movimientos` difiere del saldo guardado en 8 
 | 3 | Zenith | −51,8 |
 | 4 | Roses | −58,3 |
 
-Los 14 casos, con saldo inicial, saldo guardado, saldo calculado y rutas de cada movimiento, constan en el JSON. El estado de conciliación es `pending_owner_review`: el importador conservó los saldos originales sin corregirlos. Este cálculo usa la copia de Firebase; la comparación con la hoja oficial corresponde al ticket 03 y no sustituye una decisión del dueño sobre diferencias.
+**Roses, Split 1, queda explicado.** Firebase conserva `economia_historica.presupuesto_cierre = 145` y `presupuesto = 28,1`. Los precios de su plantilla del Split 2 son Fabi 68,4 M, Pabliyo 1,5 M, Samu 5 M y Toni 42 M: suman 116,9 M. Por tanto, `145 − 116,9 = 28,1`. La hoja oficial de 2026, exportación SHA-256 `8f6009254a036fe47bb3f0c1a4598197a8cc6a852567fc8d7ceaa782352f895d`, registra los fichajes de Roses del Split 2 en `2026!O52 = 116,9`; `2026!L52 = 90,5` corresponde a los fichajes del Split 1. El código de pactos descuenta las compras del split siguiente del saldo del split de origen. Los 145 M son el cierre histórico; los 28,1 M son el saldo posterior a esos fichajes. **No hay base para corregir los 28,1 M.**
+
+Los 14 casos, con saldo inicial, saldo guardado, saldo calculado y rutas de cada movimiento, constan en el JSON. `pending_owner_review` significa que aún quedan casos por explicar; no implica que todos los saldos guardados sean incorrectos. El importador conservó los saldos originales. El cálculo del JSON usa la copia de Firebase, y la comprobación anterior de Roses usa además la hoja oficial indicada.
 
 ## Límites pendientes
 

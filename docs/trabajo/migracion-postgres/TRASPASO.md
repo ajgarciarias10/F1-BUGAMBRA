@@ -45,7 +45,7 @@ Notas prácticas:
 ## Hallazgos abiertos
 
 - 27 de 200 transacciones (`…__historico__…`) no tienen fecha; 26 la guardan como texto ISO y 147 como timestamp. `ledger_entry.secuencia` da un orden explícito, con fecha normalizada cuando existe y `seq` de la copia para los históricos sin fecha.
-- Los saldos guardados no cuadran con inicial + libro en 8 de 14 casos (equipo y split, incluidos los equipos de agentes libres). Ejemplo: Roses split 1, guardado 28,1 y libro 145,0. Las ocho diferencias y sus movimientos están en el reporte; **solo informar**, nunca corregir sin el dueño (`AGENTS.md`).
+- La comparación preliminar de saldo actual frente a inicial + movimientos del mismo split difiere en 8 de 14 casos (equipo y split, incluidos los equipos de agentes libres). Roses Split 1 está explicado: cierre histórico 145 M menos 116,9 M de fichajes del Split 2 = saldo actual 28,1 M. Las ocho diferencias brutas y sus movimientos están en el reporte; las restantes se investigan antes de proponer cualquier corrección (`AGENTS.md`).
 - `apps/api/src/auth.ts` acepta tokens de respaldo comprobando solo `aud`, `iss` y `exp`, **sin verificar la firma**. Hay que quitarlo en la migración de auth.
 - La hoja configurada es la oficial según el dueño y tiene 59 columnas, ya con fichajes T4. El enlace de `AGENTS.md` aún apunta al libro anterior; su cambio requiere un trabajo con ese archivo en alcance.
 

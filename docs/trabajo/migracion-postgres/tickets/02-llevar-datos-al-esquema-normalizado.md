@@ -33,7 +33,7 @@ Ticket 01 dejó una copia fiel y verificada en `f1_import_test` (396 documentos,
 
 ## Conciliación de saldos
 
-Cada equipo tiene un saldo guardado y un libro de movimientos. Si el libro está completo, saldo inicial + movimientos debe dar el saldo guardado. En la copia del 2026-11-04 no ocurre en 8 de 12 casos (ejemplo: Roses en el split 1 guarda 28,1 y el libro da 145,0; diferencia -116,9). Puede haber causas legítimas (ajustes manuales del reparto, el tope de 50M de la subasta, movimientos que nunca se anotaron) o errores.
+Cada equipo tiene un saldo actual guardado y un libro de movimientos. El cálculo preliminar `saldo inicial + movimientos del mismo split` difiere del saldo actual en 8 de 14 casos. No siempre son el mismo momento: en Roses Split 1, los 145 M son el cierre histórico y los 28,1 M son el saldo tras descontar 116,9 M de fichajes del Split 2, como se demuestra en el informe. Los demás casos requieren examinar la secuencia de fichajes y ajustes antes de atribuirles un error.
 
 El script solo **informa** la diferencia por equipo y split, con los movimientos implicados. Las reglas de `AGENTS.md` mandan: el libro oficial es la hoja de cálculo de la liga, los saldos de Split 3 tienen objetivos ya anotados allí, y nada se corrige sin el dueño y sin un registro antes/después. Ninguna cifra de equipo o piloto va fija en el código.
 
