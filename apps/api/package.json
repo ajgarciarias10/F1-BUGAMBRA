@@ -9,6 +9,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed-users": "tsx scripts/seed-users.ts",
     "db:import-staging": "tsx scripts/import-firestore-staging.ts",
+    "db:migrate-staging": "tsx scripts/migrate-staging-to-schema.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "workbook:fetch": "tsx scripts/fetch-workbook.ts"
