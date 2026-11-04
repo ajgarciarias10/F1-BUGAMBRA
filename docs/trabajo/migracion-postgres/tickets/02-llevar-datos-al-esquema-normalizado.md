@@ -15,6 +15,7 @@ Ticket 01 dejó una copia fiel y verificada en `f1_import_test` (396 documentos,
 - **`admin@f1bugambra.com` no existe en la base nueva.** No se migra. El administrador es una cuenta con Google (confirmar cuál con el dueño).
 - **Administrador: `ajgarciarias@gmail.com`** (ya es `rol: admin` en los datos y entra con Google).
 - **Decisión posterior del dueño:** `paddock_posts` se descarta de la base nueva por innecesario. No se importa ni se conserva en la tabla de archivo normalizada. La exportación y `f1_import_test` quedan intactas; no se escribe en Firebase.
+- **Decisión posterior del dueño:** permitir posiciones desconocidas en el esquema normalizado. Una posición vacía sigue siendo desconocida y cero puntos no significa DNF.
 - **Alcance ampliado (2026-11-04, dueño):** se permite `apps/api/src/server.ts` y un `media.ts` nuevo para servir las fotos migradas de pilotos. Los 9 usuarios que solo tenían contraseña usan correos gmail.com, así que pueden entrar con Google.
 - **Los fallos de orden y de datos se arreglan antes de producción**, no se arrastran.
 - **Hacerlo ordenado y sin sobrecargar la base:** inserciones por lotes, índices después de cargar, y nada pesado dentro de las filas.
