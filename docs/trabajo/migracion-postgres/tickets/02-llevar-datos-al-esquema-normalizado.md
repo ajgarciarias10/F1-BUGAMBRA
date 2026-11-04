@@ -16,6 +16,7 @@ Ticket 01 dejó una copia fiel y verificada en `f1_import_test` (396 documentos,
 - **Administrador: `ajgarciarias@gmail.com`** (ya es `rol: admin` en los datos y entra con Google).
 - **Decisión posterior del dueño:** `paddock_posts` se descarta de la base nueva por innecesario. No se importa ni se conserva en la tabla de archivo normalizada. La exportación y `f1_import_test` quedan intactas; no se escribe en Firebase.
 - **Decisión posterior del dueño:** permitir posiciones desconocidas en el esquema normalizado. Una posición vacía sigue siendo desconocida y cero puntos no significa DNF.
+- **Mapa aprobado por el dueño:** tablas normalizadas para lo operativo y archivo de origen `path`/`seq`/`data jsonb` para colecciones y campos sin destino. Actores históricos desconocidos permitidos. El archivo es de solo lectura para la app y nunca entra en cálculos de dinero. Comprobar 392 documentos conservados, cuatro `paddock_posts` excluidos expresamente y SHA-256 de cada imagen extraída frente al base64 original.
 - **Alcance ampliado (2026-11-04, dueño):** se permite `apps/api/src/server.ts` y un `media.ts` nuevo para servir las fotos migradas de pilotos. Los 9 usuarios que solo tenían contraseña usan correos gmail.com, así que pueden entrar con Google.
 - **Los fallos de orden y de datos se arreglan antes de producción**, no se arrastran.
 - **Hacerlo ordenado y sin sobrecargar la base:** inserciones por lotes, índices después de cargar, y nada pesado dentro de las filas.
@@ -24,7 +25,7 @@ Ticket 01 dejó una copia fiel y verificada en `f1_import_test` (396 documentos,
 
 1. **Mapa de campos.** Documentar, antes de escribir código, cómo se corresponde cada colección con las tablas de `001_initial_schema.sql` (`splits`→`season`/`race`, `transacciones`→`ledger_entry`, `usuarios`→`app_user`, `pilotos`→`driver`, `admin_audit`→`audit_log`, etc.) y qué no tiene sitio. Parar y preguntar si algo no encaja en vez de improvisar.
 2. **Orden explícito.** Dar a `ledger_entry` una columna de orden propia (`secuencia`) en vez de depender de `fecha`: 27 transacciones históricas no tienen fecha. Regla de orden documentada y con test: fecha cuando existe, y para las históricas el orden de `seq` de la copia. Fechas en texto ISO y en timestamp se normalizan a `timestamptz`.
-3. **Imágenes fuera de las filas.** `pilotos.foto_url` trae imágenes en base64. Extraerlas a ficheros en disco servidos por la API y guardar solo la URL. Excluir por completo `paddock_posts` y sus imágenes del destino, con un conteo explícito en el informe.
+3. **Imágenes fuera de las filas.** `pilotos.foto_url` y cualquier otro base64 de los documentos incluidos se extraen a ficheros en disco servidos por la API, con URL en el destino y hash comprobado contra los bytes originales. Excluir por completo los cuatro `paddock_posts` y sus imágenes del destino, enumerando las rutas en el informe. La exportación y `f1_import_test` permanecen intactas.
 4. **Conciliación de saldos** (ver abajo). Generar un informe, no corregir nada solo.
 5. **Usuarios.** Cargar `usuarios` en `app_user` excluyendo `admin@f1bugambra.com`. Clave: correo en minúsculas. Informar de cualquier correo duplicado o sin documento.
 6. **Repetible.** Ejecutar el script dos veces da el mismo resultado; identificadores estables (`external_key` = id de Firestore) para que no se duplique nada.
