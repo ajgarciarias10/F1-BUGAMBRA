@@ -1,0 +1,1424 @@
+{
+  "sourceDocuments": 396,
+  "coverage": {
+    "included": 392,
+    "archived": 392,
+    "missing": [],
+    "exclusions": [
+      "paddock_posts/welcome_split_3_equipo_alfa_romero",
+      "paddock_posts/welcome_split_3_equipo_roses",
+      "paddock_posts/welcome_split_3_equipo_zenith",
+      "paddock_posts/xJRAocFDGh9WnBnu2iG9"
+    ]
+  },
+  "images": {
+    "sourceOccurrences": 32,
+    "uniqueFiles": 26,
+    "verifiedSha256": {
+      "42f694043d88c3e12ab489aeceb4add44f8632ab77c616e1e7b106d73666554a.jpg": "42f694043d88c3e12ab489aeceb4add44f8632ab77c616e1e7b106d73666554a",
+      "12375bc25030a0ac31a0795a5504c160098584169a4af10e14d96821d687b329.jpg": "12375bc25030a0ac31a0795a5504c160098584169a4af10e14d96821d687b329",
+      "a9e95477157848f0b293276abae422e8d7076e34a3c4ef9a57f17c9975824b2e.jpg": "a9e95477157848f0b293276abae422e8d7076e34a3c4ef9a57f17c9975824b2e",
+      "17af2b23905f19b6e42bb5d0d7250a92efd5ed34e7eab2357a8cf77dea17cf9d.jpg": "17af2b23905f19b6e42bb5d0d7250a92efd5ed34e7eab2357a8cf77dea17cf9d",
+      "c244c4ec99d1d56c43c51b91f30348531d891fdac405cc7d6c0b50fa02e714e2.jpg": "c244c4ec99d1d56c43c51b91f30348531d891fdac405cc7d6c0b50fa02e714e2",
+      "22de16831005168dc3d3179d485e0cf57bc5dd8df656904598f7b69768f1f376.jpg": "22de16831005168dc3d3179d485e0cf57bc5dd8df656904598f7b69768f1f376",
+      "4da978a112926012bcd38b80b32b929851314426dbf7552b21e3c7dc53ee2300.jpg": "4da978a112926012bcd38b80b32b929851314426dbf7552b21e3c7dc53ee2300",
+      "0aee1e9804a4dac70dc0637c2c3e4f08bf7a5a6e325e30358774a9df003763de.jpg": "0aee1e9804a4dac70dc0637c2c3e4f08bf7a5a6e325e30358774a9df003763de",
+      "c9f5102011699b6e7b89b731cf96f9589f521b25e86f3c8aeef57dd7d3fb9ca7.jpg": "c9f5102011699b6e7b89b731cf96f9589f521b25e86f3c8aeef57dd7d3fb9ca7",
+      "461905a3fa39f55fb257fd94741917d5b0f9ebacf27332908adc0871f0fb43bc.jpg": "461905a3fa39f55fb257fd94741917d5b0f9ebacf27332908adc0871f0fb43bc",
+      "84fe83db6adaf238132c828cdcdc05aa86f29d3c10b659fb18d70271cdc6832c.jpg": "84fe83db6adaf238132c828cdcdc05aa86f29d3c10b659fb18d70271cdc6832c",
+      "ead4d03c69f6f24af248c246b8dbdc204b0d87a81154214e2efa0ebe6bb2483e.jpg": "ead4d03c69f6f24af248c246b8dbdc204b0d87a81154214e2efa0ebe6bb2483e",
+      "da6f89e254e2a260aee94e0d36b30506b75031f4872aa8321a6b222b8e31dfe2.jpg": "da6f89e254e2a260aee94e0d36b30506b75031f4872aa8321a6b222b8e31dfe2",
+      "8087bba877bb13dd176d21de2a0bc26f72401a2bffcbdd679cbdeacb0e1e0233.jpg": "8087bba877bb13dd176d21de2a0bc26f72401a2bffcbdd679cbdeacb0e1e0233",
+      "ba138f71fdd1f44a114318c99396d238697a53fc37950d498a553c14df7b4350.jpg": "ba138f71fdd1f44a114318c99396d238697a53fc37950d498a553c14df7b4350",
+      "20afa69c4a6a73ae47b577095832caabbf1b3699265e5016cf3705dc86222d50.jpg": "20afa69c4a6a73ae47b577095832caabbf1b3699265e5016cf3705dc86222d50",
+      "ad065e94c49e4e11dc058948ccc7f62016cb6452c0d7fd5a75cd3b79f7889294.jpg": "ad065e94c49e4e11dc058948ccc7f62016cb6452c0d7fd5a75cd3b79f7889294",
+      "1b8cf311d4a7c1e6aed55116ab77bd3e3dd87d379c32f0ac7fe3cf74b2e7a876.jpg": "1b8cf311d4a7c1e6aed55116ab77bd3e3dd87d379c32f0ac7fe3cf74b2e7a876",
+      "d187e6efd8e67eb1a346ff08db5f90173dc30270d06a418485945ba838d1e9da.jpg": "d187e6efd8e67eb1a346ff08db5f90173dc30270d06a418485945ba838d1e9da",
+      "806631864efbc86be311b4cc4b685dc7c5fcb64e40722538107edc7d7fad4b9d.jpg": "806631864efbc86be311b4cc4b685dc7c5fcb64e40722538107edc7d7fad4b9d",
+      "04249bc501cf826b930c1273f2155665313af37a9a1c95f26bb087a5a23dd587.jpg": "04249bc501cf826b930c1273f2155665313af37a9a1c95f26bb087a5a23dd587",
+      "4c368798e621df8819c0b6990380eba94e1c117a7dd2e8bf9582055d55306900.jpg": "4c368798e621df8819c0b6990380eba94e1c117a7dd2e8bf9582055d55306900",
+      "0fdc6cb82b4c701d03e2f0ec91f7091fed7888e418f1846cb138478dbb1cee11.jpg": "0fdc6cb82b4c701d03e2f0ec91f7091fed7888e418f1846cb138478dbb1cee11",
+      "07698e87ae14750f4abb7f75eb3be38e0dc758ab95b537b0b30dc50f165bb193.jpg": "07698e87ae14750f4abb7f75eb3be38e0dc758ab95b537b0b30dc50f165bb193",
+      "7bddf91ef164983511028f5e791ce230945812251f0a1ecaa623e461edcdfc98.jpg": "7bddf91ef164983511028f5e791ce230945812251f0a1ecaa623e461edcdfc98",
+      "4527aa27609963610658e32b3f61d7e25dbf8bb59b30ec9b9d67449d6dd29b95.jpg": "4527aa27609963610658e32b3f61d7e25dbf8bb59b30ec9b9d67449d6dd29b95"
+    }
+  },
+  "normalizedCounts": {
+    "archive": 392,
+    "app_user": 16,
+    "driver": 13,
+    "team": 4,
+    "season": 5,
+    "season_team": 14,
+    "season_driver": 45,
+    "roster_assignment": 35,
+    "race": 24,
+    "race_revision": 23,
+    "race_result": 233,
+    "ledger_entry": 200,
+    "transfer": 7,
+    "audit_log": 41
+  },
+  "reconciliationStatus": "pending_owner_review",
+  "reconciliation": [
+    {
+      "splitId": "split_1",
+      "teamId": "equipo_alfa_romero",
+      "team": "Alfa Romero",
+      "initial": 100,
+      "stored": 47.2,
+      "calculated": 83.2,
+      "difference": -36,
+      "movements": [
+        {
+          "path": "transacciones/split_1__historico__equipo_alfa_romero__ajuste_fichajes",
+          "amount": -100,
+          "type": "fichaje",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_alfa_romero__ajuste_premios",
+          "amount": 15,
+          "type": "premio_carrera",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_alfa_romero__ajuste_rivalidades",
+          "amount": 8,
+          "type": "rivalidad",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_alfa_romero__carreras_limpias",
+          "amount": 9,
+          "type": "sin_sancionados",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_alfa_romero__participaciones",
+          "amount": 24,
+          "type": "premio_carrera",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_alfa_romero__poles",
+          "amount": 2,
+          "type": "pole",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_alfa_romero__puntos",
+          "amount": 13.200000000000001,
+          "type": "ingreso_puntos",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_alfa_romero__rivalidades_carreras",
+          "amount": 12,
+          "type": "rivalidad",
+          "date": "2026-09-02T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "splitId": "split_1",
+      "teamId": "equipo_roses",
+      "team": "Roses",
+      "initial": 100,
+      "stored": 28.1,
+      "calculated": 145,
+      "difference": -116.9,
+      "movements": [
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__ajuste_fichajes",
+          "amount": -90.5,
+          "type": "fichaje",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__ajuste_premios",
+          "amount": 20,
+          "type": "premio_carrera",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__ajuste_rivalidades",
+          "amount": 12,
+          "type": "rivalidad",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__carreras_limpias",
+          "amount": 6,
+          "type": "sin_sancionados",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__participaciones",
+          "amount": 24,
+          "type": "premio_carrera",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__poles",
+          "amount": 6,
+          "type": "pole",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__puntos",
+          "amount": 18.5,
+          "type": "ingreso_puntos",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__rivalidades_carreras",
+          "amount": 47,
+          "type": "rivalidad",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_roses__vueltas_rapidas",
+          "amount": 2,
+          "type": "vuelta_rapida",
+          "date": "2026-09-02T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "splitId": "split_1",
+      "teamId": "equipo_zenith",
+      "team": "Zenith",
+      "initial": 100,
+      "stored": 89.2,
+      "calculated": 258,
+      "difference": -168.8,
+      "movements": [
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__ajuste_fichajes",
+          "amount": 45,
+          "type": "piloto_negativo",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__ajuste_premios",
+          "amount": 10,
+          "type": "premio_carrera",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__ajuste_rivalidades",
+          "amount": 10,
+          "type": "rivalidad",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__carreras_limpias",
+          "amount": 18,
+          "type": "sin_sancionados",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__participaciones",
+          "amount": 24,
+          "type": "premio_carrera",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__poles",
+          "amount": 4,
+          "type": "pole",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__puntos",
+          "amount": 13,
+          "type": "ingreso_puntos",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__rivalidades_carreras",
+          "amount": 30,
+          "type": "rivalidad",
+          "date": "2026-09-02T00:00:00.000Z"
+        },
+        {
+          "path": "transacciones/split_1__historico__equipo_zenith__vueltas_rapidas",
+          "amount": 4,
+          "type": "vuelta_rapida",
+          "date": "2026-09-02T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "splitId": "split_2",
+      "teamId": "equipo_alfa_romero",
+      "team": "Alfa Romero",
+      "initial": 83.2,
+      "stored": 143,
+      "calculated": 143,
+      "difference": 0,
+      "movements": [
+        {
+          "path": "transacciones/3EkesdMnlZHy9NZookhi",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T08:20:23.453Z"
+        },
+        {
+          "path": "transacciones/ab9ZBQ1SXJcDHcz1gR3f",
+          "amount": -22.2,
+          "type": "ajuste",
+          "date": "2026-10-04T09:38:15.983Z"
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__ajuste_fichajes",
+          "amount": -36,
+          "type": "fichaje",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__ajuste_premios",
+          "amount": 15,
+          "type": "premio_carrera",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__ajuste_rivalidades",
+          "amount": 10,
+          "type": "rivalidad",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__carreras_limpias",
+          "amount": 12,
+          "type": "sin_sancionados",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__participaciones",
+          "amount": 24,
+          "type": "premio_carrera",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__poles",
+          "amount": 6,
+          "type": "pole",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__puntos",
+          "amount": 13,
+          "type": "ingreso_puntos",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__rivalidades_carreras",
+          "amount": 37,
+          "type": "rivalidad",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_alfa_romero__vueltas_rapidas",
+          "amount": 1,
+          "type": "vuelta_rapida",
+          "date": null
+        }
+      ]
+    },
+    {
+      "splitId": "split_2",
+      "teamId": "equipo_roses",
+      "team": "Roses",
+      "initial": 145,
+      "stored": 40.9,
+      "calculated": 115.9,
+      "difference": -75,
+      "movements": [
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__ajuste_fichajes",
+          "amount": -116.9,
+          "type": "fichaje",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__ajuste_premios",
+          "amount": 10,
+          "type": "premio_carrera",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__ajuste_rivalidades",
+          "amount": 4,
+          "type": "rivalidad",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__carreras_limpias",
+          "amount": 9,
+          "type": "sin_sancionados",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__participaciones",
+          "amount": 24,
+          "type": "premio_carrera",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__poles",
+          "amount": 4,
+          "type": "pole",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__puntos",
+          "amount": 11.8,
+          "type": "ingreso_puntos",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__rivalidades_carreras",
+          "amount": 23,
+          "type": "rivalidad",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_roses__vueltas_rapidas",
+          "amount": 2,
+          "type": "vuelta_rapida",
+          "date": null
+        }
+      ]
+    },
+    {
+      "splitId": "split_2",
+      "teamId": "equipo_zenith",
+      "team": "Zenith",
+      "initial": 258,
+      "stored": 226,
+      "calculated": 226,
+      "difference": 0,
+      "movements": [
+        {
+          "path": "transacciones/17PCK9c0RQvYi3Pu2UB9",
+          "amount": 40.3,
+          "type": "ajuste",
+          "date": "2026-10-04T09:37:48.481Z"
+        },
+        {
+          "path": "transacciones/EK32nW48ZHlZhfETbNjv",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T08:37:24.106Z"
+        },
+        {
+          "path": "transacciones/NHS3IgT7ZrM44aKqMtfO",
+          "amount": 22.6,
+          "type": "ajuste",
+          "date": "2026-10-04T09:37:43.590Z"
+        },
+        {
+          "path": "transacciones/r9BTdncaYsM4OZ5QCxSN",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T08:37:37.821Z"
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__ajuste_fichajes",
+          "amount": -225.3,
+          "type": "fichaje",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__ajuste_premios",
+          "amount": 20,
+          "type": "premio_carrera",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__ajuste_rivalidades",
+          "amount": 10,
+          "type": "rivalidad",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__carreras_limpias",
+          "amount": 9,
+          "type": "sin_sancionados",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__participaciones",
+          "amount": 24,
+          "type": "premio_carrera",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__poles",
+          "amount": 2,
+          "type": "pole",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__puntos",
+          "amount": 18.9,
+          "type": "ingreso_puntos",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__rivalidades_carreras",
+          "amount": 43.5,
+          "type": "rivalidad",
+          "date": null
+        },
+        {
+          "path": "transacciones/split_2__historico__equipo_zenith__vueltas_rapidas",
+          "amount": 3,
+          "type": "vuelta_rapida",
+          "date": null
+        }
+      ]
+    },
+    {
+      "splitId": "split_3",
+      "teamId": "agente_libre",
+      "team": "Agentes libres",
+      "initial": 0,
+      "stored": 0,
+      "calculated": 0,
+      "difference": 0,
+      "movements": []
+    },
+    {
+      "splitId": "split_3",
+      "teamId": "equipo_alfa_romero",
+      "team": "Alfa Romero",
+      "initial": 165.2,
+      "stored": 124.4,
+      "calculated": 125.7,
+      "difference": -1.3,
+      "movements": [
+        {
+          "path": "transacciones/6pOKVwJSsmietsnH2MVZ",
+          "amount": 0,
+          "type": "fichaje",
+          "date": "2026-09-15T16:07:26.967Z"
+        },
+        {
+          "path": "transacciones/HOKEnggqYrBqBPZFueDl",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T08:38:02.259Z"
+        },
+        {
+          "path": "transacciones/SLA8iiENvrX6MUM17BL1",
+          "amount": 0,
+          "type": "fichaje",
+          "date": "2026-09-15T16:07:19.256Z"
+        },
+        {
+          "path": "transacciones/TFOtOpcwiP4mJug0QZuv",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T15:35:29.851Z"
+        },
+        {
+          "path": "transacciones/ZyL9I7THlkiUcakQJe3E",
+          "amount": -28.9,
+          "type": "fichaje",
+          "date": "2026-09-15T16:08:20.847Z"
+        },
+        {
+          "path": "transacciones/admin_economy__split_3__economy_95744c91a08e168b909a0667b01c5130aebb170b849e7589847d35bdca40c70a__price__piloto_carlos",
+          "amount": -21.2,
+          "type": "ajuste",
+          "date": "2026-10-10T19:16:27.735Z"
+        },
+        {
+          "path": "transacciones/admin_economy__split_3__economy_b57bc75b5fbfefc19695cc005cebd30989aca57b909e75294b6f119b888b4262__manual",
+          "amount": -21.5,
+          "type": "ajuste",
+          "date": "2026-10-10T19:29:17.912Z"
+        },
+        {
+          "path": "transacciones/admin_economy__split_3__economy_bc04a8fd185c7c4aeb74a0cd460940e36578fb67b92d42c1c0869cf4e5148075__price__piloto_dani",
+          "amount": -21.2,
+          "type": "ajuste",
+          "date": "2026-10-10T19:16:51.774Z"
+        },
+        {
+          "path": "transacciones/admin_economy__split_3__economy_bdcee2d5e63f1857e02fd2c8f742c6e58e85f808bcceba38e77a932c84289fd5__manual",
+          "amount": 92.6,
+          "type": "ajuste",
+          "date": "2026-10-10T19:27:36.242Z"
+        },
+        {
+          "path": "transacciones/admin_economy__split_3__economy_cd48783abf46e5707c08adb8e11ca0a022b8fe919f2d65ef9857d9ce29d59e6d__manual",
+          "amount": -7.4,
+          "type": "ajuste",
+          "date": "2026-10-10T19:28:09.121Z"
+        },
+        {
+          "path": "transacciones/admin_economy__split_3__economy_e67f33ca4d26590c21a511b13ad9b61c17968803cd49e6f0da1087ece3b524d4__price__piloto_mimic",
+          "amount": -21.3,
+          "type": "ajuste",
+          "date": "2026-10-10T19:28:26.488Z"
+        },
+        {
+          "path": "transacciones/clausulas_fuera_plazo_20261004_carlos",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T15:41:01.751Z"
+        },
+        {
+          "path": "transacciones/clausulas_fuera_plazo_20261004_dani",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T15:41:01.751Z"
+        },
+        {
+          "path": "transacciones/clausulas_fuera_plazo_20261004_mimic",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T15:41:01.751Z"
+        },
+        {
+          "path": "transacciones/clausulas_fuera_plazo_20261004_pinilla",
+          "amount": 0,
+          "type": "ajuste",
+          "date": "2026-10-04T15:41:01.751Z"
+        },
+        {
+          "path": "transacciones/correccion_clausula_dani_20261004",
+          "amount": 21.2,
+          "type": "ajuste",
+          "date": "2026-10-04T09:44:11.133Z"
+        },
+        {
+          "path": "transacciones/ok6I78Hx5vBVWq0VJ656",
+          "amount": -21.2,
+          "type": "ajuste",
+          "date": "2026-10-04T09:37:34.238Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__0",
+          "amount": 1.3,
+          "type": "ingreso_puntos",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__1",
+          "amount": 2,
+          "type": "pole",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__10",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__13",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__15",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__16",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__18",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__2",
+          "amount": 1.6,
+          "type": "ingreso_puntos",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__20",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__21",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__22",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__8",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__0",
+          "amount": 0.8,
+          "type": "ingreso_puntos",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__1",
+          "amount": 1.1,
+          "type": "ingreso_puntos",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__12",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__15",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__16",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__19",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__2",
+          "amount": 1.6,
+          "type": "ingreso_puntos",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__21",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__22",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__23",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__24",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__3",
+          "amount": 0.6,
+          "type": "ingreso_puntos",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__0",
+          "amount": 1.6,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__1",
+          "amount": 1.1,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__17",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__19",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__2",
+          "amount": 0.3,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__20",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__22",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__23",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__24",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__25",
+          "amount": 3,
+          "type": "sin_sancionados",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__3",
+          "amount": 0.7,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__0",
+          "amount": 1.6,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__1",
+          "amount": 0.4,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__14",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__15",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__17",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__19",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__2",
+          "amount": 0.9,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__21",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__23",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__24",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__25",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__26",
+          "amount": 3,
+          "type": "sin_sancionados",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__3",
+          "amount": 0.8,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3_pre_hungary_budget_v1_equipo_alfa_romero",
+          "amount": -85,
+          "type": "ajuste",
+          "date": "2026-10-10T16:02:52.109Z"
+        }
+      ]
+    },
+    {
+      "splitId": "split_3",
+      "teamId": "equipo_roses",
+      "team": "Roses",
+      "initial": 115.9,
+      "stored": 35.1,
+      "calculated": 110.1,
+      "difference": -75,
+      "movements": [
+        {
+          "path": "transacciones/18xH3pLMejngL7nV35Hv",
+          "amount": -28.6,
+          "type": "ajuste",
+          "date": "2026-10-24T12:26:05.784Z"
+        },
+        {
+          "path": "transacciones/7eyzmmhVxzv9obHrtLeB",
+          "amount": 24.1,
+          "type": "piloto_negativo",
+          "date": "2026-09-15T15:57:14.250Z"
+        },
+        {
+          "path": "transacciones/Fpyuqngkbt3D9HwJCZXl",
+          "amount": -29.7,
+          "type": "ajuste",
+          "date": "2026-10-26T20:53:00.519Z"
+        },
+        {
+          "path": "transacciones/RUl9Ae2bzMIPMtRrXrpA",
+          "amount": 29.7,
+          "type": "ajuste",
+          "date": "2026-10-27T09:14:59.108Z"
+        },
+        {
+          "path": "transacciones/ZlseOKFV65H1nWWbzJ0m",
+          "amount": -29.7,
+          "type": "ajuste",
+          "date": "2026-10-28T12:14:43.928Z"
+        },
+        {
+          "path": "transacciones/egObVHOiOIO3icy6FmBx",
+          "amount": 60,
+          "type": "piloto_negativo",
+          "date": "2026-09-15T16:07:48.983Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__12",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__14",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__24",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__6",
+          "amount": 0.2,
+          "type": "ingreso_puntos",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__7",
+          "amount": 1.3,
+          "type": "ingreso_puntos",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__11",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__25",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__26",
+          "amount": 3,
+          "type": "sin_sancionados",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__4",
+          "amount": 0.4,
+          "type": "ingreso_puntos",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__11",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__12",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__15",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__16",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__21",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__26",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__27",
+          "amount": 3,
+          "type": "sin_sancionados",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__4",
+          "amount": 0.9,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__5",
+          "amount": 1.3,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__6",
+          "amount": 1,
+          "type": "vuelta_rapida",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__12",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__16",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__18",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__27",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__28",
+          "amount": 3,
+          "type": "sin_sancionados",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__4",
+          "amount": 0.6,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__5",
+          "amount": 0.7,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__6",
+          "amount": 0.5,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/tvmbDYFkiwIEmeWhMjIZ",
+          "amount": -75,
+          "type": "fichaje",
+          "date": "2026-09-15T15:57:42.612Z"
+        }
+      ]
+    },
+    {
+      "splitId": "split_3",
+      "teamId": "equipo_zenith",
+      "team": "Zenith",
+      "initial": 163.1,
+      "stored": 93.8,
+      "calculated": 145.6,
+      "difference": -51.8,
+      "movements": [
+        {
+          "path": "transacciones/DHC7h3qsSEwVQs0jsbyB",
+          "amount": -70,
+          "type": "fichaje",
+          "date": "2026-09-15T16:08:04.800Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__11",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__17",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__19",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__23",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__3",
+          "amount": 0.7,
+          "type": "ingreso_puntos",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__4",
+          "amount": 1,
+          "type": "vuelta_rapida",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__5",
+          "amount": 0.9,
+          "type": "ingreso_puntos",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__espana__9",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-28T12:14:14.181Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__10",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__13",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__14",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__17",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__18",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__20",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__27",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__5",
+          "amount": 1.3,
+          "type": "ingreso_puntos",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__6",
+          "amount": 0.1,
+          "type": "ingreso_puntos",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__7",
+          "amount": 1.1,
+          "type": "ingreso_puntos",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__8",
+          "amount": 2,
+          "type": "pole",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__hungria__9",
+          "amount": 1,
+          "type": "vuelta_rapida",
+          "date": "2026-10-10T20:53:17.349Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__10",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__13",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__14",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__18",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__28",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__29",
+          "amount": 3,
+          "type": "sin_sancionados",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__7",
+          "amount": 0.8,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__8",
+          "amount": 2,
+          "type": "pole",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__italia__9",
+          "amount": 0.5,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:25.630Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__10",
+          "amount": 1.1,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__11",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__13",
+          "amount": 2,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__20",
+          "amount": 0.5,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__22",
+          "amount": 1,
+          "type": "rivalidad",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__29",
+          "amount": 4,
+          "type": "premio_carrera",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__30",
+          "amount": 3,
+          "type": "sin_sancionados",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__7",
+          "amount": 1.5,
+          "type": "ingreso_puntos",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__8",
+          "amount": 2,
+          "type": "pole",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3__paises_bajos__9",
+          "amount": 1,
+          "type": "vuelta_rapida",
+          "date": "2026-10-22T20:31:20.720Z"
+        },
+        {
+          "path": "transacciones/split_3_pre_hungary_budget_v1_equipo_zenith",
+          "amount": -5,
+          "type": "ajuste",
+          "date": "2026-10-10T16:02:52.109Z"
+        }
+      ]
+    },
+    {
+      "splitId": "split_4",
+      "teamId": "agente_libre",
+      "team": "Agentes libres",
+      "initial": 0,
+      "stored": 0,
+      "calculated": 0,
+      "difference": 0,
+      "movements": []
+    },
+    {
+      "splitId": "split_4",
+      "teamId": "equipo_alfa_romero",
+      "team": "Alfa Romero",
+      "initial": 105,
+      "stored": 105,
+      "calculated": 105,
+      "difference": 0,
+      "movements": []
+    },
+    {
+      "splitId": "split_4",
+      "teamId": "equipo_roses",
+      "team": "Roses",
+      "initial": 84.9,
+      "stored": 26.6,
+      "calculated": 84.9,
+      "difference": -58.3,
+      "movements": []
+    },
+    {
+      "splitId": "split_4",
+      "teamId": "equipo_zenith",
+      "team": "Zenith",
+      "initial": 84.2,
+      "stored": 84.2,
+      "calculated": 84.2,
+      "difference": 0,
+      "movements": []
+    }
+  ],
+  "performance": {
+    "migrationMs": 787,
+    "archiveBytes": 1351680,
+    "ledgerQueryMs": 1.1
+  },
+  "sourceSnapshot": {
+    "date": "2026-11-04",
+    "archiveSha256": "f2671fe50fd7f2a7c90672bb82a0f46f817412cf3ed5f64e6c4faff069570f48",
+    "sheetComparison": "ticket 03; no adjustment applied"
+  }
+}

@@ -9,9 +9,10 @@ El dueño se quedó sin suscripción de Google Cloud. Todo sale de Firebase (pro
 ## Decisiones del dueño
 
 - Inicio de sesión **solo con Google**, integrado en la app (sin Firebase Auth). **No se migran contraseñas.** Cada usuario necesita un correo con cuenta de Google.
-- `admin@f1bugambra.com` **no existe** en la base nueva. Falta saber qué cuenta de Google es el administrador.
+- `admin@f1bugambra.com` **no existe** en la base nueva. El administrador es `ajgarciarias@gmail.com`.
 - Los fallos de orden y de datos se arreglan **antes de producción**.
 - Migrar ordenado y sin sobrecargar la base: imágenes base64 fuera de las filas.
+- Los cuatro `paddock_posts` no entran en la base nueva por decisión del dueño; siguen en la copia fiel y la exportación.
 - Cada carrera se revisa contra la hoja de la liga antes de aplicar su economía (ticket 04).
 
 ## Qué existe ya
@@ -27,10 +28,11 @@ El dueño se quedó sin suscripción de Google Cloud. Todo sale de Firebase (pro
 | Clave de servicio de Firebase | `~/.secrets/f1-firebase-sa.json` |
 | ID de la hoja de la liga | `~/.secrets/league-sheet-id` |
 | Esquema normalizado destino | `apps/api/database/migrations/001_initial_schema.sql` (18 tablas) |
+| Importación normalizada local del ticket 02, aún sin integrar | `apps/api/scripts/migrate-staging-to-schema.ts` y [reporte completo](informe-conciliacion-2026-11-04.json) |
 
 Notas prácticas:
 - El `psql` del servidor es un envoltorio que no llega al puerto 5433. Usar `docker exec f1-postgres psql -U f1_bugambra -d f1_bugambra`.
-- Ramas: `feature/migracion-postgres` tiene los tickets 01 a 04 y el importador. No hay push.
+- Ramas: `feature/migracion-postgres` es la base; el ticket 03 está en `feature/comprobar-jornada-hoja` y el 02 en `feature/migracion-postgres-normalizar`. No hay push ni integración.
 - Había `?? .claude/` y `?? docs/redesign/reviews/` sin seguimiento en el árbol: no son de esta tarea, no tocar.
 
 ## Orden de trabajo
@@ -42,10 +44,10 @@ Notas prácticas:
 
 ## Hallazgos abiertos
 
-- 27 de 200 transacciones (`…__historico__…`) no tienen fecha; 26 la guardan como texto ISO y 147 como timestamp. Hace falta una columna de orden explícita.
-- Los saldos guardados no cuadran con inicial + libro en 8 de 12 casos (equipo y split). Ejemplo: Roses split 1, guardado 28,1 y libro 145,0. Puede haber ajustes manuales legítimos o errores: **solo informar**, nunca corregir sin el dueño (`AGENTS.md`).
+- 27 de 200 transacciones (`…__historico__…`) no tienen fecha; 26 la guardan como texto ISO y 147 como timestamp. `ledger_entry.secuencia` da un orden explícito, con fecha normalizada cuando existe y `seq` de la copia para los históricos sin fecha.
+- Los saldos guardados no cuadran con inicial + libro en 8 de 14 casos (equipo y split, incluidos los equipos de agentes libres). Ejemplo: Roses split 1, guardado 28,1 y libro 145,0. Las ocho diferencias y sus movimientos están en el reporte; **solo informar**, nunca corregir sin el dueño (`AGENTS.md`).
 - `apps/api/src/auth.ts` acepta tokens de respaldo comprobando solo `aud`, `iss` y `exp`, **sin verificar la firma**. Hay que quitarlo en la migración de auth.
-- El ID de la hoja (`1kUFWc…`) no es el que cita `AGENTS.md` (`19Um3b…`). Tiene el mismo diseño pero es más reciente (59 columnas, ya con fichajes T4). **Pendiente de que el dueño confirme que es la oficial**; hasta entonces no tocar el enlace de `AGENTS.md`.
+- La hoja configurada es la oficial según el dueño y tiene 59 columnas, ya con fichajes T4. El enlace de `AGENTS.md` aún apunta al libro anterior; su cambio requiere un trabajo con ese archivo en alcance.
 
 ## Pendiente del dueño (no del agente)
 
