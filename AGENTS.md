@@ -16,6 +16,16 @@ Claude, Codex and any other tool read this same file. Read it fully before touch
 10. **Retire what is discarded in the same turn**: the doc section, the branch, the unused file. History stays in git; no current document may keep presenting discarded work as valid.
 11. **Cost discipline for agents.** The default model for delegated work is the mid-tier one; the top-tier model only with the owner's say-so (see `docs/agents/reparto-entre-agentes.md`). Do not re-read what you already know or start a task over after an interruption: continue it.
 
+## When you run out of quota or context
+
+This holds even without an automatic hand-over service. Before you stop:
+
+1. Commit what is proven and push **your** branch.
+2. Write in the ticket's `Comments` (or the closing report, if it has no such section) what is done, what is missing, the exact next step and what you could not verify.
+3. Stop. Do not leave uncommitted changes: whoever takes over enters **the same worktree** and finds the work as you left it.
+
+If you enter as a successor: read those notes, run `git status` and `git log --oneline -5`, and continue. Do not start over.
+
 ## Where the rest lives
 
 | File | What it holds |
@@ -24,6 +34,7 @@ Claude, Codex and any other tool read this same file. Read it fully before touch
 | `docs/agents/operating-procedure.md` | The steps, in order, from pre-flight to closing a ticket |
 | `docs/agents/reparto-entre-agentes.md` | Which kind of work goes to which agent and model; who integrates |
 | `docs/plantillas/ticket.md` | The ticket template |
+| `GEMINI.md` | A pointer for Gemini tools; holds no rules |
 | `docs/BACKLOG.md` | What is open right now |
 | `docs/adr/` | Decisions already taken; do not revive them without a new reason |
 
